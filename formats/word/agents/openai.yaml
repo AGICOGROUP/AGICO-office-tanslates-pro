@@ -1,0 +1,4 @@
+interface:
+  display_name: "Professional Word Translation"
+  short_description: "专业翻译 Word 文档并保持格式、分页和可编辑结构"
+  default_prompt: "Use $translate-word-professionally to translate my Word document with the shared cement glossary while preserving its layout and editable structure."

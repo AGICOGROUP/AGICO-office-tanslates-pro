@@ -1,0 +1,130 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+import re
+import subprocess
+import sys
+import tempfile
+import unittest
+import zipfile
+import xml.etree.ElementTree as ET
+
+
+SKILL_ROOT = Path(__file__).parents[1]
+SCRIPT = SKILL_ROOT / "scripts" / "pptx_ooxml.py"
+A_NS = "http://schemas.openxmlformats.org/drawingml/2006/main"
+
+
+SLIDE_XML = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+       xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+  <p:cSld><p:spTree>
+    <p:sp>
+      <p:nvSpPr><p:cNvPr id="2" name="TextBox 1"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+      <p:spPr><a:solidFill><a:srgbClr val="112233"/></a:solidFill></p:spPr>
+      <p:txBody><a:bodyPr/><a:lstStyle/><a:p>
+        <a:r><a:rPr lang="zh-CN" sz="2400" b="1"/><a:t>梁式</a:t></a:r>
+        <a:r><a:rPr lang="zh-CN" sz="2400"/><a:t>窑</a:t></a:r>
+      </a:p></p:txBody>
+    </p:sp>
+  </p:spTree></p:cSld>
+</p:sld>
+""".encode("utf-8")
+
+
+class OoxmlApplyTests(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp_dir.name)
+        self.source = self.root / "source.pptx"
+        self.output = self.root / "output.pptx"
+        self.manifest = self.root / "manifest.json"
+        self.relationships = b"<Relationships>unchanged</Relationships>"
+        self.media = b"\x89PNG\r\nfixture"
+
+        with zipfile.ZipFile(self.source, "w", zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr("[Content_Types].xml", "<Types/>")
+            archive.writestr("ppt/slides/slide1.xml", SLIDE_XML)
+            archive.writestr("ppt/slides/_rels/slide1.xml.rels", self.relationships)
+            archive.writestr("ppt/media/image1.png", self.media)
+
+        self.manifest.write_text(
+            json.dumps(
+                {
+                    "source_file": "source.pptx",
+                    "source_language": "zh-CN",
+                    "target_language": "en",
+                    "items": [
+                        {
+                            "id": "slide:1/shape:2/paragraph:1",
+                            "slide_index": 1,
+                            "shape_id": 2,
+                            "paragraph_index": 1,
+                            "kind": "shape_text",
+                            "source_text": "梁式窑",
+                            "translation": "Beam Lime Kiln",
+                            "context": "fixture",
+                        }
+                    ],
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+    def tearDown(self):
+        self.temp_dir.cleanup()
+
+    def test_apply_changes_text_only_and_preserves_package_entries(self):
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "apply",
+                "--input",
+                str(self.source),
+                "--manifest",
+                str(self.manifest),
+                "--output",
+                str(self.output),
+            ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+        with zipfile.ZipFile(self.source) as before, zipfile.ZipFile(self.output) as after:
+            self.assertEqual(before.namelist(), after.namelist())
+            self.assertEqual(
+                after.read("ppt/slides/_rels/slide1.xml.rels"), self.relationships
+            )
+            self.assertEqual(after.read("ppt/media/image1.png"), self.media)
+            xml = after.read("ppt/slides/slide1.xml")
+            original_xml = before.read("ppt/slides/slide1.xml")
+
+        mask = lambda payload: re.sub(
+            rb"(<a:t(?:\s[^>]*)?>).*?(</a:t>)", rb"\1__TEXT__\2", payload
+        )
+        self.assertEqual(
+            mask(xml),
+            mask(original_xml),
+            "OOXML mutation must leave every byte outside <a:t> text unchanged",
+        )
+
+        root = ET.fromstring(xml)
+        text_nodes = root.findall(f".//{{{A_NS}}}t")
+        self.assertEqual("".join(node.text or "" for node in text_nodes), "Beam Lime Kiln")
+        self.assertEqual(
+            root.find(f".//{{{A_NS}}}rPr").attrib,
+            {"lang": "zh-CN", "sz": "2400", "b": "1"},
+        )
+        self.assertEqual(
+            root.find(f".//{{{A_NS}}}solidFill/{{{A_NS}}}srgbClr").attrib["val"],
+            "112233",
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()

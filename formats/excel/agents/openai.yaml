@@ -1,0 +1,4 @@
+interface:
+  display_name: "Excel Professional Translation"
+  short_description: "Professional cement-industry Excel translation"
+  default_prompt: "Use $translate-excel-professionally to translate this Excel workbook professionally with the project cement glossary and preserve its structure."
