@@ -1,0 +1,4 @@
+interface:
+  display_name: "Professional Scan PDF Translation"
+  short_description: "Translate scan PDFs with selectable English and exact source-icon fidelity."
+  default_prompt: "Use $translate-scan-pdf-professionally to translate this scan-only PDF into professional English, prioritize bundled cement terminology matches before model wording, skip only proven complete bilingual regions, unify page-level title/subtitle/body typography from source evidence, preserve icons and mixed colors, use controlled text-free image repositioning only after fit failure, and pass all visual gates."

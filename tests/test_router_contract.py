@@ -67,6 +67,39 @@ class OfficeRouterContractTests(unittest.TestCase):
                     self.assertFalse(report["extension_mismatch"])
                     self.assertTrue(report["requires_conversion"])
 
+    def test_routes_pdf_by_signature(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "sample.pdf"
+            source.write_bytes(b"%PDF-1.7\n% route contract fixture\n")
+            result = self.run_router(source)
+            self.assertEqual(0, result.returncode, result.stderr)
+            report = json.loads(result.stdout)
+            self.assertEqual("pdf", report["format"])
+            self.assertEqual("formats/pdf/SKILL.md", report["adapter"])
+            self.assertEqual("pdf-signature", report["detection"])
+            self.assertFalse(report["extension_mismatch"])
+            self.assertFalse(report["requires_conversion"])
+
+    def test_rejects_pdf_extension_and_signature_mismatch(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+
+            wrong_extension = root / "sample.bin"
+            wrong_extension.write_bytes(b"%PDF-1.7\n")
+            result = self.run_router(wrong_extension)
+            self.assertEqual(2, result.returncode)
+            report = json.loads(result.stdout)
+            self.assertTrue(report["extension_mismatch"])
+            self.assertIn("does not match", report["error"])
+
+            fake_pdf = root / "fake.pdf"
+            fake_pdf.write_bytes(b"not a pdf")
+            result = self.run_router(fake_pdf)
+            self.assertEqual(2, result.returncode)
+            report = json.loads(result.stdout)
+            self.assertIsNone(report["format"])
+            self.assertIn("signature", report["error"])
+
     def test_rejects_extension_mismatch(self):
         with tempfile.TemporaryDirectory() as directory:
             source = self.make_ooxml(Path(directory), "wrong.xlsx", "word/document.xml")
