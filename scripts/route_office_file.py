@@ -11,6 +11,7 @@ import zipfile
 
 
 CFB_SIGNATURE = bytes.fromhex("D0CF11E0A1B11AE1")
+PDF_SIGNATURE = b"%PDF-"
 OOXML_MARKERS = {
     "word": "word/document.xml",
     "excel": "xl/workbook.xml",
@@ -48,6 +49,22 @@ def route(source: Path) -> tuple[int, dict[str, object]]:
 
     suffix = source.suffix.lower()
     try:
+        with source.open("rb") as stream:
+            leading_bytes = stream.read(max(len(CFB_SIGNATURE), len(PDF_SIGNATURE)))
+
+        if leading_bytes.startswith(PDF_SIGNATURE):
+            if suffix != ".pdf":
+                return 2, report(
+                    format_name="pdf",
+                    detection="pdf-signature",
+                    extension_mismatch=True,
+                    error=f"file extension {suffix or '<none>'} does not match detected pdf container",
+                )
+            return 0, report(format_name="pdf", detection="pdf-signature")
+
+        if suffix == ".pdf":
+            return 2, report(error="file has a .pdf extension but no PDF signature")
+
         if zipfile.is_zipfile(source):
             with zipfile.ZipFile(source) as archive:
                 entries = set(archive.namelist())
@@ -73,9 +90,7 @@ def route(source: Path) -> tuple[int, dict[str, object]]:
                 )
             return 0, report(format_name=format_name, detection="ooxml-signature")
 
-        with source.open("rb") as stream:
-            signature = stream.read(len(CFB_SIGNATURE))
-        if signature == CFB_SIGNATURE:
+        if leading_bytes[: len(CFB_SIGNATURE)] == CFB_SIGNATURE:
             format_name = LEGACY_EXTENSIONS.get(suffix)
             if not format_name:
                 return 2, report(

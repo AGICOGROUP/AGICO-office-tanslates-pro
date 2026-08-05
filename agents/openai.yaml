@@ -1,4 +1,4 @@
 interface:
-  display_name: "AGICO Office Professional Translation"
-  short_description: "自动路由并专业翻译 Word、Excel 和 PowerPoint 文件"
-  default_prompt: "Use $translate-office-files to translate my uploaded Office file while preserving its terminology, editable structure, and layout."
+  display_name: "AGICO Professional Document Translation"
+  short_description: "Routes Word, Excel, PowerPoint, and PDF translation while preserving structure and layout"
+  default_prompt: "Use $translate-office-files to translate my uploaded document while preserving terminology, editable structure, images, and layout."

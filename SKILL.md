@@ -1,11 +1,11 @@
 ---
 name: translate-office-files
-description: Use when translating uploaded Microsoft Office files in Word (.doc/.docx), Excel (.xls/.xlsx/.xlsm), or PowerPoint (.ppt/.pptx) formats, especially cement-industry documents whose terminology, editable structure, formulas, images, and layout must be preserved.
+description: Use when translating uploaded Word (.doc/.docx), Excel (.xls/.xlsx/.xlsm), PowerPoint (.ppt/.pptx), or PDF (.pdf) files whose professional terminology, editable content, images, and layout must be preserved.
 ---
 
-# Translate Office Files
+# Translate Office and PDF Files
 
-Route each uploaded Office document to exactly one professional translation adapter. Preserve the source and produce a separate translated artifact.
+Route each uploaded document to exactly one format adapter. Preserve the source and produce a separate translated artifact.
 
 ## Route the uploaded file
 
@@ -19,8 +19,9 @@ Route each uploaded Office document to exactly one professional translation adap
 | Word `.doc` / `.docx` | `formats/word/SKILL.md` |
 | Excel `.xls` / `.xlsx` / `.xlsm` | `formats/excel/SKILL.md` |
 | PowerPoint `.ppt` / `.pptx` | `formats/ppt/SKILL.md` |
+| PDF `.pdf` | `formats/pdf/SKILL.md` |
 
-Do not route by user wording or extension alone. For a legacy CFB file, require a confirmed CFB signature and let the selected adapter perform safe conversion.
+Do not route by user wording or extension alone. The PDF adapter performs a second signature and content classification before selecting one of its two independent PDF skills.
 
 ## Shared translation contract
 
