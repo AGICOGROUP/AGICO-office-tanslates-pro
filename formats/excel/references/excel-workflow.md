@@ -18,9 +18,10 @@ Inventory sheet order and visibility, used ranges, formulas, defined names, tabl
 - Keep one manifest item per source object; do not deduplicate repeated text.
 - Validate the manifest before mutation.
 - Modify only text-bearing objects. Keep formulas as formulas and numeric/date cells typed.
+- For bilingual output, read and apply `bilingual-row-layout.md`; it is the default layout unless the user specifies another arrangement.
 
 ## Fit and verification
 
 Keep original row heights and column widths by default. Use concise English, wrapping, and bounded font reduction before any local dimension change; record every approved fit adjustment.
 
-After export, compare formulas, sheet structure, names, merges, dimensions, styles, validations, filters, panes, links, charts, images, macros, print settings, and page setup. Scan for formula errors and unexpected Chinese. Render every final sheet and print area; reject clipping, overlap, merged-cell damage, chart collisions, missing image labels, or unreviewed hidden content.
+After export, compare formulas, sheet structure, names, merges, dimensions, styles, validations, filters, panes, links, charts, images, macros, print settings, and page setup. Scan for formula errors and unexpected Chinese. For bilingual output, also reject missing or split source/translation row pairs, duplicated numeric data in translation rows, and source-language text in translation rows. Render every final sheet and print area; reject clipping, overlap, merged-cell damage, chart collisions, missing image labels, or unreviewed hidden content.
