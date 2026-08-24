@@ -1,7 +1,7 @@
 ---
 name: translate-pdf-bilingual-overlay
 description: >-
-  Use when the user wants to keep the original text visible and add Chinese
+  Use when the user wants to keep any original source language visible and unchanged and add Chinese
   translation beside it in the surrounding whitespace, producing a bilingual
   dual-language PDF. Triggers on phrases like "保留原文加翻译", "双语版",
   "bilingual", "中英对照", "原文后面加中文", "在空白处加翻译",
@@ -15,12 +15,14 @@ description: >-
 
 ## Purpose
 
-Produce a bilingual PDF where the source-language original remains fully
+Produce a bilingual PDF where the original source language remains fully
 visible and selectable, and the Chinese translation is placed beside it in
 available whitespace. This is fundamentally different from replacement
 translation: nothing in the source is removed, overwritten, or flattened.
 
-Use this skill when the user explicitly wants both languages visible
+The source language may be English, Spanish, Russian, Portuguese, or any other
+language supported by extraction and translation. Do not assume or hard-code
+the source language. Use this skill when the user explicitly wants both languages visible
 side by side in the same document.
 
 ## When to use this skill vs. the native/scan adapters
