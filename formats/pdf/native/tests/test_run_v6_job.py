@@ -145,6 +145,43 @@ class RunV6JobTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("extractable CJK", result.stderr)
 
+    def test_verify_allows_cjk_when_target_language_is_chinese(self):
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name)
+            source = root / "source.pdf"
+            make_pdf(source)
+            initialized = run("init", source, "--jobs-root", root / "jobs")
+            job_dir = Path(json.loads(initialized.stdout)["job_dir"])
+            manifest_path = job_dir / "manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["target_language"] = "zh"
+            manifest_path.write_text(
+                json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+            candidate = job_dir / "candidate.pdf"
+            pdfmetrics.registerFont(UnicodeCIDFont("STSong-Light"))
+            pdf = canvas.Canvas(str(candidate), pagesize=(200, 200))
+            pdf.setFont("STSong-Light", 12)
+            pdf.drawString(20, 150, "中文残留")
+            pdf.save()
+            job_path = job_dir / "job.json"
+            job = json.loads(job_path.read_text(encoding="utf-8"))
+            job["stage"] = "assembled"
+            job["artifacts"]["manifest"]["sha256"] = hashlib.sha256(
+                manifest_path.read_bytes()
+            ).hexdigest()
+            job["artifacts"]["candidate_pdf"] = {
+                "path": str(candidate.resolve()),
+                "sha256": hashlib.sha256(candidate.read_bytes()).hexdigest(),
+            }
+            job_path.write_text(
+                json.dumps(job, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+            result = run("verify", job_dir, "--visual-review-complete")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertNotIn("extractable CJK", result.stderr)
+            self.assertIn("visual review report is required", result.stderr)
+
     def test_image_annotation_requires_review_of_every_original_image(self):
         with tempfile.TemporaryDirectory() as name:
             root = Path(name)
@@ -283,6 +320,36 @@ class RunV6JobTests(unittest.TestCase):
 
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("unreported confirm item", result.stderr)
+
+    def test_image_annotation_rejects_clear_informational_caption_as_confirm(self):
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name)
+            job_dir, image_id = prepare_annotation_job(root)
+            metadata = root / "metadata.json"
+            review = root / "review.json"
+            metadata.write_text(json.dumps({"images": []}), encoding="utf-8")
+            payload = routed_review(image_id, "preserve_confirm")
+            image = payload["images"][0]
+            image["translated_label_count"] = 0
+            image["preserved_label_count"] = 1
+            image["confirm_count"] = 1
+            image["labels"][0].update(
+                {
+                    "source_text": "厂区效果图下方清晰可读的企业基地说明文字",
+                    "translation": "",
+                    "status": "confirm",
+                    "preserve_reason": "informational_caption",
+                }
+            )
+            payload["confirm_items"] = [{"label_id": "label-1"}]
+            review.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+            result = run(
+                "annotate-images", job_dir, "--metadata", metadata, "--review", review
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("informational image text must be translated", result.stderr)
 
     def test_verify_requires_image_structural_evidence(self):
         with tempfile.TemporaryDirectory() as name:

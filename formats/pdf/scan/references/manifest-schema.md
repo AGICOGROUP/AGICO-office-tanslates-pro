@@ -6,6 +6,7 @@ Copy page geometry and `source_lines` from `extraction-report.json`; do not renu
 {
   "source": "C:/docs/input.pdf",
   "source_sha256": "...",
+  "target_language": "es",
   "selected_pages": [1],
   "pages": [{
     "source_page": 1,
@@ -23,7 +24,7 @@ Copy page geometry and `source_lines` from `extraction-report.json`; do not renu
     "page": 1,
     "source_line_ids": ["p01-l001"],
     "source": "原文",
-    "translation": "Professional English",
+    "translation": "Professional target text",
     "role": "title",
     "status": "translated",
     "action": "replace",
@@ -40,12 +41,37 @@ Copy page geometry and `source_lines` from `extraction-report.json`; do not renu
 }
 ```
 
+For additive bilingual output, use this block shape:
+
+```json
+{
+  "id": "p01-label-es",
+  "page": 1,
+  "source_line_ids": ["p01-l001"],
+  "source": "袋式收尘器",
+  "translation": "Filtro de mangas",
+  "role": "diagram_label",
+  "status": "translated",
+  "action": "add_bilingual",
+  "box": [320, 160, 560, 205],
+  "source_preserved": true,
+  "placement": "below",
+  "color": [0, 0.31, 0.55],
+  "max_font": 10,
+  "min_font": 7
+}
+```
+
+`add_bilingual` requires top-level `target_language`, forbids `clean_box`, and
+accepts only `below`, `right`, or `blank_panel`. Its target box must not overlap
+any OCR source line or protected graphic box.
+
 Coordinates are in source-render pixels with origin at top left. Colors are RGB floats from 0 to 1 for text/vector lines; cleanup backgrounds use integer RGB 0–255 or `sample`.
 
 `preserve_confirm` blocks must use `action: preserve`, keep a nonblank `source`, and state the reason in `translation` (for example `Trademark; preserve exactly`). A manifest is invalid if any source-line ID is missing, duplicated, or assigned to an unknown block.
 
 Use `status: bilingual_complete` with `action: preserve` only for a complete
-Chinese/English diagram region. `bilingual_evidence` must contain
+Chinese/target-language diagram region. `bilingual_evidence` must contain
 `clear_source_label_count`, the equal `matched_bilingual_pair_count`,
 `unmatched_source_label_count: 0`, and a 64-character
 `source_region_sha256`.

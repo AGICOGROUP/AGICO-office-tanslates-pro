@@ -62,6 +62,9 @@
 - Use vision/OCR on image-heavy pages to find source-language residue.
 - Every clear source-language label in embedded images is translated unless it
   belongs to a strictly proven complete bilingual image preserved unchanged.
+- Reject `preserve_confirm` for clear informational captions or readable labels;
+  confirmed preservation requires an allowed `preserve_reason` for unreadable,
+  logo/seal, signature/stamp, or protected legal-document content.
 - A preserved bilingual image has complete Chinese/English pair evidence,
   zero unmatched Chinese labels, and an unchanged original asset hash.
 - Every newly translated image label is extractable/selectable from the final
@@ -82,6 +85,9 @@
 - Image placement changes require a recorded readable-size fit failure,
   unchanged aspect ratio, approved whitespace at the vacated region, and zero
   collisions or unapproved changes.
+- Numbered section depth controls heading hierarchy. Decimal measurements and
+  punctuated prose cannot become headings, and wrapped heading continuations
+  cannot fall back to body styling.
 
 ## Evidence
 

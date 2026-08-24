@@ -24,6 +24,12 @@ IMAGE_LOCALIZATION_METHODS = {
     "preserve_confirm",
     "preserve_bilingual",
 }
+ALLOWED_CONFIRM_REASONS = {
+    "distant_unreadable",
+    "legal_document",
+    "logo_or_seal",
+    "signature_or_stamp",
+}
 IMAGE_ASSET_TYPES = {
     "editable_vector",
     "raster_simple",
@@ -171,6 +177,12 @@ def _validate_image_localization_review(
                 raise ValueError(f"blank image-label translation: {label_id}")
             if label.get("status") == "confirm" and label_id not in confirm_items:
                 raise ValueError(f"unreported confirm item: {label_id}")
+            if label.get("status") == "confirm" and str(
+                label.get("preserve_reason", "")
+            ) not in ALLOWED_CONFIRM_REASONS:
+                raise ValueError(
+                    f"informational image text must be translated: {label_id}"
+                )
         if method == "preserve_bilingual":
             clear_count = int(record.get("clear_source_label_count", -1))
             matched_count = int(record.get("matched_bilingual_pair_count", -1))
@@ -320,6 +332,10 @@ def verify(
     if job["stage"] != "assembled":
         raise ValueError("verify requires assembled stage")
     candidate = _artifact(job, "candidate_pdf")
+    manifest = _artifact(job, "manifest")
+    manifest_data = json.loads(manifest.read_text(encoding="utf-8"))
+    target_language = str(manifest_data.get("target_language", "")).casefold()
+    target_allows_cjk = target_language.startswith(("zh", "ja", "ko"))
     reader = PdfReader(str(candidate))
     extracted_text = "\n".join(
         page.extract_text() or "" for page in reader.pages
@@ -327,7 +343,7 @@ def verify(
     cjk = re.findall(
         r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]", extracted_text
     )
-    if cjk:
+    if cjk and not target_allows_cjk:
         raise ValueError(f"extractable CJK remains: {len(cjk)} characters")
     if visual_review_report is None:
         raise ValueError("visual review report is required")
@@ -362,7 +378,6 @@ def verify(
         raise ValueError(
             "visual delivery gates failed: " + ", ".join(failed)
         )
-    manifest = _artifact(job, "manifest")
     selectability_report = job_dir / "selectability-report.json"
     selectable_args: list[object] = [
         Path(job["source"]["path"]), manifest, candidate, "--report", selectability_report,
@@ -393,7 +408,12 @@ def verify(
         "candidate_sha256": candidate_hash,
         "extractable_cjk": len(cjk),
         "selectability_report": str(selectability_report),
-        "selectability_passed": not any(selectability.get(key) for key in ("geometry_failures", "extractable_cjk_pages", "selectable_text_failures", "unapproved_image_changes")),
+        "selectability_passed": (
+            not selectability.get("geometry_failures")
+            and (target_allows_cjk or not selectability.get("extractable_cjk_pages"))
+            and not selectability.get("selectable_text_failures")
+            and not selectability.get("unapproved_image_changes")
+        ),
         "typography_passed": bool(typography.get("passed", False)),
         "outside_region_pixel_changes": sum(int(item.get("outside_region_pixel_changes", 0)) for item in json.loads(_artifact(job, "clean_image_report").read_text(encoding="utf-8")).get("images", [])) if "clean_image_report" in job["artifacts"] else 0,
         "visual_review_complete": True,

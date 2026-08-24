@@ -34,6 +34,10 @@ def _validate_rgb(value: object, label: str) -> None:
         raise ManifestError(f"{label} RGB channels must be between 0 and 1")
 
 
+def _boxes_overlap(first: list[float], second: list[float]) -> bool:
+    return min(first[2], second[2]) > max(first[0], second[0]) and min(first[3], second[3]) > max(first[1], second[1])
+
+
 def _validate_rich_lines(block: dict, page: dict) -> None:
     block_id = block.get("id", "<unknown>")
     rich_lines = block.get("rich_lines")
@@ -82,6 +86,10 @@ def _validate_rich_lines(block: dict, page: dict) -> None:
 def validate_manifest(manifest: dict) -> dict:
     source_lines = manifest.get("source_lines", [])
     blocks = manifest.get("blocks", [])
+    if any(block.get("action") == "add_bilingual" for block in blocks):
+        target_language = manifest.get("target_language")
+        if not isinstance(target_language, str) or len(target_language.strip()) < 2:
+            raise ManifestError("add_bilingual manifests require a non-empty target_language")
     source_ids = [line.get("id") for line in source_lines]
     if not source_ids or any(not line_id for line_id in source_ids):
         raise ManifestError("source_lines must contain stable non-empty IDs")
@@ -126,12 +134,21 @@ def validate_manifest(manifest: dict) -> dict:
             raise ManifestError(f"block {block_id} has blank translation")
         if len(block["box"]) != 4:
             raise ManifestError(f"block {block_id} must have a four-value box")
-        if block["action"] not in {"replace", "preserve"}:
+        if block["action"] not in {"replace", "preserve", "add_bilingual"}:
             raise ManifestError(f"block {block_id} has invalid action {block['action']!r}")
         if block["action"] == "replace" and len(block.get("clean_box", [])) != 4:
             raise ManifestError(f"block {block_id} must have a four-value clean_box")
-        if block["status"] == "translated" and block["action"] != "replace":
-            raise ManifestError(f"translated block {block_id} must use action 'replace'")
+        if block["status"] == "translated" and block["action"] not in {"replace", "add_bilingual"}:
+            raise ManifestError(f"translated block {block_id} must use action 'replace' or 'add_bilingual'")
+        if block["action"] == "add_bilingual":
+            if block.get("source_preserved") is not True:
+                raise ManifestError(f"add_bilingual block {block_id} must declare source_preserved: true")
+            if block.get("placement") not in {"below", "right", "blank_panel"}:
+                raise ManifestError(
+                    f"add_bilingual block {block_id} placement must be below, right, or blank_panel"
+                )
+            if "clean_box" in block:
+                raise ManifestError(f"add_bilingual block {block_id} must not define clean_box")
         if block["status"] == "preserve_confirm" and block["action"] != "preserve":
             raise ManifestError(
                 f"block {block_id} preserve_confirm must use action 'preserve'"
@@ -159,6 +176,24 @@ def validate_manifest(manifest: dict) -> dict:
         page = page_index.get(block["page"])
         if page is None:
             raise ManifestError(f"block {block_id} references unknown page {block['page']}")
+        if block["action"] == "add_bilingual":
+            page_source_lines = [line for line in source_lines if line.get("page") == block["page"]]
+            if any(_boxes_overlap(block["box"], line["box"]) for line in page_source_lines):
+                raise ManifestError(f"add_bilingual block {block_id} overlaps source text")
+            if any(_boxes_overlap(block["box"], box) for box in page.get("protected_boxes", [])):
+                raise ManifestError(f"add_bilingual block {block_id} overlaps protected graphics")
+            assigned_lines = [line for line in page_source_lines if line.get("id") in block["source_line_ids"]]
+            if assigned_lines:
+                anchor = [
+                    min(line["box"][0] for line in assigned_lines),
+                    min(line["box"][1] for line in assigned_lines),
+                    max(line["box"][2] for line in assigned_lines),
+                    max(line["box"][3] for line in assigned_lines),
+                ]
+                if block["placement"] == "below" and block["box"][1] < anchor[3]:
+                    raise ManifestError(f"add_bilingual block {block_id} is not below its source anchor")
+                if block["placement"] == "right" and block["box"][0] < anchor[2]:
+                    raise ManifestError(f"add_bilingual block {block_id} is not right of its source anchor")
         _validate_rich_lines(block, page)
         assignments.extend(block["source_line_ids"])
         translated_count += block["status"] == "translated"

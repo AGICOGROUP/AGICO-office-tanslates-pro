@@ -58,8 +58,9 @@ Deliver only when every applicable gate passes:
    except a strictly proven complete bilingual image preserved unchanged.
 2. Source-selectable text remains selectable/copyable; native pages are not
    flattened.
-3. Page count, boxes, rotation, colors, tables, images, and hierarchy match the
-   source; layout changes are limited to approved fit-failure image adjustments.
+3. Preserve the source page count, boxes, rotation, colors, tables, images,
+   reading order, and visual identity. Allow source-respecting micro-adjustments
+   to text layout when they make the translation clearer or more balanced.
 4. Outside approved image-text regions, source and cleaned-image pixels are
    identical.
 5. Protected engineering lines, arrows, borders, symbols, and equipment pixels
@@ -174,6 +175,9 @@ python scripts/native_selectable_rebuild.py `
 - Classify body/heading/table roles from source font family, weight, position,
   and reading-text-weighted size frequency. Do not promote body copy merely
   because its absolute point size is large.
+- Derive numbered heading levels from the full section prefix; do not treat
+  decimal measurements or punctuated prose as headings. Keep short wrapped
+  heading continuations at the same level and translate them as one heading.
 - Keep structural role independent from font weight. Derive each page group's
   weight from the dominant source evidence. When a PDF exports visually bold
   text without a bold font flag, record a reviewed `source_bold_override`;
@@ -181,6 +185,12 @@ python scripts/native_selectable_rebuild.py `
 - Reflow complete paragraphs, not independently extracted lines. Preserve
   source alignment, keep one font size across each paragraph, and harmonize
   equal body roles on the same page.
+- Treat source layout as the baseline, not a coordinate prison. Apply controlled
+  local changes to alignment, indentation, line spacing, paragraph spacing,
+  text-box width, and role-consistent font size when the translated page reads
+  better without changing its identity. Restore table-of-contents hierarchy,
+  split run-in lists into separate items, and recombine orphaned continuation
+  lines when the source semantics support those changes.
 - Plan dense pages as a whole before shrinking text. Set one body-size target
   and one target for each heading level. Only after a recorded fit failure,
   reclaim verified whitespace by shifting or proportionally shrinking an image
@@ -210,6 +220,9 @@ and select `native_edit`, `deterministic_cleanup`, `anchored_line_restore`,
 text-bearing image.
 Record every label, OCR confidence, translation, route, and status. Do not
 guess unreadable labels; preserve them and create a `[CONFIRM]` item.
+Never use `[CONFIRM]` to skip a clear informational caption or readable label
+because its background is complex; route it through a local clean base and
+selectable vector-text overlay.
 
 Use two separate layers:
 

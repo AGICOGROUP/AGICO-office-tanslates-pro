@@ -279,6 +279,14 @@ def clean_region(image: np.ndarray, region: dict) -> int:
         before = target.copy()
         target[:] = reconstruct_ui_rows(image, x0, y0, x1, y1)
         return int(np.any(before != target, axis=2).sum())
+    elif mode == "solid_fill":
+        fill_rgb = np.asarray(region.get("fill_rgb", []), dtype=np.uint8)
+        if fill_rgb.shape != (3,):
+            raise ValueError("solid_fill requires fill_rgb with three channels")
+        target = image[y0:y1, x0:x1]
+        before = target.copy()
+        target[:] = fill_rgb
+        return int(np.any(before != target, axis=2).sum())
     elif mode == "anchored_line_restore":
         mask = neutral_mask(source_crop, "none")
     else:

@@ -1,0 +1,354 @@
+[
+  {
+    "page": 0,
+    "source": "TÍTULO DO DOCUMENTO: PLANO DE INSPEÇÃO E TESTES",
+    "translation": "文件标题：检验和试验计划",
+    "x": 165.5,
+    "y": 88,
+    "fontsize": 5
+  },
+  {
+    "page": 0,
+    "source": "NÚMERO PIT: 010-26 R.0",
+    "translation": "PIT编号：010-26 R.0",
+    "x": 417.0,
+    "y": 88,
+    "fontsize": 5
+  },
+  {
+    "page": 0,
+    "source": "CLIENTE: ZANINI RENK",
+    "translation": "客户：ZANINI RENK（扎尼尼·伦克）",
+    "x": 50.3,
+    "y": 118,
+    "fontsize": 5
+  },
+  {
+    "page": 0,
+    "source": "PÁGINA: 1 de 3",
+    "translation": "页码：第 1 页，共 3 页",
+    "x": 479.0,
+    "y": 118,
+    "fontsize": 5
+  },
+  {
+    "page": 0,
+    "source": "N° OS: -",
+    "translation": "工单号：-",
+    "x": 479.0,
+    "y": 148,
+    "fontsize": 5
+  },
+  {
+    "page": 0,
+    "source": "NOME DO PROJETO: TAÇA DA MESA DO MOINHO",
+    "translation": "项目名称：磨机盘塔（磨盘料盘）",
+    "x": 50.3,
+    "y": 148,
+    "fontsize": 5
+  },
+  {
+    "page": 0,
+    "source": "HP: HOLD POINT",
+    "translation": "HP：停工点（控制点）—制造至此点时须暂停并等待检验，经放行后方可进行下一道工序。",
+    "x": 51.0,
+    "y": 258,
+    "fontsize": 9,
+    "max_width": 470
+  },
+  {
+    "page": 0,
+    "source": "WP: WITNESS POINT",
+    "translation": "WP：见证点—召集授权检验员、客户和/或其代表进行监督见证，不中断生产过程。",
+    "x": 51.0,
+    "y": 303,
+    "fontsize": 9,
+    "max_width": 470
+  },
+  {
+    "page": 0,
+    "source": "RD: VERIFICAÇÃO DA DOCUMENTAÇÃO PELO CLIENTE",
+    "translation": "RD：客户文件验证—仅对质量文件和记录进行验证审核。",
+    "x": 51.0,
+    "y": 361,
+    "fontsize": 9,
+    "max_width": 470
+  },
+  {
+    "page": 0,
+    "source": "DESCRIÇÃO DAS REVISÕES",
+    "translation": "修订说明",
+    "x": 242.3,
+    "y": 546,
+    "fontsize": 7
+  },
+  {
+    "page": 0,
+    "source": "DATA",
+    "translation": "日期",
+    "x": 153.7,
+    "y": 560,
+    "fontsize": 7
+  },
+  {
+    "page": 0,
+    "source": "COMENTÁRIOS",
+    "translation": "备注",
+    "x": 350.9,
+    "y": 560,
+    "fontsize": 7
+  },
+  {
+    "page": 0,
+    "source": "Emissão inicial",
+    "translation": "初次发布",
+    "x": 351.6,
+    "y": 575,
+    "fontsize": 6
+  },
+  {
+    "page": 0,
+    "source": "ELABORADOR",
+    "translation": "编制人",
+    "x": 50.6,
+    "y": 668,
+    "fontsize": 5
+  },
+  {
+    "page": 0,
+    "source": "VERIFICADOR",
+    "translation": "审核人",
+    "x": 50.6,
+    "y": 683,
+    "fontsize": 5
+  },
+  {
+    "page": 0,
+    "source": "APROVADOR",
+    "translation": "批准人",
+    "x": 50.6,
+    "y": 698,
+    "fontsize": 5
+  },
+  {
+    "page": 1,
+    "source": "PLANO DE INSPEÇÃO E TESTES",
+    "translation": "检验和试验计划",
+    "x": 400.8,
+    "y": 140,
+    "fontsize": 5.5
+  },
+  {
+    "page": 1,
+    "source": "TAÇA DA MESA DO MOINHO",
+    "translation": "磨机盘塔（磨盘料盘）",
+    "x": 431.0,
+    "y": 155,
+    "fontsize": 5.5
+  },
+  {
+    "page": 1,
+    "source": "Zanini Renk",
+    "translation": "扎尼尼·伦克",
+    "x": 458.9,
+    "y": 170,
+    "fontsize": 5.5
+  },
+  {
+    "page": 1,
+    "source": "FASE",
+    "translation": "阶段",
+    "x": 109.2,
+    "y": 202,
+    "fontsize": 6
+  },
+  {
+    "page": 1,
+    "source": "DESCRIÇÃO DO EXAME / TESTE",
+    "translation": "检验/试验描述",
+    "x": 145.2,
+    "y": 201,
+    "fontsize": 6
+  },
+  {
+    "page": 1,
+    "source": "PROCEDIMENTO / CRITÉRIO DE ACEITAÇÃO",
+    "translation": "规程 / 验收准则",
+    "x": 260.0,
+    "y": 197,
+    "fontsize": 6
+  },
+  {
+    "page": 1,
+    "source": "REGISTRO",
+    "translation": "记录",
+    "x": 366.5,
+    "y": 202,
+    "fontsize": 6
+  },
+  {
+    "page": 1,
+    "source": "EXTENSÃO DO ENSAIO",
+    "translation": "检测范围",
+    "x": 555.5,
+    "y": 197,
+    "fontsize": 6
+  },
+  {
+    "page": 1,
+    "source": "OBSERVAÇÕES",
+    "translation": "备注",
+    "x": 644.8,
+    "y": 201,
+    "fontsize": 6
+  },
+  {
+    "page": 1,
+    "source": "1. MATERIA PRIMA",
+    "translation": "1. 原材料",
+    "x": 97.6,
+    "y": 228,
+    "fontsize": 6
+  },
+  {
+    "page": 1,
+    "source": "Análise de material - composição química e propriedades mecânicas",
+    "translation": "材料分析 - 化学成分和力学性能",
+    "x": 144.4,
+    "y": 245,
+    "fontsize": 5.5,
+    "max_width": 110
+  },
+  {
+    "page": 1,
+    "source": "Ensaio de tração",
+    "translation": "拉伸试验",
+    "x": 171.1,
+    "y": 296,
+    "fontsize": 6
+  },
+  {
+    "page": 1,
+    "source": "Ensaio de dureza",
+    "translation": "硬度试验",
+    "x": 170.4,
+    "y": 337,
+    "fontsize": 6
+  },
+  {
+    "page": 1,
+    "source": "2. PROCEDIMENTOS DE END E QUALIFICAÇÃO DE PESSOAL",
+    "translation": "2. 无损检测规程及人员资格",
+    "x": 97.6,
+    "y": 364,
+    "fontsize": 6,
+    "max_width": 200
+  },
+  {
+    "page": 1,
+    "source": "Procedimentos de ensaios não destrutivos: UT e LP",
+    "translation": "无损检测规程：UT和LP",
+    "x": 148.0,
+    "y": 381,
+    "fontsize": 5.5,
+    "max_width": 100
+  },
+  {
+    "page": 1,
+    "source": "Qualificação dos Inspetores de ensaio não destrutivo: UT e LP",
+    "translation": "无损检测检验员资格：UT和LP",
+    "x": 147.8,
+    "y": 422,
+    "fontsize": 5.5,
+    "max_width": 100
+  },
+  {
+    "page": 2,
+    "source": "PLANO DE INSPEÇÃO E TESTES",
+    "translation": "检验和试验计划",
+    "x": 400.8,
+    "y": 134,
+    "fontsize": 5.5
+  },
+  {
+    "page": 2,
+    "source": "TAÇA DA MESA DO MOINHO",
+    "translation": "磨机盘塔（磨盘料盘）",
+    "x": 431.0,
+    "y": 149,
+    "fontsize": 5.5
+  },
+  {
+    "page": 2,
+    "source": "Zanini Renk",
+    "translation": "扎尼尼·伦克",
+    "x": 458.9,
+    "y": 164,
+    "fontsize": 5.5
+  },
+  {
+    "page": 2,
+    "source": "3. FABRICAÇÃO",
+    "translation": "3. 制造",
+    "x": 97.6,
+    "y": 228,
+    "fontsize": 6
+  },
+  {
+    "page": 2,
+    "source": "Ensaio ultrassom",
+    "translation": "超声波检测",
+    "x": 170.0,
+    "y": 255,
+    "fontsize": 6
+  },
+  {
+    "page": 2,
+    "source": "Ensaio por líquido penetrante",
+    "translation": "液体渗透检测",
+    "x": 150.1,
+    "y": 299,
+    "fontsize": 6
+  },
+  {
+    "page": 2,
+    "source": "Inspeção dimensional",
+    "translation": "尺寸检验",
+    "x": 162.7,
+    "y": 343,
+    "fontsize": 6
+  },
+  {
+    "page": 2,
+    "source": "4. JATEAMENTO E PINTURA",
+    "translation": "4. 喷砂和涂装",
+    "x": 97.6,
+    "y": 371,
+    "fontsize": 6
+  },
+  {
+    "page": 2,
+    "source": "Visual e superficial",
+    "translation": "外观和表面检测",
+    "x": 167.5,
+    "y": 398,
+    "fontsize": 6,
+    "max_width": 80
+  },
+  {
+    "page": 2,
+    "source": "5. DATABOOK",
+    "translation": "5. 数据包",
+    "x": 97.6,
+    "y": 425,
+    "fontsize": 6
+  },
+  {
+    "page": 2,
+    "source": "Análise das documentações",
+    "translation": "文件分析",
+    "x": 152.5,
+    "y": 451,
+    "fontsize": 6
+  }
+]

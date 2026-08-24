@@ -1,5 +1,8 @@
 # Scan-only PDF workflow
 
+For additive bilingual engineering drawings, also read
+`additive-bilingual-drawings.md` and use `action: add_bilingual`.
+
 ## 1. Prepare
 
 Work from the original PDF. Create `<work>/<stem>-<sha8>/` with `extract/`, `manifest/`, `output/`, `review/`, and `qa/`. Keep the source immutable.
@@ -17,8 +20,8 @@ Use both 1x and 3x OCR results merged by geometry. Visually compare the 400-DPI 
 Group OCR lines into semantic blocks before translation. Preserve numbers, units, model names, standards, URLs, emails, and trademarks exactly unless localization is explicitly required. Build a document-level glossary before translating repeated technical terms. Translate meaning, not OCR noise.
 
 Before translating a diagram, inventory all clear Chinese labels and their
-nearby English counterparts. Preserve the diagram as `bilingual_complete` only
-when every Chinese label is paired. Some English on the image is insufficient;
+nearby target-language counterparts. Preserve the diagram as `bilingual_complete` only
+when every Chinese label is paired. Some target-language text on the image is insufficient;
 translate every unmatched Chinese label.
 
 ## 3. Choose cleanup geometry
@@ -27,7 +30,7 @@ The default is tight glyph-only cleanup:
 
 - Uniform background: use a clean box only 1–3 pixels beyond the glyph envelope.
 - Table cells: clean glyphs, not the whole cell. If a rule crosses text, clean the smallest necessary interval and rebuild that verified segment with `vector_lines`.
-- Leaders or dotted lines: leave dots outside the English text box intact; rebuild only the verified interrupted segment.
+- Leaders or dotted lines: leave dots outside the target text box intact; rebuild only the verified interrupted segment.
 - Engineering/process diagrams: preserve pipes, arrows, wires, beams, borders, symbols, and color coding. Never regenerate the diagram. Use local sampling only when the surrounding region is genuinely uniform.
 - Photographs/UI/screenshots: do not synthesize unknown background. If text sits on a nonuniform texture and a clean removal cannot be proved, perform pixel-local clone/inpaint outside these generic scripts, then verify the protected structure at high zoom.
 - Logos: translate the readable wording while preserving artwork. A trademark or brand name may use `preserve_confirm` when translation would be incorrect.
@@ -42,10 +45,13 @@ Classify each icon before cleanup:
 
 Do not replace a source icon with Unicode, a font glyph, explanatory text, or a similar icon from another library. For lines containing orange commands, blue links, warnings, or other meaningful color changes, use `rich_lines` text runs and preserve each run's RGB color. The concatenated text runs must equal the block `translation`; source-crop runs do not add text.
 
-The `box` is the English text area. The `clean_box` is the source-glyph removal area. They are intentionally separate. Never enlarge `clean_box` merely because English is longer; instead reflow, reduce font within the allowed minimum, or use nearby whitespace.
+The `box` is the target-language text area. In replacement mode, `clean_box` is
+the source-glyph removal area; they are intentionally separate. Never enlarge
+`clean_box` merely because the translation is longer. In additive bilingual
+mode, omit `clean_box` and place `box` below, right, or in a verified blank panel.
 
 Plan `major_title`, `minor_title`, and `body` typography once per page. Use one
-font, size, and weight for each group. If English still cannot fit at the
+font, size, and weight for each group. If target text still cannot fit at the
 readable floor, record the fit failure before using a page `layout_adjustment`.
 Try shifting a large image first, then proportional shrink. The old image area
 must be verified uniform background and both old and new boxes become approved
@@ -57,7 +63,12 @@ difference regions.
 python scripts/build_scan.py --manifest "job/manifest/translation-manifest.json" --output "job/output/translated.pdf"
 ```
 
-The builder hard-fails when complete English cannot fit. It records changed pixels and requires zero changes outside approved cleanup boxes. Optional `vector_lines` are drawn after the cleaned page image and before English text. For every `source_crop` run it records the source page, source box, output box, pixel SHA-256, and alt description in the build report.
+The builder hard-fails when complete target-language text cannot fit. It records
+changed pixels and requires zero changes outside approved cleanup boxes. A pure
+`add_bilingual` build requires `changed_pixel_count: 0`. Optional `vector_lines`
+are drawn after the cleaned page image and before target text. For every
+`source_crop` run it records the source page, source box, output box, pixel
+SHA-256, and alt description in the build report.
 
 ## 5. Review and verify
 

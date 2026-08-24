@@ -65,8 +65,18 @@ def filter_reviewed_ocr_false_positives(
 
 def filter_approved_bilingual_residuals(residual: list[dict], manifest: dict) -> list[dict]:
     pages = {int(page["source_page"]): page for page in manifest.get("pages", [])}
+    source_lines = {line.get("id"): line for line in manifest.get("source_lines", [])}
     approved: dict[int, list[list[float]]] = {}
     for block in manifest.get("blocks", []):
+        if block.get("action") == "add_bilingual":
+            page_number = int(block["page"])
+            for line_id in block.get("source_line_ids", []):
+                line = source_lines.get(line_id)
+                if line and int(line.get("page", -1)) == page_number:
+                    approved.setdefault(page_number, []).append(
+                        [float(value) for value in line["box"]]
+                    )
+            continue
         if block.get("status") != "bilingual_complete":
             continue
         page_number = int(block["page"])
@@ -123,7 +133,8 @@ def evaluate_evidence(
         manifest_error = str(exc)
 
     required_blocks = [
-        block for block in manifest.get("blocks", []) if block.get("action") == "replace"
+        block for block in manifest.get("blocks", [])
+        if block.get("action") in {"replace", "add_bilingual"}
     ]
     missing_translation_blocks = [
         block["id"]
@@ -138,7 +149,7 @@ def evaluate_evidence(
     min_font_by_id = {
         block["id"]: float(block.get("min_font") or 6)
         for block in required_blocks
-        if block.get("action") == "replace"
+        if block.get("action") in {"replace", "add_bilingual"}
     }
     minimum_font_failures = [
         record["id"]

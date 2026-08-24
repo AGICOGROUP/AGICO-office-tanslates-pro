@@ -30,17 +30,23 @@ An OCR false-positive record requires `output_page`, `box`, and `reason`. Accept
 
 - Source OCR coverage: every source-line ID assigned exactly once.
 - Translation coverage: every `replace` block rendered and extractable from the output text layer.
-- Cement terminology: every match from `references/cement-terminology.md` uses
-  the lookup-selected translation; unmatched content may use model translation.
-- Selectability: all added English exists as embedded vector text; fonts are embedded.
+- Cement terminology: English output uses the lookup-selected term. Other target
+  languages record that term as the semantic pivot and use one consistent
+  professional target-language equivalent.
+- Selectability: all added target-language text exists as embedded vector text; fonts are embedded.
 - Page integrity: page count, page order, dimensions, and orientation match the selected source pages.
 - Graphic integrity: zero pixel changes outside approved cleanup boxes; no blurred, missing, displaced, or covered non-text structure.
 - Icon fidelity: every icon preserved in the raster base or restored from exact source pixels; build-report provenance reviewed; zero text, Unicode, library-icon, or approximate-icon substitutions.
 - Color fidelity: meaningful mixed colors and emphasis preserved; zero unreviewed or flattened command/link/warning color changes.
-- Language residue: dual-scale OCR finds zero unexplained CJK text.
+- Language residue: replacement mode has zero unexplained CJK text. Additive
+  bilingual mode permits CJK only inside source-line boxes assigned to
+  `add_bilingual` or validated `bilingual_complete` blocks.
 - Bilingual preservation: every exempt CJK region is hash-bound, has complete
-  Chinese/English pair coverage, and has zero unmatched Chinese labels.
+  Chinese/target-language pair coverage, and has zero unmatched Chinese labels.
 - Layout: zero detected or visually observed text overlaps; zero clipping; no text below minimum font size.
+- Additive integrity: pure `add_bilingual` output has `changed_pixel_count: 0`;
+  each translation box is below, right, or in a verified blank panel and does
+  not intersect source text or protected graphics.
 - Typography: each page has one rendered font family, size, and weight for each
   of `major_title`, `minor_title`, and `body`; dense content reduces the full
   group uniformly.

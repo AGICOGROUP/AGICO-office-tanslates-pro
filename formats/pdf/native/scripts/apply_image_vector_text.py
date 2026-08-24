@@ -1,6 +1,7 @@
 import argparse
 import io
 import json
+import shutil
 import sys
 from pathlib import Path
 
@@ -197,6 +198,13 @@ def apply(
 ) -> None:
     register_fonts(regular_font, bold_font)
     metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    # With no image-localized regions there is nothing to overlay. Rewriting
+    # the PDF through pypdf in this case can damage masked source images (for
+    # example a transparent logo), so preserve the native PDF byte-for-byte.
+    if not metadata.get("images"):
+        output_pdf.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(input_pdf, output_pdf)
+        return
     base = metadata_path.parent
     by_page: dict[int, list[dict]] = {}
     for item in metadata["images"]:

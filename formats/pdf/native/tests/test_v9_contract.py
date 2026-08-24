@@ -35,6 +35,8 @@ class V9SkillContractTests(unittest.TestCase):
         self.assertIn("[CONFIRM]", content)
         self.assertIn("text-free clean base", content)
         self.assertIn("embedded PDF vector text", content)
+        self.assertIn("Clear informational captions", content)
+        self.assertIn("preserve_reason", content)
 
     def test_default_prompt_requires_routing_and_structural_evidence(self):
         content = OPENAI_YAML.read_text(encoding="utf-8")

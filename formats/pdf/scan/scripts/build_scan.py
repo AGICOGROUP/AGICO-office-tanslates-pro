@@ -48,7 +48,7 @@ def _median(values: list[float]) -> float:
 def apply_page_typography_policy(blocks: list[dict]) -> dict[str, dict]:
     grouped: dict[str, list[dict]] = {}
     for block in blocks:
-        if block.get("action") not in {None, "replace"}:
+        if block.get("action") not in {None, "replace", "add_bilingual"}:
             continue
         group = typography_group(block.get("role", ""))
         if group != "special":
@@ -340,7 +340,7 @@ def resolve_page_typography(blocks: list[dict], page: dict) -> dict[str, dict]:
     evidence = apply_page_typography_policy(blocks)
     grouped: dict[str, list[dict]] = {}
     for block in blocks:
-        if block.get("action") != "replace":
+        if block.get("action") not in {"replace", "add_bilingual"}:
             continue
         group = typography_group(block.get("role", ""))
         if group != "special":
@@ -383,6 +383,7 @@ def build_pdf(manifest: dict, output_path: str | Path) -> dict:
     blocks_by_page = {number: [block for block in manifest["blocks"] if block["page"] == number] for number in manifest["selected_pages"]}
     report = {
         "pages": [], "rendered_blocks": [], "outside_approved_pixel_changes": 0,
+        "changed_pixel_count": 0,
         "source_crop_runs": [], "source_crop_run_count": 0, "mixed_color_block_count": 0,
     }
     pdf = canvas.Canvas(str(output), pageCompression=1)
@@ -405,7 +406,7 @@ def build_pdf(manifest: dict, output_path: str | Path) -> dict:
         _draw_vector_lines(pdf, page)
         rendered_ids = []
         for block in blocks_by_page[page_number]:
-            if block["action"] == "replace":
+            if block["action"] in {"replace", "add_bilingual"}:
                 if block.get("rich_lines"):
                     rendered = _draw_rich_block(pdf, block, page, source_image)
                     report["source_crop_runs"].extend(rendered.pop("source_crop_runs"))
@@ -417,6 +418,8 @@ def build_pdf(manifest: dict, output_path: str | Path) -> dict:
         pdf.showPage()
         report["outside_approved_pixel_changes"] += clean_report["outside_approved_pixel_changes"]
         report["outside_approved_pixel_changes"] += layout_report["layout_outside_approved_pixel_changes"]
+        report["changed_pixel_count"] += clean_report["changed_pixel_count"]
+        report["changed_pixel_count"] += layout_report["layout_changed_pixel_count"]
         report["pages"].append({"source_page": page_number, "clean_path": str(clean_path), "rendered_block_ids": rendered_ids, "typography_evidence": typography_evidence, **layout_report, **clean_report})
     pdf.save()
     report["output"] = str(output)

@@ -65,7 +65,8 @@ Use this review shape:
           "translation": "",
           "ocr_confidence": "low",
           "method": "preserve_confirm",
-          "status": "confirm"
+          "status": "confirm",
+          "preserve_reason": "distant_unreadable"
         }
       ]
     }
@@ -92,7 +93,7 @@ remove either language, or add another English overlay.
 | `deterministic_cleanup` | Raster text lies on a verified simple background | Clean only glyph pixels with a reviewed cleanup mode. |
 | `anchored_line_restore` | Raster text crosses a recoverable engineering line | Clean glyphs and reconnect only explicit opposite-edge anchors. |
 | `constrained_clean_base` | A complex raster region defeats deterministic cleanup | Produce a local text-free clean base candidate and pass structural gates. |
-| `preserve_confirm` | Text or structure cannot be recovered safely | Preserve the original region and create a `[CONFIRM]` record. |
+| `preserve_confirm` | A label is genuinely unreadable, or is a logo/seal, signature/stamp, or protected legal-document region | Preserve the original region, record an allowed `preserve_reason`, and create a `[CONFIRM]` record. |
 | `preserve_bilingual` | Every clear Chinese label already has a semantic English counterpart | Preserve the exact original asset; record complete pair counts and zero unmatched Chinese labels. |
 
 Do not choose a raster method when an editable native source exists. Do not
@@ -101,6 +102,14 @@ The presence of some English never proves a diagram is bilingual-complete.
 Inventory all clear Chinese labels; use `preserve_bilingual` only when the
 matched-pair count equals the clear-Chinese count and the unmatched count is
 zero. Otherwise translate only the unmatched Chinese labels.
+
+Clear informational captions, photo descriptions, marketing copy, and readable
+diagram labels must be translated. A complex photographic background is a
+cleanup-routing problem, not permission to use `preserve_confirm`; use a local
+clean band or `constrained_clean_base` and add selectable vector text. For a
+caption already occupying a broad photo band, `solid_fill` may replace only the
+approved caption band with an explicit `fill_rgb`; all pixels outside that band
+must remain identical.
 
 ## Anchored line restoration
 
@@ -154,8 +163,11 @@ add English as embedded PDF vector text through `apply_image_vector_text.py`.
 
 Do not guess characters, units, model numbers, equipment tags, or topology. A
 confirm item must identify the page, image, label box, OCR text, uncertainty,
-current treatment, and recommended source or decision. Reported confirm items
-may remain preserved; unreported confirm items block delivery.
+current treatment, and recommended source or decision. Each confirmed label
+must declare `preserve_reason` as `distant_unreadable`, `legal_document`,
+`logo_or_seal`, or `signature_or_stamp`. Clear informational text is never an
+allowed confirm reason. Reported confirm items may remain preserved only under
+this allow-list; unreported or disallowed confirm items block delivery.
 
 ## Per-image review
 
