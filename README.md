@@ -1,4 +1,4 @@
-# AGICO-office-tanslates
+# Office Translate Pro
 
 Automatic professional translation skills for Word, Excel, PowerPoint, PDF, PNG, and JPEG with cement-industry terminology and layout fidelity.
 

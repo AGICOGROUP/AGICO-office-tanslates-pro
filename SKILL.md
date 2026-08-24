@@ -1,9 +1,9 @@
 ---
-name: translate-office-files
+name: office-translate-pro
 description: Use when translating uploaded Word (.doc/.docx), Excel (.xls/.xlsx/.xlsm), PowerPoint (.ppt/.pptx), PDF (.pdf), or static image (.png/.jpg/.jpeg) files whose professional terminology, editable content, graphics, and layout must be preserved.
 ---
 
-# Translate Office, PDF, and Image Files
+# Office Translate Pro
 
 Route each uploaded document to exactly one format adapter. Preserve the source and produce a separate translated artifact.
 

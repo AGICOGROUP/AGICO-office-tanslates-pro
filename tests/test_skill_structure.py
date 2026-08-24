@@ -42,7 +42,7 @@ class RootSkillStructureTests(unittest.TestCase):
         text = metadata.read_text(encoding="utf-8")
         self.assertIn('display_name: "', text)
         self.assertIn('short_description: "', text)
-        self.assertIn('$translate-office-files', text)
+        self.assertIn('$office-translate-pro', text)
 
     def test_shared_glossary_is_complete_source_copy(self):
         glossary = ROOT / "references" / GLOSSARY_NAME
@@ -58,7 +58,7 @@ class WordAdapterStructureTests(unittest.TestCase):
         text = skill.read_text(encoding="utf-8")
         required_phrases = (
             "documents:documents",
-            "translate-documents-professionally",
+            "does not depend on another Office translation skill",
             f"../../references/{GLOSSARY_NAME}",
             "editable",
             "image text",
