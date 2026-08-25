@@ -3,6 +3,9 @@
 import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { FileBlob, SpreadsheetFile } from "@oai/artifact-tool";
 
 
 export const JOB_STAGES = [
@@ -210,4 +213,276 @@ export async function saveJobState(destination, state) {
     await fs.rm(temporary, { force: true });
     throw error;
   }
+}
+
+
+async function sha256File(filename) {
+  return createHash("sha256").update(await fs.readFile(filename)).digest("hex");
+}
+
+
+async function writeJson(filename, value) {
+  await fs.mkdir(path.dirname(filename), { recursive: true });
+  await fs.writeFile(filename, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+}
+
+
+function columnNumber(label) {
+  return [...label].reduce((value, character) => value * 26 + character.charCodeAt(0) - 64, 0);
+}
+
+
+function columnLabel(number) {
+  let value = number;
+  let label = "";
+  while (value > 0) {
+    value -= 1;
+    label = String.fromCharCode(65 + (value % 26)) + label;
+    value = Math.floor(value / 26);
+  }
+  return label;
+}
+
+
+function rangeOrigin(address) {
+  const match = /^\$?([A-Z]+)\$?(\d+)/i.exec(address ?? "");
+  if (!match) throw new Error(`cannot parse used range address: ${address}`);
+  return { column: columnNumber(match[1].toUpperCase()), row: Number(match[2]) };
+}
+
+
+function protectedTokens(text) {
+  const matches = String(text).match(/(?:https?:\/\/\S+|\b[A-Z]{1,8}[-/]?\d[A-Z0-9./-]*\b|\b\d+(?:\.\d+)?\s*(?:kW|MW|V|kV|A|Hz|mm|cm|m|kg|t\/h|m³\/h)\b)/giu);
+  return [...new Set(matches ?? [])];
+}
+
+
+function contextForCell(values, rowIndex, columnIndex) {
+  for (let row = rowIndex - 1; row >= 0; row -= 1) {
+    const candidate = values[row]?.[columnIndex];
+    if (typeof candidate === "string" && candidate.trim()) {
+      return `cell:column:${candidate.trim()}`;
+    }
+  }
+  return "unknown";
+}
+
+
+async function loadState(jobDir) {
+  return JSON.parse(await fs.readFile(path.join(jobDir, "job-state.json"), "utf8"));
+}
+
+
+function parseOptions(argv) {
+  const command = argv[0];
+  const options = {};
+  for (let index = 1; index < argv.length; index += 2) {
+    const flag = argv[index];
+    const value = argv[index + 1];
+    if (!flag?.startsWith("--") || value === undefined) {
+      throw new Error(`invalid option near ${flag ?? "end of command"}`);
+    }
+    options[flag.slice(2)] = value;
+  }
+  return { command, options };
+}
+
+
+function requireOptions(options, names) {
+  for (const name of names) {
+    if (!options[name]) throw new Error(`missing --${name}`);
+  }
+}
+
+
+export async function inspectWorkbook(options) {
+  requireOptions(options, ["input", "job-dir", "target-language", "output-mode"]);
+  const input = path.resolve(options.input);
+  const jobDir = path.resolve(options["job-dir"]);
+  const config = {
+    sourceSha256: await sha256File(input),
+    targetLanguage: options["target-language"],
+    outputMode: options["output-mode"],
+  };
+  let state;
+  try {
+    state = reconcileJobState(await loadState(jobDir), config);
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+    state = newJobState(config);
+  }
+  if (state.completedStages.length > 0) state = invalidateFrom(state, "preflight");
+
+  await fs.mkdir(path.join(jobDir, "renders", "preflight"), { recursive: true });
+  const workbook = await SpreadsheetFile.importXlsx(await FileBlob.load(input));
+  const sheets = [];
+  const occurrences = [];
+  for (const sheet of workbook.worksheets.items) {
+    const used = sheet.getUsedRange();
+    if (!used?.address) {
+      sheets.push({ name: sheet.name, visible: true, used: false });
+      continue;
+    }
+    const values = used.values ?? [];
+    const formulas = used.formulas ?? [];
+    const origin = rangeOrigin(used.address);
+    sheets.push({ name: sheet.name, visible: true, used: true, range: used.address });
+    for (let row = 0; row < values.length; row += 1) {
+      for (let column = 0; column < (values[row]?.length ?? 0); column += 1) {
+        const source = values[row][column];
+        if (typeof source !== "string" || !source.trim() || formulas[row]?.[column]) continue;
+        const address = `${columnLabel(origin.column + column)}${origin.row + row}`;
+        occurrences.push({
+          id: `${sheet.name}!${address}`,
+          kind: "cell",
+          sheet: sheet.name,
+          address,
+          source,
+          context_key: contextForCell(values, row, column),
+          protected_tokens: protectedTokens(source),
+        });
+      }
+    }
+  }
+  const renderPlan = buildRenderPlan({
+    phase: "preflight", outputMode: config.outputMode, sheets,
+  });
+  if (options["skip-render"] !== "true") {
+    for (const sheet of renderPlan.sheets) {
+      const rendered = await workbook.render({
+        sheetName: sheet.name, range: sheet.range, scale: 1, format: "png",
+      });
+      const safeName = sheet.name.replace(/[<>:"/\\|?*]/g, "_");
+      await fs.writeFile(
+        path.join(jobDir, "renders", "preflight", `${safeName}.png`),
+        new Uint8Array(await rendered.arrayBuffer()),
+      );
+    }
+  }
+  const inventory = {
+    schema_version: 1,
+    source_file: input,
+    source_sha256: config.sourceSha256,
+    target_language: config.targetLanguage,
+    output_mode: config.outputMode,
+    sheets,
+    occurrences,
+  };
+  const inventoryPath = path.join(jobDir, "inventory.json");
+  await writeJson(inventoryPath, inventory);
+  state = completeStage(state, "preflight", { renderPlan: await sha256File(inventoryPath) });
+  state = completeStage(state, "inspect", { inventory: await sha256File(inventoryPath) });
+  state.outputPaths = { ...state.outputPaths, source: input, jobDir };
+  state.counts = { ...state.counts, occurrences: occurrences.length, sheets: sheets.length };
+  await saveJobState(path.join(jobDir, "job-state.json"), state);
+  return { next_stage: nextStage(state), counts: state.counts };
+}
+
+
+export async function prepareManifest(options) {
+  requireOptions(options, ["job-dir"]);
+  const jobDir = path.resolve(options["job-dir"]);
+  let state = await loadState(jobDir);
+  if (nextStage(state) !== "prepare") throw new Error(`prepare requires stage prepare; found ${nextStage(state)}`);
+  const inventory = JSON.parse(await fs.readFile(path.join(jobDir, "inventory.json"), "utf8"));
+  const built = buildTranslationUnits(inventory.occurrences);
+  const manifest = {
+    schema_version: 2,
+    source_file: inventory.source_file,
+    source_sha256: inventory.source_sha256,
+    target_language: inventory.target_language,
+    output_mode: inventory.output_mode,
+    occurrences: built.occurrences,
+    translation_units: built.translation_units,
+    images: [],
+  };
+  const manifestPath = path.join(jobDir, "translation-manifest.json");
+  await writeJson(manifestPath, manifest);
+  state = completeStage(state, "prepare", { manifest: await sha256File(manifestPath) });
+  state.counts = { ...state.counts, translationUnits: built.translation_units.length };
+  await saveJobState(path.join(jobDir, "job-state.json"), state);
+  return { next_stage: "translate", manifest: manifestPath, pending: built.translation_units.length };
+}
+
+
+function validateTranslatedManifest(manifest, state) {
+  if (manifest.schema_version !== 2) throw new Error("manifest schema_version must be 2");
+  if (manifest.source_sha256 !== state.sourceSha256) throw new Error("manifest source hash mismatch");
+  const units = new Map();
+  for (const unit of manifest.translation_units ?? []) {
+    if (!unit.id || units.has(unit.id)) throw new Error(`missing or duplicate translation unit: ${unit.id}`);
+    if (!['translated', 'retain'].includes(unit.status)) throw new Error(`translation unit ${unit.id} is pending`);
+    if (typeof unit.translation !== "string" || !unit.translation.trim()) throw new Error(`translation unit ${unit.id} has no translation`);
+    if (unit.status === "retain" && unit.translation !== unit.source) throw new Error(`retained unit ${unit.id} changed source`);
+    for (const token of unit.protected_tokens ?? []) {
+      if (!unit.translation.includes(token)) throw new Error(`translation unit ${unit.id} changed protected token ${token}`);
+    }
+    units.set(unit.id, unit);
+  }
+  for (const occurrence of manifest.occurrences ?? []) {
+    const unit = units.get(occurrence.translation_unit_id);
+    if (!unit) throw new Error(`occurrence ${occurrence.id} references an unknown translation unit`);
+    for (const field of ["source", "context_key", "protected_tokens"]) {
+      if (JSON.stringify(occurrence[field]) !== JSON.stringify(unit[field])) {
+        throw new Error(`occurrence ${occurrence.id} does not match translation unit ${unit.id}`);
+      }
+    }
+  }
+  return units;
+}
+
+
+export async function applyTranslations(options) {
+  requireOptions(options, ["input", "job-dir", "output"]);
+  const input = path.resolve(options.input);
+  const output = path.resolve(options.output);
+  const jobDir = path.resolve(options["job-dir"]);
+  if (input === output) throw new Error("output must not overwrite the source workbook");
+  let state = await loadState(jobDir);
+  if (nextStage(state) !== "translate") throw new Error(`apply requires stage translate; found ${nextStage(state)}`);
+  if (await sha256File(input) !== state.sourceSha256) throw new Error("input workbook hash changed since inspection");
+  const manifestPath = path.join(jobDir, "translation-manifest.json");
+  const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
+  const units = validateTranslatedManifest(manifest, state);
+  state = completeStage(state, "translate", { manifest: await sha256File(manifestPath) });
+  state = completeStage(state, "validate", { manifest: await sha256File(manifestPath) });
+
+  const workbook = await SpreadsheetFile.importXlsx(await FileBlob.load(input));
+  const sheets = new Map(workbook.worksheets.items.map((sheet) => [sheet.name, sheet]));
+  const changedSheets = new Set();
+  for (const occurrence of manifest.occurrences) {
+    if (occurrence.kind !== "cell") continue;
+    const sheet = sheets.get(occurrence.sheet);
+    if (!sheet) throw new Error(`worksheet not found: ${occurrence.sheet}`);
+    sheet.getRange(occurrence.address).values = [[units.get(occurrence.translation_unit_id).translation]];
+    changedSheets.add(occurrence.sheet);
+  }
+  await fs.mkdir(path.dirname(output), { recursive: true });
+  const blob = await SpreadsheetFile.exportXlsx(workbook);
+  await blob.save(output);
+  state = completeStage(state, "apply", { output: await sha256File(output) });
+  state.outputPaths = { ...state.outputPaths, output };
+  state.counts = { ...state.counts, changedSheets: changedSheets.size };
+  await saveJobState(path.join(jobDir, "job-state.json"), state);
+  return { next_stage: nextStage(state), output, changed_sheets: [...changedSheets] };
+}
+
+
+export async function main(argv = process.argv.slice(2)) {
+  const { command, options } = parseOptions(argv);
+  let result;
+  if (command === "inspect") result = await inspectWorkbook(options);
+  else if (command === "prepare") result = await prepareManifest(options);
+  else if (command === "apply") result = await applyTranslations(options);
+  else throw new Error("usage: excel_pipeline.mjs inspect|prepare|apply [options]");
+  process.stdout.write(`${JSON.stringify(result)}\n`);
+  if (command === "prepare") process.exitCode = 3;
+}
+
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    process.stderr.write(`${error.stack ?? error.message}\n`);
+    process.exitCode = 2;
+  });
 }

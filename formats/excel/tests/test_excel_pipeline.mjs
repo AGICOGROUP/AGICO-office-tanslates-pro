@@ -4,14 +4,19 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
+import { FileBlob, SpreadsheetFile, Workbook } from "@oai/artifact-tool";
+
 import {
   buildRenderPlan,
   buildTranslationUnits,
   classifyRisk,
   completeStage,
+  applyTranslations,
   invalidateFrom,
+  inspectWorkbook,
   newJobState,
   nextStage,
+  prepareManifest,
   reconcileJobState,
   saveJobState,
   translationReuseKey,
@@ -256,6 +261,69 @@ test("job state is saved atomically as JSON", async () => {
     await saveJobState(destination, state);
     assert.deepEqual(JSON.parse(await fs.readFile(destination, "utf8")), state);
     assert.deepEqual(await fs.readdir(directory), ["job-state.json"]);
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
+
+
+test("inspect prepare and apply translate text while preserving numbers and formulas", async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "excel-pipeline-"));
+  try {
+    const source = path.join(directory, "source.xlsx");
+    const output = path.join(directory, "translated.xlsx");
+    const jobDir = path.join(directory, "job");
+    const workbook = Workbook.create();
+    const sheet = workbook.worksheets.add("S1");
+    sheet.getRange("A1:C2").values = [
+      ["项目", "数值", "计算"],
+      ["设备名称", 15, null],
+    ];
+    sheet.getRange("C2").formulas = [["=B2*2"]];
+    const sourceBlob = await SpreadsheetFile.exportXlsx(workbook);
+    await sourceBlob.save(source);
+    const sourceBefore = await fs.readFile(source);
+
+    const inspected = await inspectWorkbook({
+      input: source,
+      "job-dir": jobDir,
+      "target-language": "en",
+      "output-mode": "monolingual",
+      "skip-render": "true",
+    });
+    assert.equal(inspected.next_stage, "prepare");
+
+    const prepared = await prepareManifest({ "job-dir": jobDir });
+    assert.equal(prepared.next_stage, "translate");
+    const manifestPath = path.join(jobDir, "translation-manifest.json");
+    const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
+    const unit = manifest.translation_units.find((item) => item.source === "设备名称");
+    assert.ok(unit, "expected a translation unit for 设备名称");
+    unit.translation = "Equipment Name";
+    unit.status = "translated";
+    for (const pending of manifest.translation_units.filter((item) => item.status === "pending")) {
+      pending.translation = pending.source;
+      pending.status = "retain";
+      pending.reason = "test fixture";
+    }
+    await fs.writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+
+    const applied = await applyTranslations({
+      input: source, "job-dir": jobDir, output,
+    });
+    assert.equal(applied.next_stage, "verify");
+
+    const result = await SpreadsheetFile.importXlsx(await FileBlob.load(output));
+    const resultSheet = result.worksheets.items.find((item) => item.name === "S1");
+    assert.equal(resultSheet.getRange("A2").values[0][0], "Equipment Name");
+    assert.equal(resultSheet.getRange("B2").values[0][0], 15);
+    assert.equal(resultSheet.getRange("C2").formulas[0][0], "=B2*2");
+    assert.deepEqual(await fs.readFile(source), sourceBefore);
+
+    const state = JSON.parse(await fs.readFile(path.join(jobDir, "job-state.json"), "utf8"));
+    assert.deepEqual(state.completedStages, [
+      "preflight", "inspect", "prepare", "translate", "validate", "apply",
+    ]);
   } finally {
     await fs.rm(directory, { recursive: true, force: true });
   }
