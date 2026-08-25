@@ -31,6 +31,8 @@ Do not route by user wording or extension alone. The PDF adapter performs a seco
 - Preserve numbers, formulas, units, model codes, standards, URLs, identifiers, line breaks, and other protected tokens.
 - Keep native text editable and selectable. Review text in shapes, charts, headers, footers, comments, notes, and embedded images.
 - Preserve formatting, layout, object geometry, relationships, media, and format-specific structure unless a documented local repair is necessary.
-- Reopen and render the complete output with the selected adapter's required tool. Reject missing text, unexpected Chinese, clipping, overlap, corruption, or unapproved structural change.
+- On Windows, use installed Microsoft Word, Excel, or PowerPoint as the authoritative Office engine for legacy conversion, reopen checks, pagination, and PDF export. Run `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/office_com_pdf.ps1 ...` for final visual rendering.
+- Do not install, discover, configure, or invoke LibreOffice/soffice by default. It is allowed only when Microsoft Office is unavailable and the user explicitly authorizes it for that task.
+- Reopen and render the output with the selected adapter's required Microsoft Office application. Reject missing text, unexpected Chinese, clipping, overlap, corruption, or unapproved structural change.
 
 Deliver only the translated file and a concise verification summary after every adapter gate passes.

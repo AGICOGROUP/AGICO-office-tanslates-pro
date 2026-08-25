@@ -52,7 +52,7 @@ class RootSkillStructureTests(unittest.TestCase):
 
 
 class WordAdapterStructureTests(unittest.TestCase):
-    def test_word_adapter_encodes_the_preservation_contract(self):
+    def test_word_adapter_encodes_the_fast_pipeline_contract(self):
         skill = ROOT / "formats" / "word" / "SKILL.md"
         self.assertTrue(skill.is_file())
         text = skill.read_text(encoding="utf-8")
@@ -60,13 +60,35 @@ class WordAdapterStructureTests(unittest.TestCase):
             "documents:documents",
             "does not depend on another Office translation skill",
             f"../../references/{GLOSSARY_NAME}",
+            "scripts/analyze_docx.py",
             "editable",
-            "image text",
             "protected tokens",
             "Never overwrite",
-            "render every page",
+            "Fast path",
+            "Complex path",
+            "Strict path",
+            "one extraction",
+            "one write pass",
+            "reasonable pagination drift",
+            "Do not OCR images without detected text",
+            "Render every page only on the complex or strict path",
         )
         for phrase in required_phrases:
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase.casefold(), text.casefold())
+
+        self.assertNotIn("Reject clipping, overlap, missing text, pagination drift", text)
+
+    def test_word_fast_path_keeps_mandatory_quality_gates(self):
+        text = (ROOT / "formats" / "word" / "SKILL.md").read_text(encoding="utf-8")
+        for phrase in (
+            "output opens normally",
+            "translation coverage",
+            "glossary consistency",
+            "protected-token equality",
+            "table integrity",
+            "unexpected source-language residue",
+        ):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, text)
 
