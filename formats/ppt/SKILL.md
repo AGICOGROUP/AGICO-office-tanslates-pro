@@ -39,8 +39,8 @@ only when an image needs an overlay.
 5. `apply`: write all native translations and overlays once.
 6. `verify`: compare the final source hash, package integrity, slide count, translations, protected
    tokens, and required overlays.
-7. `render`: open the output in one hidden, alert-suppressed Microsoft PowerPoint session, export
-   one official PDF, and render every final slide once at low resolution.
+7. `render`: open the output in one hidden, alert-suppressed Microsoft PowerPoint session and
+   render every final slide once at low resolution. Do not use an external PDF conversion gate.
 8. Review the final slides and run `deliver --visual-review-passed`.
 
 ## Quality boundary

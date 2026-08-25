@@ -1,7 +1,7 @@
 # PowerPoint lightweight workflow
 
 `scripts/ppt_pipeline.py` is the only production entry. It performs one inventory, one preparation,
-one write, one verification, and one final PowerPoint export. Internal OOXML and COM helpers must
+one write, one verification, and one final PowerPoint render. Internal OOXML and COM helpers must
 not be assembled into another workflow.
 
 ## Inventory and translation
@@ -24,6 +24,6 @@ original image remains unchanged.
 
 Hash the source during inspection and compare it once during final verification. Check package
 integrity, slide count, native translations, protected tokens, and required overlays. Then open the
-output in a hidden background session, suppress alerts, export one PowerPoint PDF, and create one
-low-resolution render of every final slide. The visual review checks only missing native text,
+output in a hidden background session in PowerPoint and create one low-resolution render of every
+final slide without an external PDF conversion gate. The visual review checks only missing native text,
 clipping, overlap, broken layout, and obviously misplaced overlays.

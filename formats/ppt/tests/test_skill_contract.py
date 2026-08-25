@@ -41,7 +41,7 @@ class PowerPointOnlySkillContract(unittest.TestCase):
         self.assertIn("scripts/ppt_pipeline.py", skill)
         self.assertIn("Microsoft PowerPoint", skill)
         self.assertIn("hidden background session", workflow)
-        self.assertIn("suppress alerts", workflow)
+        self.assertIn("without an external PDF conversion gate", workflow)
         self.assertNotIn("without deduplicating", skill)
         self.assertNotIn("Reopen and render every slide", skill)
         self.assertNotIn("use `scripts/ppt_com.ps1`", skill.lower())

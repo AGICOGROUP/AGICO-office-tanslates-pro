@@ -34,15 +34,6 @@ def validate(repo_root: str | Path | None = None) -> dict:
     if missing:
         errors.append("missing: " + ", ".join(missing))
 
-    resolved_repo_root = (
-        Path(repo_root).resolve()
-        if repo_root is not None
-        else ROOT.parents[1]
-    )
-    office_export = resolved_repo_root / "scripts" / "office_com_pdf.ps1"
-    if not office_export.is_file():
-        errors.append("missing: scripts/office_com_pdf.ps1")
-
     skill_path = ROOT / "SKILL.md"
     if skill_path.is_file():
         skill = skill_path.read_text(encoding="utf-8")

@@ -393,16 +393,15 @@ def command_verify(args: argparse.Namespace) -> int:
     return 0 if passed else 2
 
 
-def run_office_export(
+def run_powerpoint_render(
     input_path: Path,
-    pdf_path: Path,
     thumbnail_directory: Path,
-    high_resolution_slides: list[int],
+    expected_slides: list[int],
 ) -> dict:
     powershell = shutil.which("powershell.exe")
     if not powershell:
         raise PipelineError("Microsoft PowerPoint verification requires powershell.exe")
-    script = Path(__file__).resolve().parents[3] / "scripts" / "office_com_pdf.ps1"
+    script = Path(__file__).with_name("ppt_com.ps1")
     command = [
         powershell,
         "-NoProfile",
@@ -410,28 +409,32 @@ def run_office_export(
         "Bypass",
         "-File",
         str(script),
+        "-Command",
+        "render",
         "-InputPath",
         str(input_path),
-        "-OutputPdf",
-        str(pdf_path),
-        "-Application",
-        "powerpoint",
-        "-ThumbnailDirectory",
+        "-OutputDirectory",
         str(thumbnail_directory),
-        "-HighResolutionSlides",
-        ",".join(str(index) for index in high_resolution_slides),
     ]
     completed = subprocess.run(command, capture_output=True, text=True, encoding="utf-8")
     if completed.returncode != 0:
-        raise PipelineError(completed.stderr.strip() or "PowerPoint verification export failed")
-    try:
-        return json.loads(completed.stdout)
-    except json.JSONDecodeError as exc:
-        raise PipelineError("PowerPoint verification returned invalid JSON") from exc
+        raise PipelineError(completed.stderr.strip() or "PowerPoint internal render failed")
+    rendered = sorted(thumbnail_directory.glob("slide-*.png"))
+    if len(rendered) != len(expected_slides):
+        raise PipelineError(
+            f"PowerPoint rendered {len(rendered)} slides; expected {len(expected_slides)}"
+        )
+    return {
+        "application": "powerpoint",
+        "input": str(input_path),
+        "render_directory": str(thumbnail_directory),
+        "powerpoint_starts": 1,
+        "presentation_opens": 1,
+        "slides_rendered": len(rendered),
+    }
 
 
 def command_render(args: argparse.Namespace) -> int:
-    source = args.source.resolve()
     output = args.output.resolve()
     state = read_json(args.job_dir / "job-state.json")
     verification = read_json(args.job_dir / "verification.json")
@@ -439,27 +442,15 @@ def command_render(args: argparse.Namespace) -> int:
     if not verification.get("passed"):
         raise PipelineError("structural verification failed; repair before final Office rendering")
     render_root = args.job_dir / "final-renders"
-    target_report = run_office_export(
+    target_report = run_powerpoint_render(
         output,
-        args.job_dir / "final.pdf",
         render_root / "target",
-        plan["target_high_resolution"],
+        plan["target_low_resolution"],
     )
     reports = {"target": target_report}
     state["metrics"]["powerpoint_starts"] += int(target_report["powerpoint_starts"])
     state["metrics"]["presentation_opens"] += int(target_report["presentation_opens"])
     state["metrics"]["full_deck_passes"] += 1
-    if plan["source_high_resolution"]:
-        source_report = run_office_export(
-            source,
-            args.job_dir / "source-baseline.pdf",
-            render_root / "source",
-            plan["source_high_resolution"],
-        )
-        reports["source"] = source_report
-        state["metrics"]["powerpoint_starts"] += int(source_report["powerpoint_starts"])
-        state["metrics"]["presentation_opens"] += int(source_report["presentation_opens"])
-        state["metrics"]["full_deck_passes"] += 1
     office_report_path = args.job_dir / "office-verification.json"
     write_json(office_report_path, reports)
     mark_stage(state, "render", str(office_report_path))

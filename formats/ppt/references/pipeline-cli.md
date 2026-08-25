@@ -16,6 +16,7 @@ python scripts/ppt_pipeline.py deliver --job-dir <job> --output <output.pptx> --
 exactly one decision: `skip_target`, `skip_unclear`, or `overlay`. Use `bilingual_below` for editable
 overlays. Do not rerun OCR for unclear images.
 
-The source hash is calculated during `inspect` and compared during `verify`. `render` exports one
-official PowerPoint PDF and one low-resolution image for every final slide. Resume from the first
+The source hash is calculated during `inspect` and compared during `verify`. `render` uses the PPT
+module's hidden PowerPoint session to create one low-resolution image for every final slide, with no
+external PDF conversion gate. Resume from the first
 incomplete stage; do not build a second workflow.
