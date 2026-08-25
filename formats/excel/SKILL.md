@@ -1,51 +1,82 @@
 ---
 name: translate-excel-professionally
-description: Use when translating monolingual or bilingual Excel workbooks (.xls, .xlsx, or .xlsm), especially cement-industry equipment lists, quotations, schedules, and technical tables whose formulas, layout, images, macros, and editable structure must be preserved.
+description: Use when translating monolingual or bilingual Excel workbooks (.xls, .xlsx, or .xlsm), especially technical tables whose formulas, layout, images, macros, and editable structure must be preserved.
 ---
 
 # Professional Excel Translation
 
-Translate with Codex/GPT and mutate only human-language text-bearing objects. Keep formulas as formulas, native text editable, and workbook geometry stable.
+Translate with Codex/GPT through one resumable pipeline. Mutate only human-language text, keep
+formulas and native text editable, preserve the source hash, and always write a separate output.
 
-**REQUIRED SUB-SKILL:** Use `spreadsheets:Spreadsheets` for `.xlsx` inspection, editing, rendering, and export. Follow its artifact-tool contract.
+**REQUIRED SUB-SKILL:** Use `spreadsheets:Spreadsheets` and its artifact-tool contract.
 
-## Start from the original
+## Required inputs
 
-Hash and preserve the source. Work from a copy and create a separate translated output. Read before acting:
+Read these files completely before execution:
 
 - `references/excel-workflow.md`
-- `../../references/水泥专业名词中英对照.md`, the repository-wide terminology source
+- `references/pipeline-cli.md`
 - `references/manifest-schema.md`
-- `references/image-text-localization.md`
 
-When the user requests a bilingual Excel workbook, also read and apply `references/bilingual-row-layout.md`. Use that paired-row blue layout by default unless the user specifies another bilingual arrangement.
+Run `scripts/resolve_repo_glossary.py`; stop if the shared glossary is unavailable. After
+`prepare`, read only `<job-dir>/relevant-glossary.json`; do not load the complete glossary. Read
+`references/bilingual-row-layout.md` only for bilingual output. Read
+`references/image-text-localization.md` only when inspection finds images.
 
-Run `scripts/resolve_repo_glossary.py`; fail closed when the shared glossary is unavailable.
+## Container route
 
-## Route the Excel container
+Run `python scripts/route_excel_file.py <source>` once.
 
-Run `python scripts/route_excel_file.py <source>` and follow exactly one route:
+- `.xlsx`: run the standard pipeline below.
+- `.xls`: verify the CFB signature and VBA status, convert an immutable copy with an
+  Excel-compatible converter, verify the conversion, then run the pipeline on the converted file.
+- `.xlsm`: preserve VBA byte-for-byte with a macro-safe Excel engine. Treat it as strict; stop if
+  that engine is unavailable.
+- Reject corrupt, encrypted, extension-mismatched, or ambiguous containers.
 
-| Route | Required handling |
-|---|---|
-| `.xls` | Confirm CFB signature, inspect for legacy VBA, convert an immutable working copy through an Excel-compatible converter to `.xlsx` or macro-safe `.xlsm`, verify the conversion baseline, then follow that route. |
-| `.xlsx` | Confirm OOXML without VBA; use `spreadsheets:Spreadsheets` and the artifact tool. |
-| `.xlsm` | Confirm the macro-enabled OOXML content type and inspect `vbaProject.bin` when present; use a macro-safe Excel engine and preserve VBA byte-for-byte. Stop if unavailable. |
+## Single standard pipeline
 
-Reject corrupt, encrypted, ambiguous, unsupported, or extension-mismatched files.
+Use `scripts/excel_pipeline.mjs` in this order:
 
-## Required workflow
+1. `inspect` performs one non-rendering scan and creates the inventory, OOXML risk/image report,
+   and `job-state.json`.
+2. `prepare` creates schema-v2 translation units plus a source-matched glossary subset and
+   safely pre-fills verified English table labels, units, parameter labels, and identifier/model
+   codes, then pauses only for the remaining translation units.
+3. Fill every pending translation unit using glossary-first professional terminology, then run
+   `python scripts/validate_manifest.py <job-dir>/translation-manifest.json` and run `apply` once.
+   Safe deduplication reuses exact text only when context and protected tokens match.
+   Parameter rows such as `功率：45kW` translate the label once and reconstruct each original
+   technical value deterministically; do not send the unchanged values for repeated translation.
+4. For monolingual output, `apply` estimates translated line length, increases only affected row
+   heights, and compresses only runs of at least three completely blank, unmerged placeholder rows.
+5. `verify` reopens source and output and checks formulas, typed values, merges, sheet order,
+   occurrence coverage, protected tokens, bilingual pairs, and formula errors.
+6. `render` opens the output in Microsoft Excel, recalculates it, and exports required sheets to
+   PDF once. Do not use LibreOffice or artifact-tool rendering on the default path.
 
-1. Inventory and render every sheet and configured print area before editing.
-2. Extract text from cells, comments, notes, text boxes, charts, headers, footers, and image labels in stable object order. Never overwrite formula cells.
-3. Resolve terminology before model preference: exact glossary phrase, longest valid listed term, then professional contextual translation. Preserve numbers, units, model codes, standards, URLs, identifiers, and line breaks.
-4. Build a complete manifest and run `python scripts/validate_manifest.py <manifest.json>`.
-5. Translate editable text natively. Review every image with `references/image-text-localization.md`. For bilingual output, apply `references/bilingual-row-layout.md`.
-6. Keep row heights and column widths unchanged by default. Use concise English, wrapping, then bounded local font reduction; record any justified dimension change.
-7. Export one new workbook in the routed format (`.xls` may deliver `.xlsx`; `.xlsm` remains `.xlsm`). Never overwrite the source.
-8. Compare formulas, sheet structure, names, merges, dimensions, styles, validations, filters, panes, links, charts, media, macros, print areas, and page setup. Scan formula errors and unexpected Chinese.
-9. Reopen and render every final sheet and print area. Reject clipping, overlap, chart-label collisions, merged-cell damage, hidden omissions, or unreviewed images.
+Resume from the first incomplete stage in `job-state.json`; do not recreate task-specific workbook
+scripts. Full commands and exit codes are in `references/pipeline-cli.md`.
 
-## Delivery gate
+## Quality boundary
 
-Deliver only when the source is untouched, the output opens without repair warnings, the shared glossary governed every matching term, all expected text remains editable, every manifest item and image is resolved, formulas and VBA are unchanged, no unexpected source-language text remains, bilingual row pairs are complete when requested, and complete rendered review finds no unapproved structural or visual change.
+- Preserve numbers, units, model codes, standards, URLs, identifiers, meaningful line breaks,
+  formulas, and source-file SHA-256.
+- Group identical images by SHA-256 and review each unique byte sequence once. Deep-review only
+  localized or uncertain groups.
+- Fast jobs render changed used sheets only. Complex jobs add affected chart, comment, drawing, or
+  image sheets. Strict jobs render all visible used sheets.
+- Bilingual output defaults to the paired blue translation-row layout. The fast path is limited to
+  verified grid-safe workbooks; complex objects enter strict processing before mutation.
+- Charts, comments, external links, unsupported drawings, and uncertain images select the complex
+  path. `.xlsm`, VBA, unsafe legacy conversion, file repair, or deterministic verification mismatch
+  select the strict path.
+- Ignore tiny empty legacy shape fragments used as borders. Escalate only drawings with text,
+  media, charts, controls, or meaningful geometry.
+- Before the single final PDF export, wide translated tables use a local landscape/one-page-wide
+  print hint. Do not force narrow sheets or the whole workbook into that layout.
+- Fixed English translations are exact-match entries in `references/fixed-translations.en.json`.
+  Add only reviewed, context-stable labels; leave ambiguous equipment terminology pending.
+
+Deliver only after verification passes, required Excel PDFs exist, the output reopens without repair,
+the source remains untouched, and no required translation is missing.

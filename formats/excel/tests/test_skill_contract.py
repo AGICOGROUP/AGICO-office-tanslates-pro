@@ -16,12 +16,46 @@ class ExcelSkillContractTests(unittest.TestCase):
             "references/manifest-schema.md",
             "references/image-text-localization.md",
             "references/bilingual-row-layout.md",
+            "references/pipeline-cli.md",
             "scripts/route_excel_file.py",
+            "scripts/excel_pipeline.mjs",
             "scripts/resolve_repo_glossary.py",
+            "scripts/query_repo_glossary.py",
+            "scripts/excel_com_verify.ps1",
             "scripts/validate_manifest.py",
         }
         missing = sorted(path for path in required if not (ROOT / path).is_file())
         self.assertEqual([], missing)
+
+    def test_com_verifier_uses_a_json_file_for_sheet_names(self):
+        script = (ROOT / "scripts" / "excel_com_verify.ps1").read_text(encoding="utf-8")
+        self.assertIn("SheetNamesPath", script)
+        self.assertNotIn("SheetNamesJson", script)
+        self.assertNotIn("else { $names }", script)
+
+    def test_skill_routes_every_job_through_risk_driven_resumable_pipeline(self):
+        skill = (ROOT / "SKILL.md").read_text(encoding="utf-8")
+        workflow = (ROOT / "references" / "excel-workflow.md").read_text(encoding="utf-8")
+        combined = skill + "\n" + workflow
+        for token in (
+            "excel_pipeline.mjs",
+            "inspect",
+            "prepare",
+            "apply",
+            "verify",
+            "render",
+            "job-state.json",
+            "safe deduplication",
+            "SHA-256",
+            "strict",
+        ):
+            self.assertIn(token, combined)
+        for obsolete in (
+            "do not deduplicate repeated text",
+            "Review every image",
+            "render every final sheet and print area",
+        ):
+            self.assertNotIn(obsolete, combined)
 
     def test_skill_is_excel_only_and_complete(self):
         skill = (ROOT / "SKILL.md").read_text(encoding="utf-8")
@@ -31,7 +65,7 @@ class ExcelSkillContractTests(unittest.TestCase):
             ".xls",
             ".xlsx",
             ".xlsm",
-            "../../references/水泥专业名词中英对照.md",
+            "relevant-glossary.json",
             "route_excel_file.py",
             "resolve_repo_glossary.py",
             "validate_manifest.py",
@@ -41,6 +75,7 @@ class ExcelSkillContractTests(unittest.TestCase):
         ]
         missing = [token for token in required if token not in skill]
         self.assertEqual([], missing)
+        self.assertNotIn("../../references/水泥专业名词中英对照.md", skill)
 
     def test_bilingual_excel_defaults_to_paired_blue_translation_rows(self):
         skill = (ROOT / "SKILL.md").read_text(encoding="utf-8")
