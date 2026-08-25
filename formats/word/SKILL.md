@@ -7,7 +7,7 @@ description: Use when translating uploaded Word documents (.doc or .docx), espec
 
 Translate only human-language content while preserving the document's native Word structure and visual hierarchy.
 
-**REQUIRED SUB-SKILLS:** Use `translate-documents-professionally` for professional translation coverage and `documents:documents` for DOCX inspection, editing, rendering, and visual verification.
+**REQUIRED SUPPORTING SKILL:** Use `documents:documents` for DOCX inspection, editing, rendering, and visual verification. This adapter contains the complete professional translation, terminology, structure-preservation, and quality-control contract; it does not depend on another Office translation skill.
 
 ## Start from the original
 

@@ -21,6 +21,8 @@ Each block contains:
 - optional `render_translation_override`: meaning-preserving concise wording
   used to satisfy a verified layout/readability constraint without changing the
   stable source block or its full translation record
+- optional `heading_continuation`: reviewed evidence that a short block is the
+  wrapped continuation of the immediately preceding numbered heading
 
 Rules:
 
@@ -31,6 +33,8 @@ Rules:
   direct source-render comparison for that exact block.
 - Use `render_translation_override` only after normal paragraph fitting fails at
   the readable source-relative font floor.
+- Use `heading_continuation: true` when source extraction splits one logical
+  heading across blocks and automatic lowercase-continuation evidence is absent.
 - Keep product names, codes, units, formulas, URLs, and UI tokens intact.
 - A batch must retain the same block IDs and source text as the manifest.
 - `merge` rejects unknown IDs, changed source text, blank targets, and unexpected

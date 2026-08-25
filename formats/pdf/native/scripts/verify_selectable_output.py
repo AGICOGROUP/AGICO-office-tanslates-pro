@@ -89,6 +89,8 @@ def main() -> None:
     source = PdfReader(args.source)
     candidate = PdfReader(args.candidate)
     manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
+    target_language = str(manifest.get("target_language", "")).casefold()
+    target_allows_cjk = target_language.startswith(("zh", "ja", "ko"))
     assert len(source.pages) == len(candidate.pages) == len(manifest["pages"])
 
     allowed = set(args.allow_modified_image_page)
@@ -159,7 +161,7 @@ def main() -> None:
         "visual_review_complete": args.visual_review_complete,
     }
     assert not geometry_failures, report
-    assert not extractable_cjk, report
+    assert target_allows_cjk or not extractable_cjk, report
     assert not selectable_failures, report
     assert not image_failures, report
     assert not coverage or min(coverage) >= 0.70, report

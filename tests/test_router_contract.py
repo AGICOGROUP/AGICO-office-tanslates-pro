@@ -80,6 +80,35 @@ class OfficeRouterContractTests(unittest.TestCase):
             self.assertFalse(report["extension_mismatch"])
             self.assertFalse(report["requires_conversion"])
 
+    def test_routes_static_png_and_jpeg_by_signature(self):
+        cases = (
+            ("sample.png", b"\x89PNG\r\n\x1a\n" + bytes(16), "png-signature"),
+            ("sample.jpg", b"\xff\xd8\xff\xe0" + bytes(16), "jpeg-signature"),
+            ("sample.jpeg", b"\xff\xd8\xff\xe1" + bytes(16), "jpeg-signature"),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for filename, payload, detection in cases:
+                with self.subTest(filename=filename):
+                    source = root / filename
+                    source.write_bytes(payload)
+                    result = self.run_router(source)
+                    self.assertEqual(0, result.returncode, result.stderr)
+                    report = json.loads(result.stdout)
+                    self.assertEqual("image", report["format"])
+                    self.assertEqual("formats/image/SKILL.md", report["adapter"])
+                    self.assertEqual(detection, report["detection"])
+
+    def test_rejects_image_extension_and_signature_mismatch(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "wrong.png"
+            source.write_bytes(b"\xff\xd8\xff\xe0" + bytes(16))
+            result = self.run_router(source)
+            self.assertEqual(2, result.returncode)
+            report = json.loads(result.stdout)
+            self.assertTrue(report["extension_mismatch"])
+            self.assertIn("does not match", report["error"])
+
     def test_rejects_pdf_extension_and_signature_mismatch(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

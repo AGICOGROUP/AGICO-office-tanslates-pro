@@ -1,4 +1,4 @@
 interface:
-  display_name: "AGICO Professional Document Translation"
-  short_description: "Routes Word, Excel, PowerPoint, and PDF translation while preserving structure and layout"
-  default_prompt: "Use $translate-office-files to translate my uploaded document while preserving terminology, editable structure, images, and layout."
+  display_name: "Office Translate Pro"
+  short_description: "Routes Word, Excel, PowerPoint, PDF, PNG, and JPEG translation while preserving structure and layout"
+  default_prompt: "Use $office-translate-pro to translate my uploaded document or static image while preserving terminology, editable structure, graphics, and layout."

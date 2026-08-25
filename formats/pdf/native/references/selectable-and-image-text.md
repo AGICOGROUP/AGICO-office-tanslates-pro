@@ -101,6 +101,11 @@ Use these invariants:
     remain one flow.
 11. Preserve header/footer source size and verified visual weight. Replacement
     font metrics may require a taller container, not a smaller font.
+12. Derive numbered heading depth from the complete prefix: `4、` is level 1,
+    `4.1、` is level 2, and `4.1.2` is level 3. A bold decimal measurement or
+    sentence with clause punctuation remains body text. If a wrapped heading
+    ends in one source block and the next short line continues it, keep both
+    lines in the same heading level and translate them as one logical heading.
 
 These are source-level rules. Do not fix the same failures with page IDs,
 coordinate patches, or document-specific block suppressions.
@@ -111,6 +116,14 @@ Treat the page as a composition, not as frozen independent boxes. Trigger a
 review when same-level headings differ by more than 0.5 pt, body prose differs
 by more than 0.5 pt outside tables/captions, or prose falls below its preferred
 size while an image or vertical region leaves reclaimable whitespace.
+
+Preserve the source composition as the default. Permit small, local corrections
+when translation length or extraction artifacts weaken readability: clarify
+heading and table-of-contents hierarchy, align related parameter lines, split
+run-in enumerations into vertical lists, merge orphaned continuation lines, and
+rebalance nearby whitespace. Keep these edits within the original content
+region and preserve page identity, reading order, protected graphics, tables,
+images, headers, and footers.
 
 Use this order:
 

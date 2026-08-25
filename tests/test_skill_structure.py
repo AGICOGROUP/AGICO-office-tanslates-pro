@@ -23,7 +23,7 @@ class RootSkillStructureTests(unittest.TestCase):
         self.assertTrue(skill.is_file())
         text = skill.read_text(encoding="utf-8")
         self.assertIn("Use when", text)
-        for extension in (".docx", ".xlsx", ".pptx", ".pdf"):
+        for extension in (".docx", ".xlsx", ".pptx", ".pdf", ".png", ".jpg", ".jpeg"):
             self.assertIn(extension, text)
         self.assertIn("scripts/route_office_file.py", text)
         for adapter in (
@@ -31,6 +31,7 @@ class RootSkillStructureTests(unittest.TestCase):
             "formats/excel/SKILL.md",
             "formats/ppt/SKILL.md",
             "formats/pdf/SKILL.md",
+            "formats/image/SKILL.md",
         ):
             self.assertIn(adapter, text)
         self.assertIn(f"references/{GLOSSARY_NAME}", text)
@@ -41,7 +42,7 @@ class RootSkillStructureTests(unittest.TestCase):
         text = metadata.read_text(encoding="utf-8")
         self.assertIn('display_name: "', text)
         self.assertIn('short_description: "', text)
-        self.assertIn('$translate-office-files', text)
+        self.assertIn('$office-translate-pro', text)
 
     def test_shared_glossary_is_complete_source_copy(self):
         glossary = ROOT / "references" / GLOSSARY_NAME
@@ -57,7 +58,7 @@ class WordAdapterStructureTests(unittest.TestCase):
         text = skill.read_text(encoding="utf-8")
         required_phrases = (
             "documents:documents",
-            "translate-documents-professionally",
+            "does not depend on another Office translation skill",
             f"../../references/{GLOSSARY_NAME}",
             "editable",
             "image text",
@@ -90,6 +91,26 @@ class PdfAdapterStructureTests(unittest.TestCase):
         self.assertTrue(native.is_file())
         self.assertTrue(scan.is_file())
         self.assertNotEqual(native.read_bytes(), scan.read_bytes())
+
+    def test_bilingual_pdf_keeps_any_source_language_and_adds_chinese(self):
+        router = (ROOT / "formats" / "pdf" / "SKILL.md").read_text(encoding="utf-8")
+        bilingual = (ROOT / "formats" / "pdf" / "bilingual" / "SKILL.md").read_text(
+            encoding="utf-8"
+        )
+        for text in (router, bilingual):
+            self.assertIn("source language", text.lower())
+            self.assertIn("Chinese", text)
+        self.assertIn("unchanged", bilingual)
+
+
+class ImageAdapterStructureTests(unittest.TestCase):
+    def test_image_adapter_reuses_scan_pdf_workflow(self):
+        skill = ROOT / "formats" / "image" / "SKILL.md"
+        self.assertTrue(skill.is_file())
+        text = skill.read_text(encoding="utf-8")
+        self.assertIn("formats/pdf/scan/SKILL.md", text)
+        self.assertIn("same pixel dimensions", text)
+        self.assertIn("same image format", text)
 
 
 if __name__ == "__main__":

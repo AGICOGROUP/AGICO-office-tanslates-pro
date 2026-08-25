@@ -494,11 +494,20 @@ CHAPTER_HEADING_RE = re.compile(
 NUMBERED_SECTION_HEADING_RE = re.compile(
     r"^\s*(\d+(?:\.\d+)+)\s*[^\d.]"
 )
+DECIMAL_MEASUREMENT_RE = re.compile(
+    r"^\s*\d+(?:\.\d+)+\s*(?:mm|cm|km|m|mg|kg|g|t|kw|mw|hz|v|a|pa|kpa|mpa|%|°c)",
+    re.IGNORECASE,
+)
+NUMBERED_LIST_ITEM_RE = re.compile(
+    r"^\s*[\(\[\uff08]?\d{1,2}(?:[\)\]\uff09,\uff0c\u3001]|\.(?!\d))\s*"
+)
 
 
 def semantic_heading_level(source: str) -> int | None:
     text = normalize_text(source).strip()
     if not text or DOT_LEADER_RE.search(text) or len(text) > 45:
+        return None
+    if DECIMAL_MEASUREMENT_RE.match(text):
         return None
     if CHAPTER_HEADING_RE.match(text):
         return 1
@@ -608,6 +617,39 @@ def classify_document_roles(pages: list[dict[str, Any]]) -> None:
             )
         else:
             block["style"]["role_size"] = target
+
+    for page in pages:
+        page_blocks = page.get("blocks", [])
+        for index in range(1, len(page_blocks) - 1):
+            previous = page_blocks[index - 1]
+            current = page_blocks[index]
+            following = page_blocks[index + 1]
+            previous_role = str(previous.get("role", ""))
+            current_role = str(current.get("role", ""))
+            current_source = str(current.get("source_text", "")).strip()
+            following_source = str(following.get("source_text", "")).strip()
+            if not previous_role.startswith("heading-") or not current_role.startswith("body-"):
+                continue
+            if not current_source or len(current_source) > 24:
+                continue
+            if NUMBERED_LIST_ITEM_RE.match(current_source) or not NUMBERED_LIST_ITEM_RE.match(following_source):
+                continue
+            if source_font_is_bold(current):
+                continue
+            previous_style = previous.get("style", {})
+            current_style = current.get("style", {})
+            if abs(float(previous_style.get("size", 9)) - float(current_style.get("size", 9))) > 0.6:
+                continue
+            gap = float(current["bbox"][1]) - float(previous["bbox"][3])
+            if not (-1.0 <= gap <= max(float(previous_style.get("size", 9)), 9.0) * 1.35):
+                continue
+            current["heading_continuation_of"] = str(previous.get("id", ""))
+            current["role"] = previous_role
+            current_style["source_bold"] = bool(previous_style.get("source_bold", True))
+            current_style["bold"] = bool(previous_style.get("bold", True))
+            current_style["role_size"] = float(
+                previous_style.get("role_size", previous_style.get("size", 9))
+            )
 
 
 def apply_document_roles(pages: list[dict[str, Any]]) -> None:
@@ -949,6 +991,13 @@ def locate_pdftoppm() -> str:
 def font_file(style: dict[str, Any]) -> str:
     candidates: list[str] = []
     windows = os.environ.get("WINDIR", r"C:\Windows")
+    if style.get("cjk"):
+        if style.get("bold"):
+            # SimHei has a complete CJK bold glyph set on Windows. Some
+            # SimSun bold installations expose only the Latin subset to PIL,
+            # which renders Chinese heading glyphs as tofu squares.
+            candidates.append(os.path.join(windows, "Fonts", "simhei.ttf"))
+        candidates.append(os.path.join(windows, "Fonts", "simsun.ttc"))
     if style.get("bold") and style.get("italic"):
         candidates.append(os.path.join(windows, "Fonts", "arialbi.ttf"))
     elif style.get("bold"):
@@ -1227,6 +1276,36 @@ def background_color(image: Image.Image, box: tuple[int, int, int, int]) -> tupl
 def wrap_paragraph(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.FreeTypeFont, width: int) -> list[str]:
     output: list[str] = []
     for paragraph in text.splitlines() or [""]:
+        if CJK_RE.search(paragraph):
+            tokens: list[str] = []
+            latin = ""
+            for char in paragraph:
+                if char.isspace():
+                    if latin and not latin.endswith(" "):
+                        latin += " "
+                    continue
+                if CJK_RE.fullmatch(char) or char in CJK_PUNCTUATION:
+                    if latin.strip():
+                        tokens.append(latin.strip())
+                    latin = ""
+                    tokens.append(char)
+                else:
+                    latin += char
+            if latin.strip():
+                tokens.append(latin.strip())
+            line = ""
+            for token in tokens:
+                if not line:
+                    line = token
+                    continue
+                candidate = f"{line}{token}" if CJK_RE.fullmatch(token) or token in CJK_PUNCTUATION else f"{line} {token}"
+                if draw.textlength(candidate, font=font) <= width:
+                    line = candidate
+                else:
+                    output.append(line)
+                    line = token
+            output.append(line)
+            continue
         words = paragraph.split()
         if not words:
             output.append("")

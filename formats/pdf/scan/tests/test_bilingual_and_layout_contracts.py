@@ -14,7 +14,9 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 from contracts import ManifestError, validate_manifest
+from build_scan import build_pdf
 from verify_scan import filter_approved_bilingual_residuals
+from pypdf import PdfReader
 
 
 def manifest_with(block: dict) -> dict:
@@ -61,6 +63,70 @@ def bilingual_block(unmatched: int = 0) -> dict:
 
 
 class BilingualAndLayoutContractTests(unittest.TestCase):
+    def test_add_bilingual_preserves_source_pixels_and_adds_selectable_translation(self) -> None:
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name)
+            render = root / "page.png"
+            Image.new("RGB", (400, 400), "white").save(render)
+            manifest = manifest_with({
+                "id": "label-es",
+                "page": 1,
+                "source_line_ids": ["zh-1", "en-1"],
+                "source": "原文 / Existing",
+                "translation": "Texto profesional",
+                "role": "diagram_label",
+                "status": "translated",
+                "action": "add_bilingual",
+                "box": [80, 40, 260, 78],
+                "source_preserved": True,
+                "placement": "below",
+                "min_font": 7,
+                "max_font": 10,
+            })
+            manifest["target_language"] = "es"
+            manifest["pages"][0]["render_path"] = str(render)
+            manifest["pages"][0]["render_sha256"] = hashlib.sha256(render.read_bytes()).hexdigest()
+            output = root / "bilingual.pdf"
+            report = build_pdf(manifest, output)
+            self.assertEqual(report["changed_pixel_count"], 0)
+            self.assertEqual(report["outside_approved_pixel_changes"], 0)
+            self.assertIn("Texto profesional", PdfReader(str(output)).pages[0].extract_text())
+
+    def test_add_bilingual_rejects_translation_over_source_text(self) -> None:
+        manifest = manifest_with({
+            "id": "label-es",
+            "page": 1,
+            "source_line_ids": ["zh-1", "en-1"],
+            "source": "原文 / Existing",
+            "translation": "Texto profesional",
+            "role": "diagram_label",
+            "status": "translated",
+            "action": "add_bilingual",
+            "box": [10, 10, 60, 35],
+            "source_preserved": True,
+            "placement": "below",
+        })
+        manifest["target_language"] = "es"
+        with self.assertRaisesRegex(ManifestError, "overlaps source text"):
+            validate_manifest(manifest)
+
+    def test_add_bilingual_requires_target_language(self) -> None:
+        manifest = manifest_with({
+            "id": "label-es",
+            "page": 1,
+            "source_line_ids": ["zh-1", "en-1"],
+            "source": "原文 / Existing",
+            "translation": "Texto profesional",
+            "role": "diagram_label",
+            "status": "translated",
+            "action": "add_bilingual",
+            "box": [80, 40, 260, 78],
+            "source_preserved": True,
+            "placement": "below",
+        })
+        with self.assertRaisesRegex(ManifestError, "target_language"):
+            validate_manifest(manifest)
+
     def test_complete_bilingual_region_can_be_preserved(self) -> None:
         validate_manifest(manifest_with(bilingual_block()))
 
@@ -88,6 +154,20 @@ class BilingualAndLayoutContractTests(unittest.TestCase):
             manifest["pages"][0]["render_path"] = str(render)
             residual = [{"output_page": 1, "source_page": 1, "text": "烟囱", "box": [5, 5, 30, 20], "page_pixel_width": 200, "page_pixel_height": 200, "score": 0.9}]
             self.assertEqual(filter_approved_bilingual_residuals(residual, manifest), [])
+
+    def test_add_bilingual_source_text_is_expected_residual(self) -> None:
+        manifest = manifest_with({
+            "id": "label-es", "page": 1, "source_line_ids": ["zh-1", "en-1"],
+            "source": "source / Existing", "translation": "Texto profesional",
+            "role": "diagram_label", "status": "translated", "action": "add_bilingual",
+            "box": [80, 40, 260, 78], "source_preserved": True, "placement": "below",
+        })
+        manifest["target_language"] = "es"
+        residual = [{
+            "output_page": 1, "source_page": 1, "text": "\u539f\u6587", "box": [5, 5, 20, 12],
+            "page_pixel_width": 200, "page_pixel_height": 200, "score": 0.9,
+        }]
+        self.assertEqual(filter_approved_bilingual_residuals(residual, manifest), [])
 
 
 if __name__ == "__main__":

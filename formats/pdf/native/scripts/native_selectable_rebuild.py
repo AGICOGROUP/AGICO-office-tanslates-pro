@@ -11,7 +11,7 @@ from typing import Any
 
 from PIL import Image, ImageDraw, ImageFont
 from pypdf import PdfReader, PdfWriter
-from pypdf.generic import ContentStream, DictionaryObject, NameObject
+from pypdf.generic import ArrayObject, ContentStream, DictionaryObject, NameObject
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas
@@ -23,11 +23,17 @@ MANUAL_TABLE_BLOCK_RANGES: dict[int, tuple[int, int]] = {}
 MANUAL_BLOCK_IDS: set[str] = set()
 DEFAULT_PIPELINE = Path(__file__).with_name("pdf_translation_pipeline.py")
 LIST_ITEM_START_RE = re.compile(
-    r"^\s*(?:[-\u2013\u2014\u2022\u00b7]|[\(\[]?\d{1,2}(?:[\)\],]|\.(?!\d)|\u3001)|[IVXLC]+\.)\s*",
+    r"^\s*(?:[-\u2013\u2014\u2022\u00b7]|[\(\[\uff08]?\d{1,2}(?:[\)\]\uff09,\uff0c]|\.(?!\d)|\u3001)|[IVXLC]+\.)\s*",
     re.IGNORECASE,
 )
 TOC_ITEM_START_RE = re.compile(r"^\s*\d{1,2}(?:\.\d{1,2})+\s*.*\.{5,}\d+\s*$")
 DOT_LEADER_TEXT_RE = re.compile(r"^(.*?)(\.{5,})(\d+)\s*$", re.S)
+SECTION_HEADING_RE = re.compile(
+    r"^\s*(\d+(?:[.．]\d+)*)\s*(?:[、:：]|[.．]\s+|\s+)"
+)
+CLAUSE_PUNCTUATION_RE = re.compile(r"[，,；;。！？!?]")
+CJK_CHAR_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
+CJK_ATTACH_PUNCTUATION = set("，。；：！？、（）【】《》“”‘’—－…")
 
 
 def typography_group(role: str) -> str:
@@ -39,6 +45,60 @@ def typography_group(role: str) -> str:
     if value.startswith("body-") or value in {"body", "list_item", "warning_body"}:
         return "body"
     return "special"
+
+
+def section_heading_depth(text: str) -> int | None:
+    """Return the numbered section depth without mistaking measurements for headings."""
+    match = SECTION_HEADING_RE.match(str(text or ""))
+    if not match:
+        return None
+    return len(re.split(r"[.．]", match.group(1)))
+
+
+def likely_heading_text(text: str, style: dict[str, Any]) -> bool:
+    if section_heading_depth(text) is not None:
+        return True
+    value = str(text or "").strip()
+    return (
+        bool(style.get("bold") or style.get("source_bold"))
+        and 0 < len(value) <= 60
+        and not CLAUSE_PUNCTUATION_RE.search(value)
+    )
+
+
+def promote_wrapped_heading_continuations(page_info: dict[str, Any]) -> list[str]:
+    """Keep a short lowercase continuation with the preceding numbered heading."""
+    blocks = sorted(
+        (block for block in page_info.get("blocks", []) if not block.get("render_suppressed")),
+        key=lambda block: (float(block["bbox"][1]), float(block["bbox"][0])),
+    )
+    promoted: list[str] = []
+    for previous, current in zip(blocks, blocks[1:]):
+        previous_role = str(previous.get("role", ""))
+        if not previous_role.startswith("heading-") or not str(current.get("role", "")).startswith("body-"):
+            continue
+        previous_box = [float(value) for value in previous.get("bbox", [])]
+        current_box = [float(value) for value in current.get("bbox", [])]
+        if len(previous_box) != 4 or len(current_box) != 4:
+            continue
+        line_height = max(1.0, previous_box[3] - previous_box[1])
+        if current_box[1] - previous_box[1] > line_height * 2.2:
+            continue
+        source_text = str(current.get("source_text", "")).strip()
+        translation = str(current.get("translation", "")).strip()
+        explicit_continuation = current.get("heading_continuation") is True
+        if len(source_text) > 24 or (
+            not explicit_continuation and not re.match(r"^[a-z]", translation)
+        ):
+            continue
+        if LIST_ITEM_START_RE.match(source_text):
+            continue
+        current["role"] = previous_role
+        current.setdefault("style", {})["bold"] = True
+        current["source_bold_override"] = True
+        current["force_flow_break"] = True
+        promoted.append(str(current.get("id", "")))
+    return promoted
 
 
 def _median(values: list[float]) -> float:
@@ -256,6 +316,27 @@ def resolve_text_container(
         left, right = max(content_left, line_box[0]), content_right
 
     line_top, line_bottom = line_box[1], line_box[3]
+    if role.startswith("heading-"):
+        for raw_image in page_info.get("image_boxes", []):
+            image = [float(value) for value in raw_image]
+            image_width = image[2] - image[0]
+            image_height = image[3] - image[1]
+            if image_width > width * 0.78 or image_height > float(page_info["height"]) * 0.78:
+                continue
+            if image[0] <= left + 10 or line_bottom <= image[1] - 2 or line_top >= image[3] + 2:
+                continue
+            previous_bottoms = [
+                float(other["bbox"][3])
+                for other in page_info.get("blocks", [])
+                if str(other.get("id", "")) != str(block.get("id", ""))
+                and float(other["bbox"][3]) <= line_top
+                and str(other.get("role", "")) not in {"running-header", "footer"}
+            ]
+            safe_bottom = image[1] - 2
+            previous_bottom = max(previous_bottoms, default=line_top - 2)
+            safe_top = max(previous_bottom + 2, safe_bottom - size * 1.05)
+            if safe_bottom - safe_top >= size * 0.9:
+                return [left, safe_top, max(left + 2, right), safe_bottom]
     vertical_mid = (line_top + line_bottom) / 2
     for raw_image in (
         page_info.get("image_boxes", []) if role.startswith("body-") else []
@@ -288,13 +369,18 @@ def _font_family_key(block: dict[str, Any]) -> str:
 
 
 def _flow_compatible(previous: dict[str, Any], current: dict[str, Any]) -> bool:
-    if not str(previous.get("role", "")).startswith("body-"):
+    heading_join = str(current.get("heading_continuation_of", "")) == str(
+        previous.get("id", "")
+    )
+    if not heading_join and not str(previous.get("role", "")).startswith("body-"):
         return False
-    if not str(current.get("role", "")).startswith("body-"):
+    if not heading_join and not str(current.get("role", "")).startswith("body-"):
         return False
     if previous.get("manual_table_parts") is not None or current.get("manual_table_parts") is not None:
         return False
     if previous.get("force_block_mode") or current.get("force_block_mode"):
+        return False
+    if previous.get("force_flow_break") or current.get("force_flow_break"):
         return False
     if tuple(previous.get("style", {}).get("color_rgb", [])) != tuple(current.get("style", {}).get("color_rgb", [])):
         return False
@@ -309,13 +395,14 @@ def _flow_compatible(previous: dict[str, Any], current: dict[str, Any]) -> bool:
         current.get("reviewed_flow_group", "")
     ).strip()
     current_source = str(current.get("source_text", ""))
-    if not reviewed_join and (
+    if not reviewed_join and not heading_join and (
         LIST_ITEM_START_RE.match(current_source) or TOC_ITEM_START_RE.match(current_source)
     ):
         return False
     previous_source = str(previous.get("source_text", "")).strip()
     if (
         not reviewed_join
+        and not heading_join
         and
         PARAGRAPH_END_RE.search(previous_source)
         and not previous_source.endswith((";", "\uff1b"))
@@ -366,11 +453,25 @@ def apply_reviewed_text_region_adjustments(pages: list[dict[str, Any]]) -> None:
 def group_paragraph_flows(page_info: dict[str, Any]) -> list[dict[str, Any]]:
     all_blocks = page_info.get("blocks", [])
     block_positions = {block["id"]: index for index, block in enumerate(all_blocks)}
+    heading_roots = {
+        str(block.get("heading_continuation_of", ""))
+        for block in all_blocks
+        if block.get("heading_continuation_of")
+    }
     groups: list[list[dict[str, Any]]] = []
     for block in all_blocks:
         if block.get("render_suppressed"):
             continue
-        if not str(block.get("role", "")).startswith("body-"):
+        if block.get("force_line_mode"):
+            # Bullet rows are drawn by the source's vector bullet marks. They
+            # must stay line-addressable instead of being collapsed into a
+            # shorter paragraph flow when Chinese needs fewer wrapped lines.
+            continue
+        is_body = str(block.get("role", "")).startswith("body-")
+        is_heading_flow = bool(block.get("heading_continuation_of")) or str(
+            block.get("id", "")
+        ) in heading_roots
+        if not is_body and not is_heading_flow:
             continue
         if infer_block_alignment(block, float(page_info["width"])) == "center":
             continue
@@ -836,7 +937,7 @@ def fit_text_to_slots(
 ):
     size = max(int(round(original_size_px)), 6)
     minimum = max(int(round(size * minimum_scale)), 6)
-    words = text.split()
+    words, cjk_mode = _wrap_tokens(text)
     while size >= minimum:
         font = ImageFont.truetype(font_path, size=size)
         ascent, descent = font.getmetrics()
@@ -851,7 +952,7 @@ def fit_text_to_slots(
                 line_words: list[str] = []
                 while cursor < len(words):
                     candidate_words = line_words + [words[cursor]]
-                    candidate = " ".join(candidate_words)
+                    candidate = _join_wrap_tokens(candidate_words, cjk_mode)
                     if draw.textlength(candidate, font=font) <= available:
                         line_words = candidate_words
                         cursor += 1
@@ -860,11 +961,50 @@ def fit_text_to_slots(
                 if not line_words:
                     valid = False
                     break
-                lines.append(" ".join(line_words))
+                lines.append(_join_wrap_tokens(line_words, cjk_mode))
             if valid and cursor == len(words):
                 return font, lines, max(1, round(size * 0.08))
         size -= 1
     raise ValueError("Translated paragraph does not fit the source flow slots.")
+
+
+def _wrap_tokens(text: str) -> tuple[list[str], bool]:
+    if not CJK_CHAR_RE.search(text):
+        return text.split(), False
+    tokens: list[str] = []
+    latin = ""
+    for char in text:
+        if char.isspace():
+            if latin and not latin.endswith(" "):
+                latin += " "
+            continue
+        if CJK_CHAR_RE.fullmatch(char) or char in CJK_ATTACH_PUNCTUATION:
+            if latin.strip():
+                tokens.append(latin.strip())
+            latin = ""
+            tokens.append(char)
+        else:
+            latin += char
+    if latin.strip():
+        tokens.append(latin.strip())
+    return tokens, True
+
+
+def _join_wrap_tokens(tokens: list[str], cjk_mode: bool) -> str:
+    if not cjk_mode:
+        return " ".join(tokens)
+    output = ""
+    for token in tokens:
+        if not output:
+            output = token
+            continue
+        if CJK_CHAR_RE.fullmatch(token) or token in CJK_ATTACH_PUNCTUATION:
+            output += token
+        elif not output.endswith((" ", "\n")):
+            output += " " + token
+        else:
+            output += token
+    return output
 
 
 def fit_flow_text_to_slots(
@@ -940,7 +1080,17 @@ def strip_text_stream(stream_object, pdf) -> int:
         if operator not in TEXT_SHOW_OPERATORS
     ]
     removed = original_count - len(content.operations)
-    stream_object.set_data(content.get_data())
+    rewritten_data = content.get_data()
+    filters = stream_object.get("/Filter")
+    if filters in (None, "/FlateDecode", ["/FlateDecode"]):
+        stream_object.set_data(rewritten_data)
+    else:
+        # pypdf cannot re-encode streams that use filter chains such as
+        # ASCII85Decode + FlateDecode. Normalize the rewritten stream to the
+        # supported FlateDecode representation before writing it back.
+        stream_object[NameObject("/Filter")] = NameObject("/FlateDecode")
+        stream_object.pop(NameObject("/DecodeParms"), None)
+        stream_object.set_data(rewritten_data)
     return removed
 
 
@@ -977,12 +1127,21 @@ def strip_native_text(source: Path) -> tuple[PdfWriter, int]:
     for page in writer.pages:
         contents = page.get("/Contents")
         if contents:
-            removed += strip_text_stream(contents.get_object(), writer)
+            contents_object = contents.get_object()
+            if isinstance(contents_object, ArrayObject):
+                for stream_reference in contents_object:
+                    removed += strip_text_stream(stream_reference.get_object(), writer)
+            else:
+                removed += strip_text_stream(contents_object, writer)
         removed += strip_form_text(page.get("/Resources"), writer, visited)
     return writer, removed
 
 
 def font_key(style: dict[str, Any]) -> str:
+    if style.get("cjk"):
+        if style.get("bold"):
+            return "SimHeiV5-Bold"
+        return "SimSunV5"
     if style.get("bold") and style.get("italic"):
         return "ArialV5-BoldItalic"
     if style.get("bold"):
@@ -998,11 +1157,103 @@ def register_fonts() -> dict[str, str]:
         "ArialV5-Bold": r"C:\Windows\Fonts\arialbd.ttf",
         "ArialV5-Italic": r"C:\Windows\Fonts\ariali.ttf",
         "ArialV5-BoldItalic": r"C:\Windows\Fonts\arialbi.ttf",
+        "SimSunV5": r"C:\Windows\Fonts\simsun.ttc",
+        "SimHeiV5-Bold": r"C:\Windows\Fonts\simhei.ttf",
     }
     for name, path in fonts.items():
         if name not in pdfmetrics.getRegisteredFontNames():
             pdfmetrics.registerFont(TTFont(name, path))
     return fonts
+
+
+def mark_cjk_styles(manifest: dict[str, Any]) -> None:
+    language = str(manifest.get("target_language", "")).casefold()
+    has_cjk_translation = any(
+        re.search(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]", str(block.get("translation", "")))
+        for page in manifest.get("pages", [])
+        for block in page.get("blocks", [])
+    )
+    use_cjk = language.startswith(("zh", "ja", "ko")) or has_cjk_translation
+    if not use_cjk:
+        return
+    for page in manifest.get("pages", []):
+        for block in page.get("blocks", []):
+            block.setdefault("style", {})["cjk"] = True
+
+
+def unwrap_page_layout_table(page_info: dict[str, Any]) -> None:
+    """Remove a full-page table wrapper before native text layout.
+
+    Some Canva/PDF exports put the entire page (header, body and footer) in
+    one four-row table. Treating that wrapper as a real table cell collapses
+    every translated paragraph into one text box, losing the source paragraph
+    positions. The wrapper carries no semantic tabular content, so unwrap it
+    and classify the source blocks by their original vertical regions. Real
+    nested tables remain untouched.
+    """
+    width = float(page_info.get("width", 0))
+    height = float(page_info.get("height", 0))
+    cells = page_info.get("table_cells", []) or []
+    if not cells or width <= 0 or height <= 0:
+        return
+
+    def is_full_width_row(cell: dict[str, Any]) -> bool:
+        bbox = [float(value) for value in cell.get("bbox", [])]
+        if len(bbox) != 4:
+            return False
+        left, top, right, bottom = bbox
+        return left <= 1.0 and right >= width - 1.0 and bottom > top
+
+    layout_rows = [cell for cell in cells if is_full_width_row(cell)]
+    if not layout_rows:
+        return
+
+    # A genuine full-width table may exist in a document. Only unwrap this
+    # structure when one row is clearly the page body; the surrounding short
+    # rows are then header/footer layout containers rather than data cells.
+    body_row = max(
+        layout_rows,
+        key=lambda cell: float(cell["bbox"][3]) - float(cell["bbox"][1]),
+    )
+    body_top = float(body_row["bbox"][1])
+    body_bottom = float(body_row["bbox"][3])
+    if body_bottom - body_top < height * 0.60:
+        return
+
+    page_info["table_cells"] = [cell for cell in cells if not is_full_width_row(cell)]
+    for block in page_info.get("blocks", []):
+        if block.get("render_suppressed"):
+            continue
+        bbox = block.get("bbox", [])
+        if len(bbox) != 4:
+            continue
+        top = float(bbox[1])
+        bottom = float(bbox[3])
+        style = block.setdefault("style", {})
+        if bottom <= body_top + 1:
+            # Header blocks are intentionally kept out of paragraph grouping;
+            # they retain their original source coordinates independently.
+            block["role"] = "running-header"
+        elif top >= body_bottom - 1:
+            block["role"] = "footer"
+        else:
+            depth = section_heading_depth(str(block.get("source_text", "")))
+            if likely_heading_text(str(block.get("source_text", "")), style):
+                level = depth if depth is not None else 2
+                block["role"] = (
+                    f"heading-{level}-"
+                    + str(style.get("role_size", style.get("size", 10)))
+                )
+            else:
+                block["role"] = "body-" + str(style.get("role_size", style.get("size", 10)))
+                # Bullet glyphs are vector marks that remain at their source
+                # coordinates. Keep each indented bullet in its own flow so a
+                # shorter Chinese translation cannot consume the next bullet's
+                # line slots.
+                if float(bbox[0]) > 70.0:
+                    block["force_flow_break"] = True
+                    block["force_line_mode"] = True
+    promote_wrapped_heading_continuations(page_info)
 
 
 def draw_fitted_text(
@@ -1329,6 +1580,34 @@ def make_overlay(
             int(value) for value in style.get("color_rgb", [0, 0, 0])
         )
         source_lines = block.get("lines", [])
+        if block.get("force_line_mode") and source_lines:
+            # A bullet block may contain several source lines but only one
+            # translated record. Wrap the translation into the original line
+            # slots at the source body size before drawing each slot; otherwise
+            # the whole paragraph is forced into the first line and shrinks
+            # below the readable body floor.
+            probe_font = ImageFont.truetype(
+                pipeline.font_file(style),
+                size=max(6, int(round(float(style.get("role_size", style.get("size", 9))) * LAYOUT_SCALE))),
+            )
+            probe_width = max(
+                1,
+                int(
+                    round(
+                        max(
+                            resolve_text_container(page_info, block, line)[2]
+                            - resolve_text_container(page_info, block, line)[0]
+                            for line in source_lines
+                        )
+                        * LAYOUT_SCALE
+                    )
+                ),
+            )
+            wrapped_translation = pipeline.wrap_paragraph(
+                scratch, translation, probe_font, probe_width
+            )
+            if len(wrapped_translation) <= len(source_lines):
+                translation = "\n".join(wrapped_translation)
         target_lines = translation.splitlines() if translation else []
         if source_lines and len(target_lines) <= len(source_lines):
             target_lines.extend([""] * (len(source_lines) - len(target_lines)))
@@ -1375,6 +1654,8 @@ def make_overlay(
             and len(target_lines) == len(source_lines)
             and not block.get("force_block_mode")
             and (
+                block.get("force_line_mode")
+                or
                 len(source_lines) <= 1
                 or any(candidate_anchors)
                 or any(candidate_tables)
@@ -1414,7 +1695,7 @@ def make_overlay(
                 for item in items:
                     if not str(item.get("text", "")).strip():
                         continue
-                    top = float(item.get("top", line["bbox"][1]))
+                    top = float(item.get("top", container_top))
                     bottom = float(
                         item.get(
                             "bottom",
@@ -1497,7 +1778,10 @@ def rebuild(
 ) -> None:
     pipeline = load_pipeline(pipeline_path)
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    mark_cjk_styles(manifest)
     pipeline.enrich_manifest_layout(source, manifest)
+    for page_info in manifest.get("pages", []):
+        unwrap_page_layout_table(page_info)
     apply_reviewed_text_region_adjustments(manifest["pages"])
     missing = [
         block["id"]

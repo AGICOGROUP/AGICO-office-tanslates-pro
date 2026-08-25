@@ -1,9 +1,9 @@
 ---
-name: translate-office-files
-description: Use when translating uploaded Word (.doc/.docx), Excel (.xls/.xlsx/.xlsm), PowerPoint (.ppt/.pptx), or PDF (.pdf) files whose professional terminology, editable content, images, and layout must be preserved.
+name: office-translate-pro
+description: Use when translating uploaded Word (.doc/.docx), Excel (.xls/.xlsx/.xlsm), PowerPoint (.ppt/.pptx), PDF (.pdf), or static image (.png/.jpg/.jpeg) files whose professional terminology, editable content, graphics, and layout must be preserved.
 ---
 
-# Translate Office and PDF Files
+# Office Translate Pro
 
 Route each uploaded document to exactly one format adapter. Preserve the source and produce a separate translated artifact.
 
@@ -20,8 +20,9 @@ Route each uploaded document to exactly one format adapter. Preserve the source 
 | Excel `.xls` / `.xlsx` / `.xlsm` | `formats/excel/SKILL.md` |
 | PowerPoint `.ppt` / `.pptx` | `formats/ppt/SKILL.md` |
 | PDF `.pdf` | `formats/pdf/SKILL.md` |
+| Static image `.png` / `.jpg` / `.jpeg` | `formats/image/SKILL.md` |
 
-Do not route by user wording or extension alone. The PDF adapter performs a second signature and content classification before selecting one of its two independent PDF skills.
+Do not route by user wording or extension alone. The PDF adapter performs a second signature and content classification before selecting one of its three independent PDF skills. The image adapter wraps a verified static PNG or JPEG as a one-page scan PDF, reuses the scan-PDF workflow, and returns the same image format and dimensions.
 
 ## Shared translation contract
 

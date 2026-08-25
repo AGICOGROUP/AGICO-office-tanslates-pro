@@ -1,13 +1,13 @@
 ---
 name: translate-scan-pdf-professionally
-description: Use when translating scan-only or image-only PDFs whose text cannot be selected, especially manuals, catalogs, tables, screenshots, process diagrams, engineering drawings, logos, headers, and footers where page appearance and non-text graphics must remain unchanged.
+description: Use when translating scan-only or image-only PDFs whose text cannot be selected, including requests to retain Chinese and add selectable bilingual labels to engineering drawings, diagrams, title blocks, legends, logos, manuals, tables, screenshots, headers, or footers.
 ---
 
 # Professional Scan PDF Translation
 
 ## Overview
 
-Translate rasterized PDFs by changing only source-language glyph regions, then add embedded vector English text. Preserve page geometry, colors, photographs, diagram lines, table rules, icons, logos, and all non-text pixels.
+Translate rasterized PDFs with embedded vector target-language text. Support both replacement output and additive bilingual output that preserves Chinese. Preserve page geometry, colors, photographs, diagram lines, table rules, icons, logos, and all non-text pixels.
 
 ## Route Gate
 
@@ -23,6 +23,8 @@ Read these files before acting:
 - `references/workflow.md` for the complete execution order and image-text handling rules.
 - `references/manifest-schema.md` before creating or editing the translation manifest.
 - `references/quality-gates.md` before review and delivery.
+- `references/additive-bilingual-drawings.md` when the user asks to retain
+  Chinese and add selectable target-language labels.
 - `references/cement-terminology.md` only through
   `scripts/glossary_lookup.py` when cement-industry terms or sentences occur.
 
@@ -34,21 +36,34 @@ Use an isolated job directory named with the source SHA-256 prefix. Never modify
 3. Create a manifest with `scripts/make_manifest_template.py`.
 4. Inventory every OCR line. Group lines into semantic blocks. For each cement
    block or batch, run `python scripts/glossary_lookup.py scan "<Chinese source>"`.
-   Use every returned table translation before model wording; use the model only
-   for unmatched terms or sentences. The lookup uses longest matches and the
-   final occurrence of duplicate entries because later table sections contain
-   revisions. Apply matches consistently to body text and image labels. Every
+   For English output, use every returned table translation before model
+   wording. For another target language, record the selected English term as a
+   controlled semantic pivot and translate that concept professionally and
+   consistently. The lookup uses longest matches and the final occurrence of
+   duplicate entries because later table sections contain revisions. Every
    source-line ID must be assigned exactly once as `translated` or
    `preserve_confirm`.
-5. For each translated block, approve a tight `clean_box` around glyph pixels only. Preserve drawing lines crossing or touching text; explicitly reconstruct only verified line segments through `vector_lines`. Keep icons in the raster base whenever possible. If cleanup must cover an icon, use a `rich_lines` `source_crop` run to copy the exact original pixels back; never substitute a similar icon.
-6. Build with `scripts/build_scan.py`. English is embedded vector text and must be selectable/copyable.
+5. Select the output mode. For replacement, approve a tight `clean_box` around
+   glyph pixels only. For additive bilingual output, use `action: add_bilingual`
+   and verified adjacent whitespace; do not define `clean_box` or alter source
+   pixels. Preserve drawing lines crossing or touching text; explicitly
+   reconstruct only verified line segments through `vector_lines`. Keep icons
+   in the raster base whenever possible. If replacement cleanup must cover an
+   icon, use a `rich_lines` `source_crop` run to copy the exact original pixels
+   back; never substitute a similar icon.
+6. Build with `scripts/build_scan.py`. Target-language text is embedded vector
+   text and must be selectable/copyable.
 7. Render and inspect every output page at full-page and zoomed resolution. Complete the visual-review evidence.
 8. Run `scripts/verify_scan.py`. Deliver only when it exits successfully and its report says `passed: true`.
 
 ## Shared Layout Rules
 
+- For additive bilingual drawings, place target text below, then right, then in
+  a complete companion legend/title panel in verified whitespace. Never squeeze
+  long translations into dense source cells or place them over drawing content.
+
 - Mark a diagram `bilingual_complete` and preserve it unchanged only when every
-  clear Chinese label has a semantic English counterpart. Record the source
+  clear Chinese label has a semantic target-language counterpart. Record the source
   region hash, clear-Chinese count, matched-pair count, and zero unmatched
   labels. Partial bilingual diagrams translate only unmatched Chinese labels.
 - Within one page, `major_title`, `minor_title`, and `body` each use one font,
@@ -73,12 +88,13 @@ Use an isolated job directory named with the source SHA-256 prefix. Never modify
   region. Illegible text may be preserved only with an explicit review record.
 - OCR confidence never replaces visual review. OCR false positives require exact bounding-box evidence and a documented reason.
 - Zero unreviewed pages, zero unreviewed images, zero icon substitutions, zero mixed-color failures, zero overlap/clipping findings, zero unexplained CJK residuals, and zero pixel changes outside approved cleanup regions.
-- Approved CJK inside a hash-bound `bilingual_complete` region is not an
-  untranslated residual; clear Chinese without a paired English label remains
-  a delivery failure.
-- Cement glossary hits must use the bundled table's selected English lexical
-  form. Only capitalization or grammatical number may change; a model synonym
-  is a delivery failure when a table match exists.
+- Approved CJK inside a hash-bound `bilingual_complete` region or an assigned
+  `add_bilingual` source box is expected. Clear Chinese without a paired target
+  label remains a delivery failure.
+- For English output, cement glossary hits must use the selected English lexical
+  form. For other target languages, retain the selected English concept in the
+  job glossary as the semantic pivot and use one consistent professional target
+  equivalent.
 
 ## Quick Commands
 

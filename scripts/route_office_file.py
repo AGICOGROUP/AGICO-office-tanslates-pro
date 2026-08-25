@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Detect an Office container and select exactly one translation adapter."""
+"""Detect a supported document or image and select one translation adapter."""
 
 from __future__ import annotations
 
@@ -12,6 +12,8 @@ import zipfile
 
 CFB_SIGNATURE = bytes.fromhex("D0CF11E0A1B11AE1")
 PDF_SIGNATURE = b"%PDF-"
+PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+JPEG_SIGNATURE = b"\xff\xd8\xff"
 OOXML_MARKERS = {
     "word": "word/document.xml",
     "excel": "xl/workbook.xml",
@@ -50,7 +52,39 @@ def route(source: Path) -> tuple[int, dict[str, object]]:
     suffix = source.suffix.lower()
     try:
         with source.open("rb") as stream:
-            leading_bytes = stream.read(max(len(CFB_SIGNATURE), len(PDF_SIGNATURE)))
+            leading_bytes = stream.read(
+                max(len(CFB_SIGNATURE), len(PDF_SIGNATURE), len(PNG_SIGNATURE))
+            )
+
+        image_format = None
+        detection = None
+        valid_extensions: set[str] = set()
+        if leading_bytes.startswith(PNG_SIGNATURE):
+            image_format = "PNG"
+            detection = "png-signature"
+            valid_extensions = {".png"}
+        elif leading_bytes.startswith(JPEG_SIGNATURE):
+            image_format = "JPEG"
+            detection = "jpeg-signature"
+            valid_extensions = {".jpg", ".jpeg"}
+
+        if image_format:
+            if suffix not in valid_extensions:
+                return 2, report(
+                    format_name="image",
+                    detection=detection,
+                    extension_mismatch=True,
+                    error=(
+                        f"file extension {suffix or '<none>'} does not match "
+                        f"detected {image_format} image"
+                    ),
+                )
+            return 0, report(format_name="image", detection=detection)
+
+        if suffix in {".png", ".jpg", ".jpeg"}:
+            return 2, report(
+                error=f"file has a {suffix} extension but no matching image signature"
+            )
 
         if leading_bytes.startswith(PDF_SIGNATURE):
             if suffix != ".pdf":
@@ -106,7 +140,7 @@ def route(source: Path) -> tuple[int, dict[str, object]]:
     except (OSError, zipfile.BadZipFile) as exc:
         return 2, report(error=f"cannot inspect source: {exc}")
 
-    return 2, report(error="unsupported or corrupt Office file signature")
+    return 2, report(error="unsupported or corrupt file signature")
 
 
 def main() -> int:
