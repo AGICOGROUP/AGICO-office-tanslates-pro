@@ -1,27 +1,43 @@
 # Excel professional translation workflow
 
-## Preflight
+## 1. Route and preserve
 
-1. Hash and preserve the original.
-2. Route by signature with `scripts/route_excel_file.py`.
-3. For `.xls`, inspect for legacy VBA, convert a working copy with an Excel-compatible converter to `.xlsx` or macro-safe `.xlsm`, and compare the converted baseline visually and structurally before translation.
-4. For `.xlsm`, require a macro-safe engine and retain `vbaProject.bin`; stop if unavailable.
-5. Render every visible sheet and every configured print area.
+Hash the original and run `scripts/route_excel_file.py`. Never overwrite it. Convert `.xls` only
+through a verified Excel-compatible working copy. Keep `.xlsm` on the strict macro-safe route.
 
-Inventory sheet order and visibility, used ranges, formulas, defined names, tables, merged cells, dimensions, styles, number formats, validations, comments, hyperlinks, filters, freeze panes, charts, shapes, images, external links, macros, print areas, headers, footers, and page setup.
+## 2. Run the fixed pipeline
 
-## Translation
+Run `scripts/excel_pipeline.mjs` in the fixed sequence `inspect`, `prepare`, `apply`, `verify`,
+`render`. Store artifacts under `work/<source-stem>-<hash-prefix>/` and resume from
+`job-state.json`; do not repeat completed stages whose artifact hashes still match.
 
-- Extract editable human-language text from cells, comments, notes, shapes, chart labels, headers, footers, and image labels.
-- Exclude formulas, names, macro code, model numbers, identifiers, URLs, and protected tokens.
-- Resolve the repository glossary before model wording: exact phrase, longest valid term, then contextual professional translation.
-- Keep one manifest item per source object; do not deduplicate repeated text.
-- Validate the manifest before mutation.
-- Modify only text-bearing objects. Keep formulas as formulas and numeric/date cells typed.
-- For bilingual output, read and apply `bilingual-row-layout.md`; it is the default layout unless the user specifies another arrangement.
+`inspect` performs one preflight pass, inventories editable text and OOXML risks, and groups images
+by SHA-256. `prepare` performs safe deduplication: repeated source text shares a translation unit
+only when object kind, context, and protected tokens match. Unknown context stays separate.
 
-## Fit and verification
+At the translation pause, resolve the repository glossary before model wording: exact phrase,
+longest valid listed term, then professional contextual translation. Preserve numbers, units,
+models, identifiers, URLs, standards, punctuation, and meaningful line breaks. Validate the
+schema-v2 manifest before mutation.
 
-Keep original row heights and column widths by default. Use concise English, wrapping, and bounded font reduction before any local dimension change; record every approved fit adjustment.
+`apply` imports once, mutates text-bearing cells only, and exports once. For bilingual output, apply
+`bilingual-row-layout.md` only after the grid-safety classifier passes. Otherwise enter strict
+processing before creating an output.
 
-After export, compare formulas, sheet structure, names, merges, dimensions, styles, validations, filters, panes, links, charts, images, macros, print settings, and page setup. Scan for formula errors and unexpected Chinese. For bilingual output, also reject missing or split source/translation row pairs, duplicated numeric data in translation rows, and source-language text in translation rows. Render every final sheet and print area; reject clipping, overlap, merged-cell damage, chart collisions, missing image labels, or unreviewed hidden content.
+## 3. Conditional checks
+
+- Balanced monolingual: verify deterministic invariants and render only changed/risk sheets.
+- Bilingual: verify every source/translation pair and render all changed visible sheets.
+- Images: read `image-text-localization.md`; review one record per unique SHA-256, not each
+  occurrence.
+- Strict: use feature-aware checks and full relevant rendering when macros, unsafe conversion,
+  tables, charts, comments, external links, unsupported drawings, uncertain images, repair
+  warnings, or invariant mismatches are present.
+
+Verification must reject changed formulas or typed values, broken merges, missing occurrences,
+protected-token loss, incomplete bilingual pairs, formula errors, or output-open failure.
+
+## 4. Delivery
+
+Deliver one new workbook only after `verify` passes and `render` completes. Report strict reasons
+when present. The source hash must still match the value recorded at `inspect`.

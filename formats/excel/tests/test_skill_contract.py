@@ -16,12 +16,38 @@ class ExcelSkillContractTests(unittest.TestCase):
             "references/manifest-schema.md",
             "references/image-text-localization.md",
             "references/bilingual-row-layout.md",
+            "references/pipeline-cli.md",
             "scripts/route_excel_file.py",
+            "scripts/excel_pipeline.mjs",
             "scripts/resolve_repo_glossary.py",
             "scripts/validate_manifest.py",
         }
         missing = sorted(path for path in required if not (ROOT / path).is_file())
         self.assertEqual([], missing)
+
+    def test_skill_routes_every_job_through_balanced_resumable_pipeline(self):
+        skill = (ROOT / "SKILL.md").read_text(encoding="utf-8")
+        workflow = (ROOT / "references" / "excel-workflow.md").read_text(encoding="utf-8")
+        combined = skill + "\n" + workflow
+        for token in (
+            "excel_pipeline.mjs",
+            "inspect",
+            "prepare",
+            "apply",
+            "verify",
+            "render",
+            "job-state.json",
+            "safe deduplication",
+            "SHA-256",
+            "strict",
+        ):
+            self.assertIn(token, combined)
+        for obsolete in (
+            "do not deduplicate repeated text",
+            "Review every image",
+            "render every final sheet and print area",
+        ):
+            self.assertNotIn(obsolete, combined)
 
     def test_skill_is_excel_only_and_complete(self):
         skill = (ROOT / "SKILL.md").read_text(encoding="utf-8")
