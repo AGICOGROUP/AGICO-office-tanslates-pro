@@ -8,7 +8,7 @@ description: Use when translating uploaded Word documents (.doc or .docx), espec
 Translate only human-language content while preserving the document's native Word structure and visual hierarchy.
 
 Top-level routing is complete when this adapter starts. Do not run the root Office router again,
-read another format adapter, or consider Excel, PowerPoint, PDF, or image workflows.
+read another format adapter, or consider another format workflow.
 
 This adapter contains the complete professional translation, terminology, structure-preservation,
 and quality-control contract; it does not depend on another Office translation skill. Use Microsoft

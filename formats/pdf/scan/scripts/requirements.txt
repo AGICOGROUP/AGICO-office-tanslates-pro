@@ -1,6 +1,0 @@
-numpy
-Pillow
-pdfplumber
-pypdf
-rapidocr-onnxruntime
-reportlab

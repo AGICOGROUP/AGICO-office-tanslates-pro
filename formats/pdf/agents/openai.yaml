@@ -1,4 +1,0 @@
-interface:
-  display_name: "Route PDF Translation"
-  short_description: "Selects the native/mixed or scan-only PDF translation skill"
-  default_prompt: "Use $route-pdf-translation to inspect my PDF and invoke exactly one appropriate PDF translation skill."

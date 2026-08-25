@@ -1,4 +1,0 @@
-interface:
-  display_name: "Professional PDF Translator"
-  short_description: "Translate PDFs with selectable text and mandatory visual QA"
-  default_prompt: "Use $translate-pdf-professionally to translate this original native/mixed PDF into English, prioritize bundled cement terminology matches before model wording, preserve selectability, apply image-method routing with structural-line evidence, skip only proven complete bilingual images, unify page-level title/subtitle/body typography from source evidence, use controlled image repositioning only after fit failure, and pass all visual gates."

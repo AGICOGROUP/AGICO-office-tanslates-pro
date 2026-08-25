@@ -6,7 +6,7 @@ description: Use when translating PowerPoint presentations (.ppt or .pptx) while
 # Professional PowerPoint Translation
 
 Top-level routing is complete when this module starts. Do not run the root Office router again,
-read another format adapter, or consider Word, Excel, PDF, or image workflows.
+read another format adapter, or consider another format workflow.
 
 Use `scripts/ppt_pipeline.py` as the single production entry. Preserve the immutable source, write
 one separate `.pptx`, translate native text in place, and use Microsoft PowerPoint as final

@@ -9,7 +9,7 @@ Translate with Codex/GPT through one resumable pipeline. Mutate only human-langu
 formulas and native text editable, preserve the source hash, and always write a separate output.
 
 Top-level routing is complete when this adapter starts. Do not run the root Office router again,
-read another format adapter, or consider Word, PowerPoint, PDF, or image workflows. The container
+read another format adapter, or consider another format workflow. The container
 route below is Excel-internal validation only.
 
 **REQUIRED SUB-SKILL:** Use `spreadsheets:Spreadsheets` and its artifact-tool contract.

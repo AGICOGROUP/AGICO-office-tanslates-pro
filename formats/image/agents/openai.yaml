@@ -1,4 +1,0 @@
-interface:
-  display_name: "Professional Image Translation"
-  short_description: "Translate PNG and JPEG images while preserving layout and graphics."
-  default_prompt: "Use $translate-image-professionally to translate this static PNG or JPEG image, preserve its dimensions and non-text artwork, and pass the raster translation visual gates."

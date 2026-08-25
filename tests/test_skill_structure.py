@@ -24,17 +24,21 @@ class RootSkillStructureTests(unittest.TestCase):
         text = skill.read_text(encoding="utf-8")
         normalized = " ".join(text.split())
         self.assertIn("Use when", text)
-        for extension in (".docx", ".xlsx", ".pptx", ".pdf", ".png", ".jpg", ".jpeg"):
+        for extension in (".docx", ".xlsx", ".pptx"):
             self.assertIn(extension, text)
         self.assertIn("scripts/route_office_file.py", text)
         for adapter in (
             "formats/word/SKILL.md",
             "formats/excel/SKILL.md",
             "formats/ppt/SKILL.md",
-            "formats/pdf/SKILL.md",
-            "formats/image/SKILL.md",
         ):
             self.assertIn(adapter, text)
+        for removed in ("formats/pdf", "formats/image", ".pdf", ".png", ".jpg", ".jpeg"):
+            self.assertNotIn(removed, text)
+        self.assertEqual(
+            {"word", "excel", "ppt"},
+            {path.name for path in (ROOT / "formats").iterdir() if path.is_dir()},
+        )
         self.assertIn("Routing ends immediately", normalized)
         self.assertIn("Do not read or consider any other format adapter", normalized)
         for downstream_rule in ("Hash and preserve", "glossary", "protected tokens", "render"):
@@ -54,6 +58,8 @@ class RootSkillStructureTests(unittest.TestCase):
         self.assertIn('display_name: "', text)
         self.assertIn('short_description: "', text)
         self.assertIn('$office-translate-pro', text)
+        for removed in ("PDF", "PNG", "JPEG", "image"):
+            self.assertNotIn(removed, text)
 
     def test_shared_glossary_is_complete_source_copy(self):
         glossary = ROOT / "references" / GLOSSARY_NAME
@@ -95,43 +101,6 @@ class WordAdapterStructureTests(unittest.TestCase):
         self.assertTrue(metadata.is_file())
         text = metadata.read_text(encoding="utf-8")
         self.assertIn('$translate-word-professionally', text)
-
-
-class PdfAdapterStructureTests(unittest.TestCase):
-    def test_pdf_router_and_independent_adapters_exist(self):
-        router = ROOT / "formats" / "pdf" / "SKILL.md"
-        self.assertTrue(router.is_file())
-        text = router.read_text(encoding="utf-8")
-        self.assertIn("scripts/route_pdf_file.py", text)
-        self.assertIn("formats/pdf/native/SKILL.md", text)
-        self.assertIn("formats/pdf/scan/SKILL.md", text)
-
-        native = ROOT / "formats" / "pdf" / "native" / "SKILL.md"
-        scan = ROOT / "formats" / "pdf" / "scan" / "SKILL.md"
-        self.assertTrue(native.is_file())
-        self.assertTrue(scan.is_file())
-        self.assertNotEqual(native.read_bytes(), scan.read_bytes())
-
-    def test_bilingual_pdf_keeps_any_source_language_and_adds_chinese(self):
-        router = (ROOT / "formats" / "pdf" / "SKILL.md").read_text(encoding="utf-8")
-        bilingual = (ROOT / "formats" / "pdf" / "bilingual" / "SKILL.md").read_text(
-            encoding="utf-8"
-        )
-        for text in (router, bilingual):
-            self.assertIn("source language", text.lower())
-            self.assertIn("Chinese", text)
-        self.assertIn("unchanged", bilingual)
-
-
-class ImageAdapterStructureTests(unittest.TestCase):
-    def test_image_adapter_reuses_scan_pdf_workflow(self):
-        skill = ROOT / "formats" / "image" / "SKILL.md"
-        self.assertTrue(skill.is_file())
-        text = skill.read_text(encoding="utf-8")
-        self.assertIn("formats/pdf/scan/SKILL.md", text)
-        self.assertIn("same pixel dimensions", text)
-        self.assertIn("same image format", text)
-
 
 if __name__ == "__main__":
     unittest.main()
