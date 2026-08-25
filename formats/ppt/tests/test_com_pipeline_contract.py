@@ -5,12 +5,14 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
 COM_SCRIPT = ROOT / "scripts" / "ppt_com.ps1"
+PIPELINE_SCRIPT = ROOT / "scripts" / "ppt_pipeline.py"
 POWERSHELL = shutil.which("powershell.exe")
 
 
@@ -31,6 +33,59 @@ def powerpoint_available() -> bool:
 
 @unittest.skipUnless(powerpoint_available(), "Microsoft PowerPoint COM is required")
 class PowerPointComPipelineContractTests(unittest.TestCase):
+    def test_inspect_converts_legacy_ppt_inside_the_pipeline(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "legacy.ppt"
+            job = root / "job"
+            create_script = (
+                "$app=New-Object -ComObject PowerPoint.Application;"
+                "$deck=$app.Presentations.Add();"
+                "$slide=$deck.Slides.Add(1,12);"
+                "$shape=$slide.Shapes.AddTextbox(1,40,40,400,80);"
+                "$shape.TextFrame.TextRange.Text='篦式冷却机';"
+                f"$deck.SaveAs('{source}',1);"
+                "$deck.Close();$app.Quit();"
+                "[Runtime.InteropServices.Marshal]::FinalReleaseComObject($shape)|Out-Null;"
+                "[Runtime.InteropServices.Marshal]::FinalReleaseComObject($slide)|Out-Null;"
+                "[Runtime.InteropServices.Marshal]::FinalReleaseComObject($deck)|Out-Null;"
+                "[Runtime.InteropServices.Marshal]::FinalReleaseComObject($app)|Out-Null"
+            )
+            created = subprocess.run(
+                [POWERSHELL, "-NoProfile", "-Command", create_script],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                timeout=30,
+            )
+            self.assertEqual(0, created.returncode, created.stderr)
+            inspected = subprocess.run(
+                [
+                    sys.executable,
+                    str(PIPELINE_SCRIPT),
+                    "inspect",
+                    "--input",
+                    str(source),
+                    "--job-dir",
+                    str(job),
+                    "--target-language",
+                    "en",
+                ],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                timeout=30,
+            )
+            self.assertEqual(0, inspected.returncode, inspected.stderr)
+            inventory = json.loads((job / "inventory.json").read_text(encoding="utf-8"))
+            state = json.loads((job / "job-state.json").read_text(encoding="utf-8"))
+
+        self.assertEqual("legacy.ppt", inventory["source_file"])
+        self.assertTrue(inventory["working_source_path"].endswith("working-source.pptx"))
+        self.assertEqual("complex", inventory["risk_plan"]["route"])
+        self.assertIn("legacy-ppt-conversion", inventory["risk_plan"]["complex_reasons"])
+        self.assertEqual(1, state["metrics"]["powerpoint_starts"])
+
     def test_apply_consumes_schema_v2_and_writes_translation(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

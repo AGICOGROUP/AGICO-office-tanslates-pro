@@ -73,6 +73,52 @@ def extract_slide_occurrences(slide_xml: bytes, slide_index: int) -> list[dict]:
         shape_id = int(identity.attrib.get("id", "0"))
         shape_name = identity.attrib.get("name", "")
         role = shape_role(shape, shape_name)
+        if role == "table":
+            table = shape.find(f".//{{{A_NS}}}tbl")
+            if table is None:
+                continue
+            package_indices = {
+                id(paragraph): index
+                for index, paragraph in enumerate(
+                    shape.findall(f".//{{{A_NS}}}p"), start=1
+                )
+            }
+            for row_index, row in enumerate(
+                table.findall(f"{{{A_NS}}}tr"), start=1
+            ):
+                for column_index, cell in enumerate(
+                    row.findall(f"{{{A_NS}}}tc"), start=1
+                ):
+                    for paragraph_index, paragraph in enumerate(
+                        cell.findall(f".//{{{A_NS}}}p"), start=1
+                    ):
+                        text = paragraph_text(paragraph)
+                        if not text:
+                            continue
+                        occurrences.append(
+                            {
+                                "id": (
+                                    f"ppt/slide:{slide_index}/shape:{shape_id}"
+                                    f"/cell:{row_index}:{column_index}"
+                                    f"/paragraph:{paragraph_index}"
+                                ),
+                                "kind": "ppt_table_cell",
+                                "source_text": text,
+                                "slide_index": slide_index,
+                                "shape_id": shape_id,
+                                "row": row_index,
+                                "column": column_index,
+                                "paragraph_index": paragraph_index,
+                                "package_paragraph_index": package_indices[id(paragraph)],
+                                "role": role,
+                                "shape_name": shape_name,
+                                "context_signature": (
+                                    f"table:r{row_index}:c{column_index}"
+                                ),
+                                "protected_tokens": PROTECTED_RE.findall(text),
+                            }
+                        )
+            continue
         for paragraph_index, paragraph in enumerate(
             shape.findall(f".//{{{A_NS}}}p"), start=1
         ):
@@ -82,7 +128,7 @@ def extract_slide_occurrences(slide_xml: bytes, slide_index: int) -> list[dict]:
             occurrences.append(
                 {
                     "id": f"ppt/slide:{slide_index}/shape:{shape_id}/paragraph:{paragraph_index}",
-                    "kind": "ppt_table_cell" if role == "table" else "ppt_paragraph",
+                    "kind": "ppt_paragraph",
                     "source_text": text,
                     "slide_index": slide_index,
                     "shape_id": shape_id,

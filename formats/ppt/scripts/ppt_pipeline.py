@@ -123,6 +123,18 @@ def first_incomplete_stage(state: dict) -> str | None:
     return None
 
 
+def complete_delivery(
+    state: dict, output: Path, *, visual_review_passed: bool
+) -> None:
+    if not state["stages"]["render"]["completed"]:
+        raise PipelineError("render stage must pass before delivery")
+    if not visual_review_passed:
+        raise PipelineError("visual review must pass before delivery")
+    if not output.is_file():
+        raise PipelineError(f"translated presentation not found: {output}")
+    mark_stage(state, "deliver", str(output.resolve()))
+
+
 def build_render_plan(inventory: dict, verification_passed: bool) -> dict:
     all_slides = [int(item["index"]) for item in inventory.get("slides", [])]
     risk_plan = inventory.get("risk_plan", {})
@@ -175,8 +187,59 @@ def read_json(path: Path) -> dict:
 
 
 def command_inspect(args: argparse.Namespace) -> int:
-    inventory = inspect_package(args.input)
+    source = args.input.resolve()
+    working_source = source
+    legacy_converted = False
+    if source.suffix.lower() == ".ppt":
+        powershell = shutil.which("powershell.exe")
+        if not powershell:
+            raise PipelineError("legacy .ppt conversion requires Microsoft PowerPoint")
+        args.job_dir.mkdir(parents=True, exist_ok=True)
+        working_source = (args.job_dir / "working-source.pptx").resolve()
+        completed = subprocess.run(
+            [
+                powershell,
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                str(Path(__file__).with_name("ppt_com.ps1")),
+                "-Command",
+                "convert",
+                "-InputPath",
+                str(source),
+                "-OutputPath",
+                str(working_source),
+            ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        )
+        if completed.returncode != 0:
+            raise PipelineError(completed.stderr.strip() or "legacy .ppt conversion failed")
+        legacy_converted = True
+    elif source.suffix.lower() != ".pptx":
+        raise PipelineError("PowerPoint pipeline supports only .ppt and .pptx")
+
+    inventory = inspect_package(working_source)
+    inventory["source_file"] = source.name
+    inventory["source_path"] = str(source)
+    inventory["source_sha256"] = sha256_file(source)
+    inventory["working_source_path"] = str(working_source)
+    inventory["working_source_sha256"] = sha256_file(working_source)
+    if legacy_converted:
+        reasons = inventory["risk_plan"].setdefault("complex_reasons", [])
+        if "legacy-ppt-conversion" not in reasons:
+            reasons.append("legacy-ppt-conversion")
+        inventory["risk_plan"]["route"] = "complex"
+        inventory["risk_plan"]["risk_slides"] = [
+            int(item["index"]) for item in inventory["slides"]
+        ]
     state = new_state(inventory, args.target_language)
+    if legacy_converted:
+        state["metrics"]["powerpoint_starts"] = 1
+        state["metrics"]["presentation_opens"] = 1
+        state["metrics"]["full_deck_passes"] += 1
     mark_stage(state, "preflight")
     inventory_path = args.job_dir / "inventory.json"
     write_json(inventory_path, inventory)
@@ -221,12 +284,18 @@ def command_apply(args: argparse.Namespace) -> int:
     if sha256_file(source) != inventory["source_sha256"]:
         raise PipelineError("source hash differs from the inspected source")
     validation = validate_manifest(manifest_path, require_translations=True)
+    mutation_source = Path(inventory.get("working_source_path", str(source))).resolve()
+    if not mutation_source.is_file():
+        raise PipelineError(f"working source not found: {mutation_source}")
+    expected_working_hash = inventory.get("working_source_sha256")
+    if expected_working_hash and sha256_file(mutation_source) != expected_working_hash:
+        raise PipelineError("working source hash differs from inspected artifact")
     mark_stage(state, "translate", str(manifest_path))
     mark_stage(state, "validate", str(manifest_path))
 
     route = state.get("route", "strict")
     if route == "fast":
-        apply_report = apply_manifest(source, manifest_path, output)
+        apply_report = apply_manifest(mutation_source, manifest_path, output)
         apply_report["engine"] = "ooxml"
     else:
         powershell = shutil.which("powershell.exe")
@@ -242,7 +311,7 @@ def command_apply(args: argparse.Namespace) -> int:
             "-Command",
             "apply",
             "-InputPath",
-            str(source),
+            str(mutation_source),
             "-OutputPath",
             str(output),
             "-ManifestPath",
@@ -405,9 +474,22 @@ def command_render(args: argparse.Namespace) -> int:
     office_report_path = args.job_dir / "office-verification.json"
     write_json(office_report_path, reports)
     mark_stage(state, "render", str(office_report_path))
-    mark_stage(state, "deliver", str(output))
     write_json(args.job_dir / "job-state.json", state)
     print(json.dumps(reports, ensure_ascii=False))
+    return 0
+
+
+def command_deliver(args: argparse.Namespace) -> int:
+    output = args.output.resolve()
+    state_path = args.job_dir / "job-state.json"
+    state = read_json(state_path)
+    complete_delivery(
+        state,
+        output,
+        visual_review_passed=args.visual_review_passed,
+    )
+    write_json(state_path, state)
+    print(json.dumps({"delivered": str(output)}, ensure_ascii=False))
     return 0
 
 
@@ -438,6 +520,11 @@ def build_parser() -> argparse.ArgumentParser:
     render_parser.add_argument("--job-dir", required=True, type=Path)
     render_parser.add_argument("--output", required=True, type=Path)
     render_parser.set_defaults(handler=command_render)
+    deliver_parser = subparsers.add_parser("deliver")
+    deliver_parser.add_argument("--job-dir", required=True, type=Path)
+    deliver_parser.add_argument("--output", required=True, type=Path)
+    deliver_parser.add_argument("--visual-review-passed", action="store_true")
+    deliver_parser.set_defaults(handler=command_deliver)
     return parser
 
 

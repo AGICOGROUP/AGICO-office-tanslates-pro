@@ -15,6 +15,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from ppt_pipeline import (  # noqa: E402
     STAGES,
     build_translation_manifest,
+    complete_delivery,
     first_incomplete_stage,
     mark_stage,
     new_state,
@@ -108,6 +109,54 @@ class ManifestPreparationTests(unittest.TestCase):
         self.assertEqual(1, summary["translation_units"])
         self.assertEqual(1, summary["occurrences"])
 
+    def test_manifest_cannot_apply_while_unique_image_screening_is_pending(self):
+        source_inventory = inventory([occurrence("item-1")])
+        source_inventory["image_groups"] = [
+            {
+                "sha256": "b" * 64,
+                "media_paths": ["ppt/media/image1.png"],
+                "occurrences": [{"slide_index": 1, "shape_id": 3}],
+                "screening_status": "pending",
+            }
+        ]
+        manifest = build_translation_manifest(source_inventory, "en")
+        manifest["translation_units"][0]["translation"] = "Grate cooler"
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "manifest.json"
+            path.write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
+            with self.assertRaises(ManifestError):
+                validate_manifest(path, require_translations=True)
+
+            manifest["image_groups"][0]["screening_status"] = "retain"
+            manifest["image_groups"][0]["reason_code"] = "no-source-language-text"
+            path.write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
+            summary = validate_manifest(path, require_translations=True)
+
+        self.assertEqual(1, summary["image_groups"])
+
+    def test_manifest_rejects_translation_that_drops_a_protected_token(self):
+        manifest = build_translation_manifest(
+            inventory([occurrence("item-1", text="Motor M1", protected_tokens=["M1"])]),
+            "es",
+        )
+        manifest["translation_units"][0]["translation"] = "Motor principal"
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "manifest.json"
+            path.write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
+            with self.assertRaisesRegex(ManifestError, "protected token missing"):
+                validate_manifest(path, require_translations=True)
+
+    def test_table_occurrence_requires_a_valid_cell_location(self):
+        item = occurrence("item-1")
+        item["kind"] = "ppt_table_cell"
+        manifest = build_translation_manifest(inventory([item]), "en")
+        manifest["translation_units"][0]["translation"] = "Translated"
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "manifest.json"
+            path.write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
+            with self.assertRaisesRegex(ManifestError, "missing field: row"):
+                validate_manifest(path, require_translations=True)
+
 
 class PipelineStateTests(unittest.TestCase):
     def test_state_resumes_from_first_incomplete_stage(self):
@@ -117,6 +166,20 @@ class PipelineStateTests(unittest.TestCase):
         mark_stage(state, "inspect")
         self.assertEqual("prepare", first_incomplete_stage(state))
         self.assertEqual(list(STAGES), list(state["stages"]))
+
+    def test_delivery_requires_render_and_explicit_visual_review(self):
+        state = new_state(inventory([occurrence("item-1")]), "en")
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "translated.pptx"
+            output.touch()
+            with self.assertRaisesRegex(Exception, "render stage"):
+                complete_delivery(state, output, visual_review_passed=True)
+            mark_stage(state, "render", "office-verification.json")
+            with self.assertRaisesRegex(Exception, "visual review"):
+                complete_delivery(state, output, visual_review_passed=False)
+            complete_delivery(state, output, visual_review_passed=True)
+
+        self.assertTrue(state["stages"]["deliver"]["completed"])
 
     def test_fast_pipeline_applies_all_translations_through_single_entry(self):
         slide = """<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"

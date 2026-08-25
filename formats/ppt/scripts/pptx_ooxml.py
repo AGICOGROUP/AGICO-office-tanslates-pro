@@ -178,9 +178,15 @@ def apply_items_to_slide(xml_bytes: bytes, items: list[dict]) -> bytes:
         shape_xml = shape_match.group(0)
         paragraphs = list(PARAGRAPH_RE.finditer(shape_xml))
         for item in sorted(
-            shape_items, key=lambda value: int(value["paragraph_index"]), reverse=True
+            shape_items,
+            key=lambda value: int(
+                value.get("package_paragraph_index", value["paragraph_index"])
+            ),
+            reverse=True,
         ):
-            paragraph_index = int(item["paragraph_index"])
+            paragraph_index = int(
+                item.get("package_paragraph_index", item["paragraph_index"])
+            )
             if paragraph_index < 1 or paragraph_index > len(paragraphs):
                 raise OoxmlError(
                     f"{item['id']}: paragraph {paragraph_index} not found"

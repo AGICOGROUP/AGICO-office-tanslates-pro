@@ -101,8 +101,16 @@ def validate_manifest(path: str | Path, require_translations: bool = False) -> d
             raise ManifestError(f"{label}.translation: expected a string")
         non_empty_string(unit["role"], f"{label}.role")
         non_empty_string(unit["context_signature"], f"{label}.context_signature")
-        string_list(unit["protected_tokens"], f"{label}.protected_tokens")
+        protected_tokens = string_list(
+            unit["protected_tokens"], f"{label}.protected_tokens"
+        )
         if unit["translation"].strip():
+            if require_translations:
+                for token in protected_tokens:
+                    if token not in unit["translation"]:
+                        raise ManifestError(
+                            f"{label}: protected token missing from translation: {token}"
+                        )
             translated += 1
         elif require_translations:
             raise ManifestError(f"{label}: empty translation: {unit_id}")
@@ -140,16 +148,43 @@ def validate_manifest(path: str | Path, require_translations: bool = False) -> d
             raise ManifestError(f"{label}: unknown translation unit: {unit_id}")
         for field in ("slide_index", "shape_id", "paragraph_index"):
             positive_int(occurrence[field], f"{label}.{field}")
+        if occurrence["kind"] == "ppt_table_cell":
+            for field in ("row", "column", "package_paragraph_index"):
+                if field not in occurrence:
+                    raise ManifestError(f"{label}: missing field: {field}")
+                positive_int(occurrence[field], f"{label}.{field}")
         tokens = string_list(occurrence["protected_tokens"], f"{label}.protected_tokens")
         unit = units[unit_id]
         if occurrence["source_text"] != unit["source_text"] or tokens != unit["protected_tokens"]:
             raise ManifestError(f"{label}: occurrence does not match translation unit {unit_id}")
+
+    seen_image_hashes: set[str] = set()
+    for index, group in enumerate(data["image_groups"], start=1):
+        label = f"image_groups[{index}]"
+        if not isinstance(group, dict):
+            raise ManifestError(f"{label}: expected an object")
+        digest = non_empty_string(group.get("sha256"), f"{label}.sha256")
+        if len(digest) != 64 or any(character not in "0123456789abcdef" for character in digest.lower()):
+            raise ManifestError(f"{label}.sha256: expected 64 hexadecimal digits")
+        if digest in seen_image_hashes:
+            raise ManifestError(f"{label}: duplicate image sha256: {digest}")
+        seen_image_hashes.add(digest)
+        status = non_empty_string(
+            group.get("screening_status"), f"{label}.screening_status"
+        )
+        if status not in {"pending", "retain", "localize", "manual_review"}:
+            raise ManifestError(f"{label}.screening_status: unsupported status: {status}")
+        if require_translations and status == "pending":
+            raise ManifestError(f"{label}: image screening is still pending")
+        if status in {"retain", "manual_review"}:
+            non_empty_string(group.get("reason_code"), f"{label}.reason_code")
 
     return {
         "source_file": data["source_file"],
         "format": "powerpoint",
         "occurrences": len(data["occurrences"]),
         "translation_units": len(units),
+        "image_groups": len(data["image_groups"]),
         "translated": translated,
         "untranslated": len(units) - translated,
     }

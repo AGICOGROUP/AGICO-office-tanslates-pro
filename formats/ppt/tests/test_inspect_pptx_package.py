@@ -37,6 +37,19 @@ SLIDE_RELS = """<?xml version="1.0" encoding="UTF-8"?>
 </Relationships>"""
 
 
+TABLE_SLIDE = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+       xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+  <p:cSld><p:spTree><p:graphicFrame>
+    <p:nvGraphicFramePr><p:cNvPr id="7" name="Table 1"/></p:nvGraphicFramePr>
+    <a:graphic><a:graphicData><a:tbl>
+      <a:tr><a:tc><a:txBody><a:p><a:r><a:t>Cell A</a:t></a:r></a:p></a:txBody></a:tc>
+            <a:tc><a:txBody><a:p><a:r><a:t>Cell B</a:t></a:r></a:p></a:txBody></a:tc></a:tr>
+    </a:tbl></a:graphicData></a:graphic>
+  </p:graphicFrame></p:spTree></p:cSld>
+</p:sld>"""
+
+
 class PowerPointPackageInspectorTests(unittest.TestCase):
     def make_deck(self, directory: str, texts=("重复术语", "重复术语")) -> Path:
         path = Path(directory) / "sample.pptx"
@@ -75,6 +88,20 @@ class PowerPointPackageInspectorTests(unittest.TestCase):
 
         self.assertEqual("complex", report["risk_plan"]["route"])
         self.assertIn("chart", report["risk_plan"]["complex_reasons"])
+
+    def test_table_occurrences_keep_com_cell_and_ooxml_paragraph_locations(self):
+        with tempfile.TemporaryDirectory() as directory:
+            deck = Path(directory) / "table.pptx"
+            with ZipFile(deck, "w", ZIP_DEFLATED) as archive:
+                archive.writestr("[Content_Types].xml", "<Types/>")
+                archive.writestr("ppt/slides/slide1.xml", TABLE_SLIDE)
+            report = inspect_package(deck)
+
+        first, second = report["occurrences"]
+        self.assertEqual((1, 1, 1), (first["row"], first["column"], first["paragraph_index"]))
+        self.assertEqual(1, first["package_paragraph_index"])
+        self.assertEqual((1, 2, 1), (second["row"], second["column"], second["paragraph_index"]))
+        self.assertEqual(2, second["package_paragraph_index"])
 
 
 if __name__ == "__main__":
