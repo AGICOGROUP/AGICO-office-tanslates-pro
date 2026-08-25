@@ -35,6 +35,8 @@ class RootSkillStructureTests(unittest.TestCase):
         ):
             self.assertIn(adapter, text)
         self.assertIn(f"references/{GLOSSARY_NAME}", text)
+        self.assertIn("Do not load the complete glossary by default", text)
+        self.assertIn("selected adapter's glossary resolver", text)
 
     def test_root_ui_metadata_exists(self):
         metadata = ROOT / "agents" / "openai.yaml"

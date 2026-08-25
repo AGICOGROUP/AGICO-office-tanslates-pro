@@ -11,10 +11,13 @@ class PowerPointOnlySkillContract(unittest.TestCase):
             "SKILL.md",
             "agents/openai.yaml",
             "references/powerpoint-workflow.md",
+            "references/pipeline-cli.md",
             "references/typography-and-fit.md",
             "references/image-text-localization.md",
             "references/manifest-schema.md",
             "scripts/ppt_com.ps1",
+            "scripts/ppt_pipeline.py",
+            "scripts/inspect_pptx_package.py",
             "scripts/pptx_ooxml.py",
             "scripts/make_text_patch.py",
             "scripts/validate_manifest.py",
@@ -31,6 +34,14 @@ class PowerPointOnlySkillContract(unittest.TestCase):
         self.assertIn(".ppt", skill)
         self.assertIn(".pptx", skill)
 
+    def test_single_pipeline_replaces_command_composition(self):
+        skill = (ROOT / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("scripts/ppt_pipeline.py", skill)
+        self.assertIn("Microsoft PowerPoint", skill)
+        self.assertNotIn("without deduplicating", skill)
+        self.assertNotIn("Reopen and render every slide", skill)
+        self.assertNotIn("use `scripts/ppt_com.ps1`", skill.lower())
+
     def test_deliverable_has_no_other_format_or_router_content(self):
         suffixes = {".md", ".yaml", ".json", ".py", ".ps1"}
         text = "\n".join(
@@ -41,7 +52,6 @@ class PowerPointOnlySkillContract(unittest.TestCase):
             and path.suffix.lower() in suffixes
         ).lower()
         forbidden = [
-            ".pdf",
             ".doc",
             ".docx",
             ".xls",

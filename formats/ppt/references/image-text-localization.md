@@ -1,24 +1,24 @@
 # PowerPoint image-text localization
 
-Extract each original embedded image at native resolution. Never use a slide screenshot, thumbnail, earlier translated presentation, or generated redraw as the image source.
+## Screen unique media only
 
-## Method order
+Use `inventory.json.image_groups`. Review each SHA-256 group once and apply the decision to all
+recorded slide/shape occurrences. Skip the image workflow entirely when no media groups exist.
 
-1. Edit native PowerPoint text when it exists.
-2. On a verified uniform, semantic-free background, remove only the source glyph region with `scripts/make_text_patch.py` and add a transparent native text box.
-3. When text touches linework, arrows, borders, gradients, texture, or equipment, use a lossless local repair patch that restores every non-text pixel, then add the native text box.
-4. If reading or repair cannot be verified, preserve the region and record manual review.
+- `retain`: logo, photograph, no source-language text, or text that must remain unchanged.
+- `localize`: clear source-language labels that the user expects translated.
+- `manual_review`: uncertain reading or unsafe repair area.
 
-The cleanup mask follows source glyphs; the English text frame may be wider and remains transparent. Never enlarge an opaque patch to fit a longer translation.
+Do not export and review identical image occurrences separately.
 
-## Engineering protection
+## Localization method
 
-- Preserve every number, unit, tag, standard, arrow, leader line, process line, symbol, equipment component, and flow direction.
-- Never redraw the complete diagram or use broad generative inpainting.
-- Preserve original crop, aspect ratio, anchors, rotation, color, and z-order.
-- Require zero changed pixels outside approved text masks.
-- Verify connected-line continuity and compare dense diagrams at 3x using side-by-side and alpha-overlay review.
+1. Prefer native PowerPoint text when it exists.
+2. On a verified uniform semantic-free background, remove only the source glyph region with
+   `scripts/make_text_patch.py` and add a transparent editable text box.
+3. Where text touches linework, borders, gradients, texture, arrows, or equipment, use a lossless
+   local repair patch that restores every non-text pixel.
+4. Preserve unsafe regions and record manual review instead of guessing.
 
-## Editable result
-
-Keep translated image labels as native PowerPoint text boxes whenever possible. They must remain selectable, copyable, and editable. Use lossless raster output only for the local repaired background layer.
+Preserve crop, aspect ratio, anchors, z-order, numbers, units, tags, arrows, process lines, symbols,
+equipment, and flow direction. Require zero changed pixels outside approved source-text masks.

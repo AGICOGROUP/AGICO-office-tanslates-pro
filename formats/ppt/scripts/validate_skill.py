@@ -16,11 +16,14 @@ REQUIRED = (
     "SKILL.md",
     "agents/openai.yaml",
     "references/powerpoint-workflow.md",
+    "references/pipeline-cli.md",
     "references/typography-and-fit.md",
     "references/image-text-localization.md",
     "references/manifest-schema.md",
     "references/overlay-schema.md",
     "scripts/ppt_com.ps1",
+    "scripts/ppt_pipeline.py",
+    "scripts/inspect_pptx_package.py",
     "scripts/pptx_ooxml.py",
     "scripts/make_text_patch.py",
     "scripts/validate_manifest.py",
@@ -32,11 +35,24 @@ def validate(repo_root: str | Path | None = None) -> dict:
     if missing:
         errors.append("missing: " + ", ".join(missing))
 
+    resolved_repo_root = (
+        Path(repo_root).resolve()
+        if repo_root is not None
+        else ROOT.parents[1]
+    )
+    office_export = resolved_repo_root / "scripts" / "office_com_pdf.ps1"
+    if not office_export.is_file():
+        errors.append("missing: scripts/office_com_pdf.ps1")
+
     skill_path = ROOT / "SKILL.md"
     if skill_path.is_file():
         skill = skill_path.read_text(encoding="utf-8")
         if "name: translate-powerpoint-professionally" not in skill:
             errors.append("wrong skill name")
+        if "scripts/ppt_pipeline.py" not in skill:
+            errors.append("single pipeline entry is not documented")
+        if "without deduplicating" in skill:
+            errors.append("legacy no-deduplication rule remains")
 
     glossary = resolve_glossary(repo_root)
     if not glossary["exists"]:
