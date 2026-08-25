@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  buildRenderPlan,
   buildTranslationUnits,
+  classifyRisk,
   translationReuseKey,
 } from "../scripts/excel_pipeline.mjs";
 
@@ -79,4 +81,105 @@ test("reuse key preserves meaningful newlines and punctuation", () => {
     translationReuseKey(occurrence({ source: "设备名称：" })),
     translationReuseKey(occurrence({ source: "设备名称" })),
   );
+});
+
+
+test("macro and unsupported workbook features select strict mode", () => {
+  const risk = classifyRisk({
+    extension: ".xlsm",
+    features: {
+      has_vba: true,
+      chart_count: 1,
+      comment_count: 1,
+      unsupported_drawing_count: 1,
+    },
+  });
+  assert.equal(risk.mode, "strict");
+  assert.deepEqual(
+    risk.reasons,
+    ["macro", "chart", "comment", "unsupported-drawing"],
+  );
+});
+
+
+test("ordinary images do not force strict mode", () => {
+  const risk = classifyRisk({
+    extension: ".xlsx",
+    features: { unique_image_count: 3, image_occurrence_count: 8 },
+  });
+  assert.deepEqual(risk, { mode: "balanced", reasons: [] });
+});
+
+
+test("unsafe conversion repair warning and uncertain image force strict mode", () => {
+  const risk = classifyRisk({
+    extension: ".xlsx",
+    unsafe_legacy_conversion: true,
+    repair_warning: true,
+    image_uncertain: true,
+    features: {},
+  });
+  assert.deepEqual(risk.reasons, [
+    "unsafe-legacy-conversion",
+    "repair-warning",
+    "image-uncertain",
+  ]);
+});
+
+
+test("preflight renders each visible used sheet once", () => {
+  const sheets = [
+    { name: "A", visible: true, used: true },
+    { name: "B", visible: false, used: true },
+    { name: "C", visible: true, used: false },
+  ];
+  const plan = buildRenderPlan({
+    phase: "preflight",
+    outputMode: "monolingual",
+    sheets,
+    changedSheets: [],
+    risk: { mode: "balanced", reasons: [] },
+  });
+  assert.deepEqual(plan.sheets.map((sheet) => sheet.name), ["A"]);
+  assert.equal(plan.fullPrintPages, false);
+});
+
+
+test("monolingual final render contains only changed and risk sheets", () => {
+  const plan = buildRenderPlan({
+    phase: "final",
+    outputMode: "monolingual",
+    sheets: [
+      { name: "A", visible: true, used: true },
+      { name: "B", visible: true, used: true },
+      { name: "C", visible: true, used: true },
+    ],
+    changedSheets: ["B"],
+    riskSheets: ["C"],
+    risk: { mode: "balanced", reasons: [] },
+  });
+  assert.deepEqual(plan.sheets.map((sheet) => sheet.name), ["B", "C"]);
+  assert.equal(plan.fullPrintPages, false);
+});
+
+
+test("bilingual and strict final render use all visible sheets and print pages", () => {
+  const sheets = [
+    { name: "A", visible: true, used: true },
+    { name: "B", visible: true, used: true },
+    { name: "Hidden", visible: false, used: true },
+  ];
+  for (const request of [
+    { outputMode: "bilingual", risk: { mode: "balanced", reasons: [] } },
+    { outputMode: "monolingual", risk: { mode: "strict", reasons: ["chart"] } },
+  ]) {
+    const plan = buildRenderPlan({
+      phase: "final",
+      sheets,
+      changedSheets: ["A"],
+      ...request,
+    });
+    assert.deepEqual(plan.sheets.map((sheet) => sheet.name), ["A", "B"]);
+    assert.equal(plan.fullPrintPages, true);
+  }
 });
