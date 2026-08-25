@@ -22,6 +22,7 @@ class RootSkillStructureTests(unittest.TestCase):
         skill = ROOT / "SKILL.md"
         self.assertTrue(skill.is_file())
         text = skill.read_text(encoding="utf-8")
+        normalized = " ".join(text.split())
         self.assertIn("Use when", text)
         for extension in (".docx", ".xlsx", ".pptx", ".pdf", ".png", ".jpg", ".jpeg"):
             self.assertIn(extension, text)
@@ -34,7 +35,17 @@ class RootSkillStructureTests(unittest.TestCase):
             "formats/image/SKILL.md",
         ):
             self.assertIn(adapter, text)
-        self.assertIn(f"references/{GLOSSARY_NAME}", text)
+        self.assertIn("Routing ends immediately", normalized)
+        self.assertIn("Do not read or consider any other format adapter", normalized)
+        for downstream_rule in ("Hash and preserve", "glossary", "protected tokens", "render"):
+            self.assertNotIn(downstream_rule, text)
+
+    def test_selected_office_adapters_do_not_return_to_the_root_router(self):
+        for adapter in ("word", "excel"):
+            text = (ROOT / "formats" / adapter / "SKILL.md").read_text(encoding="utf-8")
+            with self.subTest(adapter=adapter):
+                self.assertIn("Top-level routing is complete", text)
+                self.assertIn("Do not run the root Office router again", text)
 
     def test_root_ui_metadata_exists(self):
         metadata = ROOT / "agents" / "openai.yaml"
@@ -60,7 +71,6 @@ class WordAdapterStructureTests(unittest.TestCase):
             "documents:documents",
             "does not depend on another Office translation skill",
             f"../../references/{GLOSSARY_NAME}",
-            "scripts/analyze_docx.py",
             "editable",
             "protected tokens",
             "Never overwrite",
@@ -77,10 +87,8 @@ class WordAdapterStructureTests(unittest.TestCase):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase.casefold(), text.casefold())
 
-        self.assertNotIn("Reject clipping, overlap, missing text, pagination drift", text)
-
-    def test_word_fast_path_keeps_mandatory_quality_gates(self):
-        text = (ROOT / "formats" / "word" / "SKILL.md").read_text(encoding="utf-8")
+    def test_word_fast_path_uses_docx_core_gates_without_mandatory_pdf(self):
+        text = (ROOT / "formats" / "word" / "SKILL.md").read_text(encoding="utf-8").casefold()
         for phrase in (
             "output opens normally",
             "translation coverage",
@@ -88,6 +96,9 @@ class WordAdapterStructureTests(unittest.TestCase):
             "protected-token equality",
             "table integrity",
             "unexpected source-language residue",
+            "ordinary fast-path documents do not require pdf export",
+            "deliver the validated docx directly",
+            "pdf export failure must not block",
         ):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, text)

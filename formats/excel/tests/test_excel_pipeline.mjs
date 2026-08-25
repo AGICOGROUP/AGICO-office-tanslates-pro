@@ -7,10 +7,9 @@ import test from "node:test";
 import { FileBlob, SpreadsheetFile, Workbook } from "@oai/artifact-tool";
 
 import {
-  buildRenderPlan,
   buildImageReviewPlan,
   buildTranslationUnits,
-  buildPrintLayoutPlan,
+  JOB_STAGES,
   classifyRisk,
   classifyBilingualGrid,
   completeStage,
@@ -26,7 +25,7 @@ import {
   nextStage,
   prepareManifest,
   reconcileJobState,
-  renderOutput,
+  officeValidateOutput,
   renderOccurrenceTranslation,
   saveJobState,
   translationReuseKey,
@@ -216,14 +215,6 @@ test("horizontal merges do not block blank-row compression", () => {
   ]), new Set([55, 56]));
 });
 
-test("wide translated tables get a one-page-wide landscape print hint", () => {
-  assert.deepEqual(buildPrintLayoutPlan({ range: "A1:N99", translated: true }), {
-    orientation: "landscape", fitToPagesWide: 1, fitToPagesTall: 0,
-  });
-  assert.equal(buildPrintLayoutPlan({ range: "A1:F20", translated: true }), null);
-});
-
-
 test("ordinary images use the fast path", () => {
   const risk = classifyRisk({
     extension: ".xlsx",
@@ -249,79 +240,9 @@ test("unsafe conversion repair warning and uncertain image force strict mode", (
 });
 
 
-test("preflight never renders ordinary workbooks", () => {
-  const sheets = [
-    { name: "A", visible: true, used: true },
-    { name: "B", visible: false, used: true },
-    { name: "C", visible: true, used: false },
-  ];
-  const plan = buildRenderPlan({
-    phase: "preflight",
-    outputMode: "monolingual",
-    sheets,
-    changedSheets: [],
-    risk: { mode: "balanced", reasons: [] },
-  });
-  assert.deepEqual(plan.sheets, []);
-  assert.equal(plan.fullPrintPages, false);
-  assert.equal(plan.skipped, true);
-});
-
-
-test("monolingual final render contains only changed and risk sheets", () => {
-  const plan = buildRenderPlan({
-    phase: "final",
-    outputMode: "monolingual",
-    sheets: [
-      { name: "A", visible: true, used: true },
-      { name: "B", visible: true, used: true },
-      { name: "C", visible: true, used: true },
-    ],
-    changedSheets: ["B"],
-    riskSheets: ["C"],
-    risk: { mode: "balanced", reasons: [] },
-  });
-  assert.deepEqual(plan.sheets.map((sheet) => sheet.name), ["B", "C"]);
-  assert.equal(plan.fullPrintPages, false);
-});
-
-
-test("strict final render uses all visible sheets and print pages", () => {
-  const sheets = [
-    { name: "A", visible: true, used: true },
-    { name: "B", visible: true, used: true },
-    { name: "Hidden", visible: false, used: true },
-  ];
-  for (const request of [
-    { outputMode: "monolingual", risk: { mode: "strict", reasons: ["macro"] } },
-  ]) {
-    const plan = buildRenderPlan({
-      phase: "final",
-      sheets,
-      changedSheets: ["A"],
-      ...request,
-    });
-    assert.deepEqual(plan.sheets.map((sheet) => sheet.name), ["A", "B"]);
-    assert.equal(plan.fullPrintPages, true);
-  }
-});
-
-
-test("complex final render is limited to changed and risk sheets", () => {
-  const plan = buildRenderPlan({
-    phase: "final",
-    outputMode: "monolingual",
-    sheets: [
-      { name: "A", visible: true, used: true },
-      { name: "B", visible: true, used: true },
-      { name: "C", visible: true, used: true },
-    ],
-    changedSheets: ["A"],
-    riskSheets: ["B"],
-    risk: { mode: "complex", reasons: ["chart"] },
-  });
-  assert.deepEqual(plan.sheets.map((sheet) => sheet.name), ["A", "B"]);
-  assert.equal(plan.fullPrintPages, false);
+test("final stage validates in Excel without a PDF render stage", () => {
+  assert.ok(JOB_STAGES.includes("office-validate"));
+  assert.ok(!JOB_STAGES.includes("render"));
 });
 
 
@@ -415,7 +336,6 @@ test("inspect prepare and apply translate text while preserving numbers and form
       "job-dir": jobDir,
       "target-language": "en",
       "output-mode": "monolingual",
-      "skip-render": "true",
     });
     assert.equal(inspected.next_stage, "prepare");
 
@@ -461,11 +381,18 @@ test("inspect prepare and apply translate text while preserving numbers and form
     assert.equal(verification.passed, true, JSON.stringify(verification));
     const verifiedState = JSON.parse(await fs.readFile(path.join(jobDir, "job-state.json"), "utf8"));
     assert.equal(verifiedState.completedStages.at(-1), "verify");
-    const rendered = await renderOutput({
-      "job-dir": jobDir, output, "skip-render": "true",
-    });
-    assert.deepEqual(rendered.sheets.map((item) => item.name), ["S1"]);
-    assert.equal(rendered.next_stage, "deliver");
+    const officeValidated = await officeValidateOutput(
+      { "job-dir": jobDir, output },
+      () => ({
+        passed: true,
+        application: "Microsoft Excel",
+        worksheets: ["S1"],
+        formula_error_count: 0,
+        value_error_count: 0,
+      }),
+    );
+    assert.equal(officeValidated.passed, true);
+    assert.equal(officeValidated.next_stage, "deliver");
   } finally {
     await fs.rm(directory, { recursive: true, force: true });
   }
@@ -508,7 +435,7 @@ test("verification reports changed formulas numbers merges and missing translati
     await (await SpreadsheetFile.exportXlsx(workbook)).save(source);
     await inspectWorkbook({
       input: source, "job-dir": jobDir, "target-language": "en",
-      "output-mode": "monolingual", "skip-render": "true",
+      "output-mode": "monolingual",
     });
     await prepareManifest({ "job-dir": jobDir });
     const manifestPath = path.join(jobDir, "translation-manifest.json");
@@ -583,7 +510,6 @@ test("bilingual apply creates paired blue rows and keeps data only on source row
       "job-dir": jobDir,
       "target-language": "en",
       "output-mode": "bilingual",
-      "skip-render": "true",
     });
     await prepareManifest({ "job-dir": jobDir });
     const manifestPath = path.join(jobDir, "translation-manifest.json");

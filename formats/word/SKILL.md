@@ -7,11 +7,13 @@ description: Use when translating Word .doc or .docx files quickly and professio
 
 Produce an accurate, editable translation with no major visual change. Exact pagination, run geometry, and pixel-level fidelity are not default requirements.
 
+Top-level routing is complete when this adapter starts. Do not run the root Office router again, read another format adapter, or apply a cross-format gate. This adapter owns its final validation and delivery.
+
 **REQUIRED SUPPORTING SKILL:** Use `documents:documents` for DOCX inspection and editing, but do not use its LibreOffice renderer. This adapter contains the complete professional translation, terminology, structure-preservation, and quality-control contract; it does not depend on another Office translation skill.
 
 For Word files, this adapter's risk-based render scope and layout tolerance supersede broader root-skill wording about complete rendering or exact structure preservation.
 
-Use native DOCX/OOXML tooling for extraction and writing. `documents:documents` may assist with DOCX structure, but its LibreOffice renderer must not be used. On Windows, Microsoft Word is the authoritative engine for `.doc` conversion, reopen checks, pagination, and PDF export.
+Use native DOCX/OOXML tooling for extraction, writing, and core validation. `documents:documents` may assist with DOCX structure, but its LibreOffice renderer must not be used. On Windows, Microsoft Word is the authoritative engine for `.doc` conversion and optional visual QA.
 
 ## Start
 
@@ -42,14 +44,16 @@ Run a streaming pipeline:
 3. Protect numbers, units, formulas, model codes, standards, URLs, identifiers, field codes, bookmarks, whitespace, and line breaks. Preserve protected tokens exactly.
 4. **One write pass:** write translated strings back to their owning paragraph, cell, header/footer, or native text object. Keep hyperlinks, fields, lists, tables, styles, relationships, and media functional. Preserve the dominant local formatting; do not reconstruct harmless run-level fragmentation.
 5. Reopen the output once and run the mandatory quality gates below.
-6. Export the final DOCX to PDF with Microsoft Word using `powershell -NoProfile -ExecutionPolicy Bypass -File ../../scripts/office_com_pdf.ps1 ...`. Rasterize that PDF with the available PDF renderer. Render all pages when the document has at most five pages; otherwise render the first page, last page, table-dense pages, and pages containing repaired or high-risk content. Render more only when a sampled page fails.
+6. Ordinary fast-path documents do not require PDF export. Deliver the validated DOCX directly after the mandatory quality gates pass.
 
 Allow natural line wrapping, small row-height changes, and reasonable pagination drift. Pagination change alone is not a defect. Repair only missing text, clipping, overlap, broken tables, displaced critical objects, or clearly degraded hierarchy.
 
 ## Complex and strict additions
 
+- Run PDF-based visual QA only for the complex path, strict path, or when the user explicitly requests visual or PDF-based QA. Export with Microsoft Word using `powershell -NoProfile -ExecutionPolicy Bypass -File ../../scripts/office_com_pdf.ps1 ...`, then rasterize the PDF.
 - **Complex path:** render a source baseline for affected pages, process the detected special objects, and compare their structure after writing. Render every page only on the complex or strict path.
 - **Strict path:** render every source and output page; compare pagination, sections, object positions, table geometry, relationships, and media. Apply bounded layout repairs until the requested fidelity is met.
+- PDF export failure must not block saving or returning a DOCX that has passed the mandatory core gates. Report the missing visual QA explicitly. If strict visual fidelity was required, also report that the strict visual gate remains incomplete.
 - Native text in shapes/charts remains editable. Review raster images only when triage indicates relevant text or the user requests image-text translation. Do not OCR images without detected text; skip logos, decorative images, photos, and diagrams with no relevant language.
 - If raster text cannot be translated safely, preserve the image and report its location instead of blocking unrelated native-text translation, unless the user required complete image localization.
 
@@ -64,7 +68,6 @@ Every path must verify:
 - translated native content remains editable and selectable;
 - paragraph/list order, section count, and table integrity are intact;
 - no unexpected source-language residue remains in translated native text;
-- the required final render sample has no missing text, clipping, overlap, broken tables, or obvious hierarchy damage.
 
 Do not fail the fast path for reasonable pagination drift, harmless font fallback, minor spacing changes, or non-text image differences.
 
@@ -72,4 +75,4 @@ Never install, locate, configure, or invoke LibreOffice/soffice automatically. U
 
 ## Delivery
 
-Deliver one translated `.docx` and a concise summary stating the selected path, translation coverage, protected-token result, table result, render scope, and any intentionally preserved image text.
+Deliver one translated `.docx` and a concise summary stating the selected path, translation coverage, protected-token result, table result, any optional render scope, and any intentionally preserved image text. Do not return to the root router after delivery.

@@ -10,7 +10,7 @@ node scripts/excel_pipeline.mjs inspect --input <source.xlsx> --job-dir <job-dir
 node scripts/excel_pipeline.mjs prepare --job-dir <job-dir>
 node scripts/excel_pipeline.mjs apply --input <source.xlsx> --job-dir <job-dir> --output <translated.xlsx>
 node scripts/excel_pipeline.mjs verify --source <source.xlsx> --job-dir <job-dir> --output <translated.xlsx>
-node scripts/excel_pipeline.mjs render --job-dir <job-dir> --output <translated.xlsx>
+node scripts/excel_pipeline.mjs office-validate --job-dir <job-dir> --output <translated.xlsx>
 ```
 
 `inspect` never renders. `prepare` exits with code `3` intentionally. This means
@@ -25,7 +25,7 @@ as `retain`; translate only records still marked `pending`.
 `job-state.json` records source SHA-256, target language, output mode, completed stages, artifact
 hashes, output paths, counts, and strict reasons. Stages are:
 
-`preflight → inspect → prepare → translate → validate → apply → verify → render → deliver`
+`preflight → inspect → prepare → translate → validate → apply → verify → office-validate → deliver`
 
 Resume at the first incomplete stage. A changed source hash, target language, or output mode starts
 a fresh job. If an earlier artifact changes, invalidate that stage and every downstream stage.
@@ -38,8 +38,8 @@ Never mark a stage complete until its artifact is saved and hashed.
 - `relevant-glossary.json`: only glossary rows matched to extracted source text.
 - `fixed-translations.en.json`: reviewed exact English labels and units; never fuzzy-matched.
 - `verification.json`: deterministic pass/fail result and stable reason codes.
-- `render-plan.json`: selected sheets, fast/complex/strict mode, local print-layout hints, Office result, and reasons.
-- `final-renders/`: Microsoft Excel PDFs for required sheets; no preflight render directory.
+- `office-validation.json`: Microsoft Excel open/recalculation result, worksheet names, used ranges,
+  and formula/value error counts.
 
 ## Strict escalation
 

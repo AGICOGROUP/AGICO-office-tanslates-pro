@@ -5,14 +5,14 @@ description: Use when translating uploaded Word (.doc/.docx), Excel (.xls/.xlsx/
 
 # Office Translate Pro
 
-Route each uploaded document to exactly one format adapter. Preserve the source and produce a separate translated artifact.
+Route each uploaded file to exactly one format adapter.
 
 ## Route the uploaded file
 
 1. Run `python scripts/route_office_file.py <uploaded-file>` from this Skill directory.
 2. Trust the detected container signature before the filename extension.
 3. Stop on corrupt, encrypted, ambiguous, unsupported, or extension-mismatched files.
-4. Read and follow only the adapter returned in `adapter`:
+4. Read and follow only the adapter returned in `adapter`.
 
 | Detected format | Adapter |
 |---|---|
@@ -22,17 +22,11 @@ Route each uploaded document to exactly one format adapter. Preserve the source 
 | PDF `.pdf` | `formats/pdf/SKILL.md` |
 | Static image `.png` / `.jpg` / `.jpeg` | `formats/image/SKILL.md` |
 
-Do not route by user wording or extension alone. The PDF adapter performs a second signature and content classification before selecting one of its three independent PDF skills. The image adapter wraps a verified static PNG or JPEG as a one-page scan PDF, reuses the scan-PDF workflow, and returns the same image format and dimensions.
+Routing ends immediately after one adapter is selected. Do not read or consider any other format
+adapter, do not return to this root router, and do not apply a cross-format workflow. The selected
+adapter owns all subsequent processing and delivery rules.
 
-## Shared translation contract
-
-- Hash and preserve the uploaded source. Work on a copy and never overwrite the original.
-- Read `references/水泥专业名词中英对照.md` before translating. Apply exact full-phrase matches first, then the longest valid listed term, then professional contextual translation.
-- Preserve numbers, formulas, units, model codes, standards, URLs, identifiers, line breaks, and other protected tokens.
-- Keep native text editable and selectable. Review text in shapes, charts, headers, footers, comments, notes, and embedded images.
-- Preserve formatting, layout, object geometry, relationships, media, and format-specific structure unless a documented local repair is necessary.
-- On Windows, use installed Microsoft Word, Excel, or PowerPoint as the authoritative Office engine for legacy conversion, reopen checks, pagination, and PDF export. Run `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/office_com_pdf.ps1 ...` for final visual rendering.
-- Do not install, discover, configure, or invoke LibreOffice/soffice by default. It is allowed only when Microsoft Office is unavailable and the user explicitly authorizes it for that task.
-- Reopen and render the output with the selected adapter's required Microsoft Office application. Reject missing text, unexpected Chinese, clipping, overlap, corruption, or unapproved structural change.
-
-Deliver only the translated file and a concise verification summary after every adapter gate passes.
+Do not route by user wording or extension alone. The PDF adapter may perform its own PDF-content
+subroute after the Office format is already fixed as PDF. The image adapter may use its documented
+one-page scan bridge after the format is already fixed as a static image. Neither case reopens the
+other Office-format doors.

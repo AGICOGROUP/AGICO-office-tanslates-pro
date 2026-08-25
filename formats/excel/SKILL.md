@@ -8,6 +8,10 @@ description: Use when translating monolingual or bilingual Excel workbooks (.xls
 Translate with Codex/GPT through one resumable pipeline. Mutate only human-language text, keep
 formulas and native text editable, preserve the source hash, and always write a separate output.
 
+Top-level routing is complete when this adapter starts. Do not run the root Office router again,
+read another format adapter, or consider Word, PowerPoint, PDF, or image workflows. The container
+route below is Excel-internal validation only.
+
 **REQUIRED SUB-SKILL:** Use `spreadsheets:Spreadsheets` and its artifact-tool contract.
 
 ## Required inputs
@@ -38,7 +42,7 @@ Run `python scripts/route_excel_file.py <source>` once.
 
 Use `scripts/excel_pipeline.mjs` in this order:
 
-1. `inspect` performs one non-rendering scan and creates the inventory, OOXML risk/image report,
+1. `inspect` performs one scan and creates the inventory, OOXML risk/image report,
    and `job-state.json`.
 2. `prepare` creates schema-v2 translation units plus a source-matched glossary subset and
    safely pre-fills verified English table labels, units, parameter labels, and identifier/model
@@ -52,8 +56,8 @@ Use `scripts/excel_pipeline.mjs` in this order:
    heights, and compresses only runs of at least three completely blank, unmerged placeholder rows.
 5. `verify` reopens source and output and checks formulas, typed values, merges, sheet order,
    occurrence coverage, protected tokens, bilingual pairs, and formula errors.
-6. `render` opens the output in Microsoft Excel, recalculates it, and exports required sheets to
-   PDF once. Do not use LibreOffice or artifact-tool rendering on the default path.
+6. `office-validate` opens the output read-only in Microsoft Excel, performs a full recalculation,
+   confirms every worksheet and used range is accessible, and rejects formula or value error cells.
 
 Resume from the first incomplete stage in `job-state.json`; do not recreate task-specific workbook
 scripts. Full commands and exit codes are in `references/pipeline-cli.md`.
@@ -64,8 +68,8 @@ scripts. Full commands and exit codes are in `references/pipeline-cli.md`.
   formulas, and source-file SHA-256.
 - Group identical images by SHA-256 and review each unique byte sequence once. Deep-review only
   localized or uncertain groups.
-- Fast jobs render changed used sheets only. Complex jobs add affected chart, comment, drawing, or
-  image sheets. Strict jobs render all visible used sheets.
+- Fast jobs use deterministic checks plus one Excel open/recalculation pass. Complex and strict jobs
+  add only their documented object or macro checks; they do not export PDF by default.
 - Bilingual output defaults to the paired blue translation-row layout. The fast path is limited to
   verified grid-safe workbooks; complex objects enter strict processing before mutation.
 - Charts, comments, external links, unsupported drawings, and uncertain images select the complex
@@ -73,10 +77,8 @@ scripts. Full commands and exit codes are in `references/pipeline-cli.md`.
   select the strict path.
 - Ignore tiny empty legacy shape fragments used as borders. Escalate only drawings with text,
   media, charts, controls, or meaningful geometry.
-- Before the single final PDF export, wide translated tables use a local landscape/one-page-wide
-  print hint. Do not force narrow sheets or the whole workbook into that layout.
 - Fixed English translations are exact-match entries in `references/fixed-translations.en.json`.
   Add only reviewed, context-stable labels; leave ambiguous equipment terminology pending.
 
-Deliver only after verification passes, required Excel PDFs exist, the output reopens without repair,
-the source remains untouched, and no required translation is missing.
+Deliver only after deterministic verification and `office-validate` pass, the output reopens without
+repair, the source remains untouched, and no required translation is missing.
