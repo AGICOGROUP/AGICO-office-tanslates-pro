@@ -25,7 +25,6 @@ REQUIRED = (
     "scripts/ppt_pipeline.py",
     "scripts/inspect_pptx_package.py",
     "scripts/pptx_ooxml.py",
-    "scripts/make_text_patch.py",
     "scripts/validate_manifest.py",
     "scripts/resolve_repo_glossary.py",
 )

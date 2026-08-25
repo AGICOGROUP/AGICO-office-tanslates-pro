@@ -35,9 +35,9 @@ match exactly.
 occurrences. `text_screening` records the one-pass OCR plus visual result and every detected label's
 final status. Before apply, change `screening_status` from `pending` to `retain`, `localize`, or
 `manual_review`; retained/manual groups require `reason_code`. A localized PowerPoint image uses
-`bilingual_below` or `text_region_replace`, sets `preserve_source_image: true`, and has non-empty
-`overlay_ids` that reference top-level `overlays`. `text_region_replace` additionally requires a
-lossless `image_patch`, equal source/target regions, and a passing zero-change outside-mask check.
+only `bilingual_below`, sets `preserve_source_image: true`, and has non-empty `overlay_ids` that
+reference top-level `overlays`. Every detected source label must end as `localized`,
+`target-language-already-present`, or `manual_review`; incomplete coverage blocks apply.
 An image already fully containing the requested target language uses `retain` with
 `reason_code: target-language-already-present`. `risk_plan` stores route, risk slides, complex
 reasons, and strict reasons.

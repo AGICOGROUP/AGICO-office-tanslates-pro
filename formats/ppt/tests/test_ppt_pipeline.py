@@ -249,7 +249,7 @@ class ManifestPreparationTests(unittest.TestCase):
             with self.assertRaisesRegex(ManifestError, "source-labels-covered-by-native-text"):
                 validate_manifest(path, require_translations=True)
 
-    def test_text_region_replace_requires_masked_patch_and_zero_outside_change(self):
+    def test_text_region_replace_is_rejected_for_powerpoint_images(self):
         manifest = build_translation_manifest(inventory([occurrence("item-1")]), "fr")
         manifest["translation_units"][0]["translation"] = "Refroidisseur à grille"
         manifest["overlays"] = [
@@ -293,18 +293,8 @@ class ManifestPreparationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "manifest.json"
             path.write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
-            with self.assertRaisesRegex(ManifestError, "outside_mask_pixel_check"):
+            with self.assertRaisesRegex(ManifestError, "expected bilingual_below"):
                 validate_manifest(path, require_translations=True)
-
-            manifest["image_groups"][0]["outside_mask_pixel_check"] = {
-                "passed": True,
-                "changed_pixels": 0,
-            }
-            path.write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
-            summary = validate_manifest(path, require_translations=True)
-
-        self.assertEqual(1, summary["localized_images"])
-        self.assertEqual(1, summary["covered_image_labels"])
 
     def test_manifest_rejects_translation_that_drops_a_protected_token(self):
         manifest = build_translation_manifest(

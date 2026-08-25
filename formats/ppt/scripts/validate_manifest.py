@@ -261,9 +261,9 @@ def validate_manifest(path: str | Path, require_translations: bool = False) -> d
             non_empty_string(group.get("reason_code"), f"{label}.reason_code")
         if status == "localize":
             localization_mode = group.get("localization_mode")
-            if localization_mode not in {"bilingual_below", "text_region_replace"}:
+            if localization_mode != "bilingual_below":
                 raise ManifestError(
-                    f"{label}.localization_mode: expected bilingual_below or text_region_replace"
+                    f"{label}.localization_mode: expected bilingual_below"
                 )
             if group.get("preserve_source_image") is not True:
                 raise ManifestError(
@@ -279,31 +279,12 @@ def validate_manifest(path: str | Path, require_translations: bool = False) -> d
                 raise ManifestError(
                     f"{label}.overlay_ids: unknown overlays: {', '.join(unknown_overlays)}"
                 )
-            if localization_mode == "text_region_replace":
-                pixel_check = group.get("outside_mask_pixel_check")
-                if (
-                    not isinstance(pixel_check, dict)
-                    or pixel_check.get("passed") is not True
-                    or pixel_check.get("changed_pixels") != 0
-                ):
+            for overlay_id in referenced_overlays:
+                overlay = overlays_by_id[overlay_id]
+                if overlay.get("localization_mode") not in {None, "bilingual_below"}:
                     raise ManifestError(
-                        f"{label}.outside_mask_pixel_check: expected passed=true and changed_pixels=0"
+                        f"overlays[{overlay_id}].localization_mode: expected bilingual_below"
                     )
-                for overlay_id in referenced_overlays:
-                    overlay = overlays_by_id[overlay_id]
-                    if overlay.get("localization_mode") != "text_region_replace":
-                        raise ManifestError(
-                            f"overlays[{overlay_id}].localization_mode: expected text_region_replace"
-                        )
-                    background = overlay.get("background")
-                    if not isinstance(background, dict) or background.get("mode") != "image_patch":
-                        raise ManifestError(
-                            f"overlays[{overlay_id}].background.mode: expected image_patch"
-                        )
-                    if overlay.get("source_region") != overlay.get("region"):
-                        raise ManifestError(
-                            f"overlays[{overlay_id}]: replacement region must equal source_region"
-                        )
             localized_images += 1
         elif (
             status == "retain"

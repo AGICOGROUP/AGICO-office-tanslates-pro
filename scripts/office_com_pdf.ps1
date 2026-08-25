@@ -7,6 +7,30 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public static class OfficeWindowControl {
+    [DllImport("user32.dll")]
+    public static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);
+}
+'@
+
+function Hide-PowerPointWindow {
+    param($PowerPointApplication)
+    try {
+        $handle = [IntPtr][int64]$PowerPointApplication.HWND
+        if ($handle -ne [IntPtr]::Zero) {
+            # 0 = SW_HIDE
+            [void][OfficeWindowControl]::ShowWindowAsync($handle, 0)
+        }
+    }
+    catch {
+        # WithWindow=false remains the primary control if HWND is unavailable.
+    }
+}
+
 $inputFull = [IO.Path]::GetFullPath($InputPath)
 $outputFull = [IO.Path]::GetFullPath($OutputPdf)
 if (-not (Test-Path -LiteralPath $inputFull -PathType Leaf)) { throw "Input not found: $inputFull" }
@@ -43,11 +67,16 @@ try {
     }
     else {
         $app = New-Object -ComObject PowerPoint.Application
+        # 1 = ppAlertsNone.
+        $app.DisplayAlerts = 1
+        Hide-PowerPointWindow $app
         $powerpointStarts = 1
         # ReadOnly=true, Untitled=false, WithWindow=false.
         $presentation = $app.Presentations.Open($inputFull, -1, 0, 0)
+        Hide-PowerPointWindow $app
         $presentationOpens = 1
         # 32 = ppSaveAsPDF.
+        Hide-PowerPointWindow $app
         $presentation.SaveAs($outputFull, 32)
 
         if (-not [string]::IsNullOrWhiteSpace($ThumbnailDirectory)) {

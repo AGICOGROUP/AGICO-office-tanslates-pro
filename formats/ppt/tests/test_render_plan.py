@@ -21,6 +21,14 @@ from ppt_pipeline import build_render_plan  # noqa: E402
 
 
 class RenderPlanTests(unittest.TestCase):
+    def test_powerpoint_pdf_export_hides_automation_window_and_alerts(self):
+        script = OFFICE_EXPORT.read_text(encoding="utf-8")
+
+        self.assertIn("ShowWindowAsync", script)
+        self.assertIn("$app.DisplayAlerts = 1", script)
+        self.assertGreaterEqual(script.count("Hide-PowerPointWindow $app"), 2)
+        self.assertIn("$presentation.SaveAs($outputFull, 32)", script)
+
     def test_fast_plan_renders_all_targets_low_and_only_risk_slides_high(self):
         inventory = {
             "slides": [{"index": 1}, {"index": 2}, {"index": 3}],

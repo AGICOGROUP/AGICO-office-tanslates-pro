@@ -37,7 +37,9 @@ save once. Never overwrite the source and never carry a prior translated deck fo
 Deterministic verification precedes visual work: source hash, ZIP integrity, slide count, stable
 occurrence IDs, exact expected translations, protected tokens, relationships, and media. Microsoft
 PowerPoint then opens the final file and exports one PDF in the same session used to create final
-thumbnails.
+thumbnails. Run that automation in a hidden background session: open presentations with no window,
+suppress alerts, and hide the application window again before PDF export. Keep the stable
+PowerPoint `SaveAs PDF` path; visual suppression must not replace or weaken official verification.
 
 Fast jobs render all final slides at low resolution and risk slides at high resolution. Complex
 jobs add all changed/risk slides at high resolution. Strict jobs render source and target fully.

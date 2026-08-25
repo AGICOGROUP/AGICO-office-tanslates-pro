@@ -19,7 +19,6 @@ class PowerPointOnlySkillContract(unittest.TestCase):
             "scripts/ppt_pipeline.py",
             "scripts/inspect_pptx_package.py",
             "scripts/pptx_ooxml.py",
-            "scripts/make_text_patch.py",
             "scripts/validate_manifest.py",
             "scripts/validate_skill.py",
             "scripts/resolve_repo_glossary.py",
@@ -36,13 +35,18 @@ class PowerPointOnlySkillContract(unittest.TestCase):
 
     def test_single_pipeline_replaces_command_composition(self):
         skill = (ROOT / "SKILL.md").read_text(encoding="utf-8")
+        workflow = (ROOT / "references" / "powerpoint-workflow.md").read_text(
+            encoding="utf-8"
+        )
         self.assertIn("scripts/ppt_pipeline.py", skill)
         self.assertIn("Microsoft PowerPoint", skill)
+        self.assertIn("hidden background session", workflow)
+        self.assertIn("suppress alerts", workflow)
         self.assertNotIn("without deduplicating", skill)
         self.assertNotIn("Reopen and render every slide", skill)
         self.assertNotIn("use `scripts/ppt_com.ps1`", skill.lower())
 
-    def test_embedded_image_translation_uses_two_precision_modes(self):
+    def test_embedded_image_translation_uses_bilingual_overlay_only(self):
         skill = (ROOT / "SKILL.md").read_text(encoding="utf-8").lower()
         image_rule = (ROOT / "references" / "image-text-localization.md").read_text(
             encoding="utf-8"
@@ -59,10 +63,10 @@ class PowerPointOnlySkillContract(unittest.TestCase):
 
         for text in (skill, image_rule, overlay_rule, manifest_rule, cli_rule):
             self.assertIn("bilingual_below", text)
-            self.assertIn("text_region_replace", text)
+            self.assertNotIn("text_region_replace", text)
         self.assertIn("preserve the original image", image_rule)
         self.assertIn("immediately below", image_rule)
-        self.assertIn("outside-mask", image_rule)
+        self.assertIn("every ocr-detected label", image_rule)
         self.assertIn("single-pass", image_rule)
         self.assertIn("target-language-already-present", image_rule)
         self.assertIn("skip", image_rule)

@@ -16,10 +16,10 @@ python scripts/ppt_pipeline.py deliver --job-dir <job-dir> --output <translated.
 `prepare` exits with code `3` intentionally after producing the manifest. Fill
 `translation_units[].translation`; do not edit or remove occurrences. Screen every unique image
 once and fill `text_screening.labels`; uncovered labels and `pending` groups block apply. Set each
-group to `retain`, `localize`, or `manual_review`. Prefer `bilingual_below`; use
-`text_region_replace` only without safe below-label space and only with a verified lossless patch
-whose outside-mask change count is zero. Both modes preserve the source image and reference their
-editable overlays. If the complete target language already exists, use `retain`
+group to `retain`, `localize`, or `manual_review`. Use only `bilingual_below`: place editable target
+text immediately below each source label or in the nearest safe blank area while preserving the
+source image and pixels. If a label has no safe placement, use `manual_review`; never erase, cover,
+patch, regenerate, or replace image text. If the complete target language already exists, use `retain`
 with `target-language-already-present`; the pipeline skips that image. Localized images
 automatically select the single PowerPoint COM apply route so native text and overlays save once.
 

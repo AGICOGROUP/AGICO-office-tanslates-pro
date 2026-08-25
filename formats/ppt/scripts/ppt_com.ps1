@@ -815,40 +815,12 @@ function Apply-OverlayManifest {
         }
 
         $backgroundMode = "solid"
-        $patchAssetPath = ""
-        $sourceX = $x
-        $sourceY = $y
-        $sourceWidthRatio = $widthRatio
-        $sourceHeightRatio = $heightRatio
         if ($null -ne $item.background -and
             -not [string]::IsNullOrWhiteSpace([string]$item.background.mode)) {
             $backgroundMode = [string]$item.background.mode
         }
-        if ($backgroundMode -notin @("solid", "image_patch", "transparent")) {
+        if ($backgroundMode -notin @("solid", "transparent")) {
             throw "Overlay '$itemId' has unsupported background mode '$backgroundMode'."
-        }
-        if ($backgroundMode -eq "image_patch") {
-            if ($null -eq $item.source_region) {
-                throw "Overlay '$itemId' image_patch requires source_region."
-            }
-            $sourceX = [double]$item.source_region.x
-            $sourceY = [double]$item.source_region.y
-            $sourceWidthRatio = [double]$item.source_region.w
-            $sourceHeightRatio = [double]$item.source_region.h
-            if ($sourceX -lt 0 -or $sourceY -lt 0 -or
-                $sourceWidthRatio -le 0 -or $sourceHeightRatio -le 0 -or
-                ($sourceX + $sourceWidthRatio) -gt 1 -or
-                ($sourceY + $sourceHeightRatio) -gt 1) {
-                throw "Overlay '$itemId' has a source_region outside its host."
-            }
-            $patchAssetPath = [string]$item.background.asset_path
-            if ([string]::IsNullOrWhiteSpace($patchAssetPath)) {
-                throw "Overlay '$itemId' image_patch requires background.asset_path."
-            }
-            if (-not [IO.Path]::IsPathRooted($patchAssetPath)) {
-                $patchAssetPath = Join-Path (Split-Path -Parent $manifestFullPath) $patchAssetPath
-            }
-            $patchAssetPath = Resolve-ExistingPath $patchAssetPath
         }
 
         $fillColor = Convert-RgbHexToOfficeColor ([string]$item.style.fill_rgb) "fill_rgb"
@@ -868,21 +840,12 @@ function Apply-OverlayManifest {
 
         $slide = $Presentation.Slides.Item($slideIndex)
         $overlayShape = $null
-        $patchShape = $null
         $hostShape = $null
         $textRange = $null
         try {
             # Resolve the overlay before the host: releasing candidates while
             # scanning PowerPoint's COM collection can invalidate another RCW
             # for the same shape.
-            if ($backgroundMode -eq "image_patch") {
-                $patchShape = Get-TaggedOverlayShape $slide "maltipal_translate_patch" $itemId
-                if ($null -ne $patchShape) {
-                    $patchShape.Delete()
-                    Release-ComObject $patchShape
-                    $patchShape = $null
-                }
-            }
             $overlayShape = Get-TaggedOverlayShape $slide "maltipal_translate_overlay" $itemId
             $hostShape = Get-ShapeById $slide $hostShapeId
             if ($null -eq $hostShape) {
@@ -893,25 +856,6 @@ function Apply-OverlayManifest {
             $top = [double]$hostShape.Top + ($y * [double]$hostShape.Height)
             $width = $widthRatio * [double]$hostShape.Width
             $height = $heightRatio * [double]$hostShape.Height
-            if ($backgroundMode -eq "image_patch") {
-                $patchLeft = [double]$hostShape.Left + ($sourceX * [double]$hostShape.Width)
-                $patchTop = [double]$hostShape.Top + ($sourceY * [double]$hostShape.Height)
-                $patchWidth = $sourceWidthRatio * [double]$hostShape.Width
-                $patchHeight = $sourceHeightRatio * [double]$hostShape.Height
-                $patchShape = $slide.Shapes.AddPicture(
-                    $patchAssetPath, 0, -1,
-                    $patchLeft, $patchTop, $patchWidth, $patchHeight
-                )
-                $patchShape.LockAspectRatio = 0
-                $patchShape.Left = $patchLeft
-                $patchShape.Top = $patchTop
-                $patchShape.Width = $patchWidth
-                $patchShape.Height = $patchHeight
-                $patchShape.Tags.Add("maltipal_translate_patch", $itemId)
-                # Bring the patch forward first; the translated text is brought
-                # forward after it so the repaired pixels remain directly below.
-                $patchShape.ZOrder(0)
-            }
             if ($null -eq $overlayShape) {
                 # 1 = msoShapeRectangle
                 $overlayShape = $slide.Shapes.AddShape(1, $left, $top, $width, $height)
@@ -948,7 +892,6 @@ function Apply-OverlayManifest {
         finally {
             Release-ComObject $textRange
             Release-ComObject $hostShape
-            Release-ComObject $patchShape
             Release-ComObject $overlayShape
             Release-ComObject $slide
         }
