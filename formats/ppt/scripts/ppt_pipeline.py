@@ -74,6 +74,22 @@ def build_translation_manifest(
         occurrence["translation_unit_id"] = unit["id"]
         occurrences.append(occurrence)
 
+    image_groups = []
+    for source_group in inventory.get("image_groups", []):
+        group = dict(source_group)
+        group.pop("screening_status", None)
+        group.pop("text_screening", None)
+        group.pop("reason_code", None)
+        group["decision"] = "pending"
+        group["overlay_ids"] = []
+        image_groups.append(group)
+
+    embedded_objects = []
+    for source_object in inventory.get("embedded_objects", []):
+        embedded = dict(source_object)
+        embedded["status"] = "pending_native_handler"
+        embedded_objects.append(embedded)
+
     return {
         "schema_version": 2,
         "source_file": inventory["source_file"],
@@ -84,14 +100,9 @@ def build_translation_manifest(
         "format": "powerpoint",
         "occurrences": occurrences,
         "translation_units": list(units_by_key.values()),
-        "image_groups": inventory.get("image_groups", []),
+        "image_groups": image_groups,
+        "embedded_objects": embedded_objects,
         "overlays": [],
-        "manual_reviews": [],
-        "legal_evidence": [],
-        "risk_plan": inventory.get(
-            "risk_plan",
-            {"route": "strict", "complex_reasons": [], "strict_reasons": ["missing-risk-plan"]},
-        ),
     }
 
 
@@ -102,7 +113,6 @@ def new_state(inventory: dict, target_language: str) -> dict:
         "source_path": inventory.get("source_path", ""),
         "source_sha256": inventory["source_sha256"],
         "target_language": target_language,
-        "route": inventory.get("risk_plan", {}).get("route", "strict"),
         "stages": {stage: {"completed": False, "artifact": None} for stage in STAGES},
         "metrics": {
             "package_passes": inventory.get("metrics", {}).get("package_passes", 0),
@@ -126,21 +136,15 @@ def first_incomplete_stage(state: dict) -> str | None:
     return None
 
 
-def apply_route(state_route: str, validation: dict) -> str:
-    if int(validation.get("localized_images", 0)) > 0:
-        return "complex"
-    return state_route
-
-
 def verify_localized_image_hashes(manifest: dict, output_inventory: dict) -> list[dict]:
     output_hashes = {
         str(group.get("sha256", ""))
         for group in output_inventory.get("image_groups", [])
     }
     return [
-        {"code": "localized-image-changed", "sha256": str(group["sha256"])}
+        {"code": "overlay-image-changed", "sha256": str(group["sha256"])}
         for group in manifest.get("image_groups", [])
-        if group.get("screening_status") == "localize"
+        if group.get("decision") == "overlay"
         and str(group.get("sha256", "")) not in output_hashes
     ]
 
@@ -159,36 +163,12 @@ def complete_delivery(
 
 def build_render_plan(inventory: dict, verification_passed: bool) -> dict:
     all_slides = [int(item["index"]) for item in inventory.get("slides", [])]
-    risk_plan = inventory.get("risk_plan", {})
-    requested_mode = risk_plan.get("route", "strict")
-    mode = requested_mode if verification_passed else "strict"
-    risk_slides = sorted(
-        {int(index) for index in risk_plan.get("risk_slides", []) if int(index) in all_slides}
-    )
-    changed_slides = sorted(
-        {
-            int(item["slide_index"])
-            for item in inventory.get("occurrences", [])
-            if int(item["slide_index"]) in all_slides
-        }
-    )
-    if mode == "strict":
-        source_high = all_slides
-        target_high = all_slides
-    elif mode == "complex":
-        source_high = risk_slides
-        target_high = sorted(set(risk_slides) | set(changed_slides))
-    else:
-        source_high = []
-        target_high = risk_slides
     return {
-        "mode": mode,
+        "mode": "single",
         "target_low_resolution": all_slides,
-        "source_high_resolution": source_high,
-        "target_high_resolution": target_high,
-        "reasons": list(risk_plan.get("complex_reasons", []))
-        + list(risk_plan.get("strict_reasons", []))
-        + ([] if verification_passed else ["verification-failed"]),
+        "source_high_resolution": [],
+        "target_high_resolution": [],
+        "verification_passed": verification_passed,
     }
 
 
@@ -246,17 +226,11 @@ def command_inspect(args: argparse.Namespace) -> int:
     inventory = inspect_package(working_source)
     inventory["source_file"] = source.name
     inventory["source_path"] = str(source)
-    inventory["source_sha256"] = sha256_file(source)
-    inventory["working_source_path"] = str(working_source)
-    inventory["working_source_sha256"] = sha256_file(working_source)
     if legacy_converted:
-        reasons = inventory["risk_plan"].setdefault("complex_reasons", [])
-        if "legacy-ppt-conversion" not in reasons:
-            reasons.append("legacy-ppt-conversion")
-        inventory["risk_plan"]["route"] = "complex"
-        inventory["risk_plan"]["risk_slides"] = [
-            int(item["index"]) for item in inventory["slides"]
-        ]
+        # inspect_package hashed the converted working copy; hash the immutable
+        # legacy source once because it is the file verified at delivery.
+        inventory["source_sha256"] = sha256_file(source)
+    inventory["working_source_path"] = str(working_source)
     state = new_state(inventory, args.target_language)
     if legacy_converted:
         state["metrics"]["powerpoint_starts"] = 1
@@ -267,7 +241,7 @@ def command_inspect(args: argparse.Namespace) -> int:
     write_json(inventory_path, inventory)
     mark_stage(state, "inspect", str(inventory_path))
     write_json(args.job_dir / "job-state.json", state)
-    print(json.dumps({"route": state["route"], "next_stage": first_incomplete_stage(state)}))
+    print(json.dumps({"next_stage": first_incomplete_stage(state)}))
     return 0
 
 
@@ -303,21 +277,14 @@ def command_apply(args: argparse.Namespace) -> int:
     inventory = read_json(args.job_dir / "inventory.json")
     state = read_json(args.job_dir / "job-state.json")
     manifest_path = args.job_dir / "translation-manifest.json"
-    if sha256_file(source) != inventory["source_sha256"]:
-        raise PipelineError("source hash differs from the inspected source")
     validation = validate_manifest(manifest_path, require_translations=True)
     mutation_source = Path(inventory.get("working_source_path", str(source))).resolve()
     if not mutation_source.is_file():
         raise PipelineError(f"working source not found: {mutation_source}")
-    expected_working_hash = inventory.get("working_source_sha256")
-    if expected_working_hash and sha256_file(mutation_source) != expected_working_hash:
-        raise PipelineError("working source hash differs from inspected artifact")
     mark_stage(state, "translate", str(manifest_path))
     mark_stage(state, "validate", str(manifest_path))
 
-    route = apply_route(state.get("route", "strict"), validation)
-    state["route"] = route
-    if route == "fast":
+    if int(validation.get("overlay_images", 0)) == 0:
         apply_report = apply_manifest(mutation_source, manifest_path, output)
         apply_report["engine"] = "ooxml"
     else:
@@ -420,8 +387,6 @@ def command_verify(args: argparse.Namespace) -> int:
     render_plan = build_render_plan(inventory, passed)
     render_plan_path = args.job_dir / "render-plan.json"
     write_json(render_plan_path, render_plan)
-    if not passed:
-        state["route"] = "strict"
     mark_stage(state, "verify", str(report_path))
     write_json(args.job_dir / "job-state.json", state)
     print(json.dumps(report, ensure_ascii=False))

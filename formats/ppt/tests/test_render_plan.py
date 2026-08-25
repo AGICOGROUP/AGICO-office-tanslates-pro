@@ -25,11 +25,16 @@ class RenderPlanTests(unittest.TestCase):
         script = OFFICE_EXPORT.read_text(encoding="utf-8")
 
         self.assertIn("ShowWindowAsync", script)
+        self.assertIn("PowerPointWindowGuard", script)
+        self.assertLess(
+            script.index("$windowGuard.Start()"),
+            script.index("New-Object -ComObject PowerPoint.Application"),
+        )
         self.assertIn("$app.DisplayAlerts = 1", script)
         self.assertGreaterEqual(script.count("Hide-PowerPointWindow $app"), 2)
         self.assertIn("$presentation.SaveAs($outputFull, 32)", script)
 
-    def test_fast_plan_renders_all_targets_low_and_only_risk_slides_high(self):
+    def test_single_plan_renders_every_target_once_at_low_resolution(self):
         inventory = {
             "slides": [{"index": 1}, {"index": 2}, {"index": 3}],
             "risk_plan": {
@@ -44,9 +49,10 @@ class RenderPlanTests(unittest.TestCase):
 
         self.assertEqual([], plan["source_high_resolution"])
         self.assertEqual([1, 2, 3], plan["target_low_resolution"])
-        self.assertEqual([2], plan["target_high_resolution"])
+        self.assertEqual([], plan["target_high_resolution"])
+        self.assertEqual("single", plan["mode"])
 
-    def test_strict_plan_compares_all_source_and_target_slides(self):
+    def test_source_and_high_resolution_sets_stay_empty(self):
         inventory = {
             "slides": [{"index": 1}, {"index": 2}],
             "risk_plan": {
@@ -59,10 +65,10 @@ class RenderPlanTests(unittest.TestCase):
 
         plan = build_render_plan(inventory, verification_passed=True)
 
-        self.assertEqual([1, 2], plan["source_high_resolution"])
-        self.assertEqual([1, 2], plan["target_high_resolution"])
+        self.assertEqual([], plan["source_high_resolution"])
+        self.assertEqual([], plan["target_high_resolution"])
 
-    def test_failed_verification_escalates_to_strict(self):
+    def test_failed_verification_does_not_expand_render_scope(self):
         inventory = {
             "slides": [{"index": 1}, {"index": 2}],
             "risk_plan": {"route": "fast", "risk_slides": []},
@@ -70,8 +76,8 @@ class RenderPlanTests(unittest.TestCase):
 
         plan = build_render_plan(inventory, verification_passed=False)
 
-        self.assertEqual("strict", plan["mode"])
-        self.assertEqual([1, 2], plan["source_high_resolution"])
+        self.assertEqual("single", plan["mode"])
+        self.assertEqual([], plan["source_high_resolution"])
 
 
 def powerpoint_available() -> bool:

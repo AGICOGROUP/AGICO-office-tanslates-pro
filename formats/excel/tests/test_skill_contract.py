@@ -27,11 +27,12 @@ class ExcelSkillContractTests(unittest.TestCase):
         missing = sorted(path for path in required if not (ROOT / path).is_file())
         self.assertEqual([], missing)
 
-    def test_com_verifier_uses_a_json_file_for_sheet_names(self):
+    def test_com_verifier_opens_recalculates_and_scans_without_exporting_pdf(self):
         script = (ROOT / "scripts" / "excel_com_verify.ps1").read_text(encoding="utf-8")
-        self.assertIn("SheetNamesPath", script)
-        self.assertNotIn("SheetNamesJson", script)
-        self.assertNotIn("else { $names }", script)
+        for token in ("InputPath", "CalculateFullRebuild", "SpecialCells", "formula_error_count"):
+            self.assertIn(token, script)
+        self.assertNotIn("ExportAsFixedFormat", script)
+        self.assertNotIn("OutputDirectory", script)
 
     def test_skill_routes_every_job_through_risk_driven_resumable_pipeline(self):
         skill = (ROOT / "SKILL.md").read_text(encoding="utf-8")
@@ -43,7 +44,7 @@ class ExcelSkillContractTests(unittest.TestCase):
             "prepare",
             "apply",
             "verify",
-            "render",
+            "office-validate",
             "job-state.json",
             "safe deduplication",
             "SHA-256",
@@ -71,11 +72,14 @@ class ExcelSkillContractTests(unittest.TestCase):
             "validate_manifest.py",
             "formula",
             "image",
-            "render",
+            "office-validate",
         ]
         missing = [token for token in required if token not in skill]
         self.assertEqual([], missing)
         self.assertNotIn("../../references/水泥专业名词中英对照.md", skill)
+        self.assertNotIn("final-renders", skill)
+        self.assertNotIn("skip-render", skill)
+        self.assertNotIn("exports required sheets to\n   PDF", skill)
 
     def test_bilingual_excel_defaults_to_paired_blue_translation_rows(self):
         skill = (ROOT / "SKILL.md").read_text(encoding="utf-8")

@@ -22,6 +22,7 @@ class RootSkillStructureTests(unittest.TestCase):
         skill = ROOT / "SKILL.md"
         self.assertTrue(skill.is_file())
         text = skill.read_text(encoding="utf-8")
+        normalized = " ".join(text.split())
         self.assertIn("Use when", text)
         for extension in (".docx", ".xlsx", ".pptx", ".pdf", ".png", ".jpg", ".jpeg"):
             self.assertIn(extension, text)
@@ -34,9 +35,17 @@ class RootSkillStructureTests(unittest.TestCase):
             "formats/image/SKILL.md",
         ):
             self.assertIn(adapter, text)
-        self.assertIn(f"references/{GLOSSARY_NAME}", text)
-        self.assertIn("Do not load the complete glossary by default", text)
-        self.assertIn("selected adapter's glossary resolver", text)
+        self.assertIn("Routing ends immediately", normalized)
+        self.assertIn("Do not read or consider any other format adapter", normalized)
+        for downstream_rule in ("Hash and preserve", "glossary", "protected tokens", "render"):
+            self.assertNotIn(downstream_rule, text)
+
+    def test_selected_office_adapters_do_not_return_to_the_root_router(self):
+        for adapter in ("word", "excel", "ppt"):
+            text = (ROOT / "formats" / adapter / "SKILL.md").read_text(encoding="utf-8")
+            with self.subTest(adapter=adapter):
+                self.assertIn("Top-level routing is complete", text)
+                self.assertIn("Do not run the root Office router again", text)
 
     def test_root_ui_metadata_exists(self):
         metadata = ROOT / "agents" / "openai.yaml"

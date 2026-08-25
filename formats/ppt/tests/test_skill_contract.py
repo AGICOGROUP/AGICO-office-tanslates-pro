@@ -46,7 +46,7 @@ class PowerPointOnlySkillContract(unittest.TestCase):
         self.assertNotIn("Reopen and render every slide", skill)
         self.assertNotIn("use `scripts/ppt_com.ps1`", skill.lower())
 
-    def test_embedded_image_translation_uses_bilingual_overlay_only(self):
+    def test_embedded_image_translation_uses_only_three_fast_decisions(self):
         skill = (ROOT / "SKILL.md").read_text(encoding="utf-8").lower()
         image_rule = (ROOT / "references" / "image-text-localization.md").read_text(
             encoding="utf-8"
@@ -61,16 +61,32 @@ class PowerPointOnlySkillContract(unittest.TestCase):
             encoding="utf-8"
         ).lower()
 
-        for text in (skill, image_rule, overlay_rule, manifest_rule, cli_rule):
+        for text in (skill, image_rule, manifest_rule, cli_rule):
             self.assertIn("bilingual_below", text)
-            self.assertNotIn("text_region_replace", text)
+            for decision in ("skip_target", "skip_unclear", "overlay"):
+                self.assertIn(decision, text)
+            for legacy in ("manual_review", "text_region_replace", "risk_plan"):
+                self.assertNotIn(legacy, text)
+        self.assertIn("bilingual_below", overlay_rule)
         self.assertIn("preserve the original image", image_rule)
         self.assertIn("immediately below", image_rule)
-        self.assertIn("every ocr-detected label", image_rule)
         self.assertIn("single-pass", image_rule)
-        self.assertIn("target-language-already-present", image_rule)
-        self.assertIn("skip", image_rule)
+        self.assertIn("do not retry", image_rule)
         self.assertIn("powerpoint embedded images only", skill)
+        self.assertIn("all readable source labels", image_rule)
+        self.assertIn("partial target-language text does not skip the whole image", image_rule)
+        self.assertIn("small but readable", image_rule)
+        self.assertIn("selectable or copyable", image_rule)
+        self.assertIn("embedded object", image_rule)
+        self.assertIn("preview image", image_rule)
+
+    def test_workflow_has_one_route_and_no_risk_tiers(self):
+        text = "\n".join(
+            (ROOT / path).read_text(encoding="utf-8").lower()
+            for path in ("SKILL.md", "references/powerpoint-workflow.md")
+        )
+        for legacy in ("fast:", "complex:", "strict:", "risk escalation"):
+            self.assertNotIn(legacy, text)
 
     def test_deliverable_has_no_other_format_or_router_content(self):
         suffixes = {".md", ".yaml", ".json", ".py", ".ps1"}

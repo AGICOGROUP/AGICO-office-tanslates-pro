@@ -8,7 +8,7 @@ through a verified Excel-compatible working copy. Keep `.xlsm` on the strict mac
 ## 2. Run the fixed pipeline
 
 Run `scripts/excel_pipeline.mjs` in the fixed sequence `inspect`, `prepare`, `apply`, `verify`,
-`render`. Store artifacts under `work/<source-stem>-<hash-prefix>/` and resume from
+`office-validate`. Store artifacts under `work/<source-stem>-<hash-prefix>/` and resume from
 `job-state.json`; do not repeat completed stages whose artifact hashes still match.
 
 `inspect` performs one non-rendering pass, inventories editable text and OOXML risks, and groups
@@ -36,26 +36,23 @@ runs of three or more completely blank, formula-free, unmerged placeholder rows.
 
 ## 3. Conditional checks
 
-- Fast: verify deterministic invariants and export changed used sheets only.
-- Complex: add only sheets containing affected charts, comments, drawings, or image text.
-- Bilingual: verify every source/translation pair and render all changed visible sheets.
+- Fast: verify deterministic invariants and run one Microsoft Excel validation pass.
+- Complex: add checks for affected charts, comments, drawings, or image text.
+- Bilingual: verify every source/translation pair and the translated workbook structure.
 - Images: read `image-text-localization.md`; review one record per unique SHA-256, not each
   occurrence.
-- Strict: export every visible used sheet when macros, unsafe conversion, repair warnings, or
+- Strict: add macro-safe and repair checks when macros, unsafe conversion, repair warnings, or
   deterministic invariant mismatches are present.
 
 Treat sub-2-point empty legacy shape fragments as decorative borders, not unsupported drawings.
-Before the single final export, apply landscape plus one-page-wide fitting only to changed sheets
-whose used range is at least ten columns wide. Keep vertical pagination automatic.
-
-Use Microsoft Excel COM for the single final open, full recalculation, and PDF export. Do not
-install, discover, add, or fall back to LibreOffice. If Microsoft Excel is unavailable, stop and
-ask before using another renderer.
+Use Microsoft Excel COM for one final read-only open, full recalculation, worksheet/used-range access
+check, and formula/value error scan. Do not export PDF or invoke LibreOffice on the default path. If
+Microsoft Excel is unavailable, stop and report the validation blocker.
 
 Verification must reject changed formulas or typed values, broken merges, missing occurrences,
 protected-token loss, incomplete bilingual pairs, formula errors, or output-open failure.
 
 ## 4. Delivery
 
-Deliver one new workbook only after `verify` passes and Excel COM validation completes. Report strict reasons
+Deliver one new workbook only after `verify` and `office-validate` pass. Report strict reasons
 when present. The source hash must still match the value recorded at `inspect`.

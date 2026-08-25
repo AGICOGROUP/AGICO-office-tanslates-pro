@@ -22,7 +22,7 @@ export const JOB_STAGES = [
   "validate",
   "apply",
   "verify",
-  "render",
+  "office-validate",
   "deliver",
 ];
 
@@ -248,45 +248,6 @@ export function classifyBilingualGrid(meta = {}) {
   ];
   const reasons = checks.filter(([condition]) => Boolean(condition)).map(([, reason]) => reason);
   return { safe: reasons.length === 0, reasons };
-}
-
-
-export function buildRenderPlan({
-  phase,
-  outputMode,
-  sheets,
-  changedSheets = [],
-  riskSheets = [],
-  risk = { mode: "balanced", reasons: [] },
-}) {
-  if (!Array.isArray(sheets)) {
-    throw new TypeError("sheets must be an array");
-  }
-  const visibleUsed = sheets.filter((sheet) => sheet.visible !== false && sheet.used !== false);
-  if (phase === "preflight") {
-    return {
-      phase,
-      mode: risk.mode,
-      sheets: [],
-      fullPrintPages: false,
-      skipped: true,
-      reasons: [...risk.reasons],
-    };
-  }
-  if (phase !== "final") {
-    throw new Error(`unsupported render phase: ${phase}`);
-  }
-  const fullCoverage = risk.mode === "strict";
-  const selectedNames = new Set([...changedSheets, ...riskSheets]);
-  return {
-    phase,
-    mode: risk.mode,
-    sheets: fullCoverage
-      ? visibleUsed
-      : visibleUsed.filter((sheet) => selectedNames.has(sheet.name)),
-    fullPrintPages: fullCoverage,
-    reasons: [...risk.reasons],
-  };
 }
 
 
@@ -516,15 +477,6 @@ function inspectOoxmlPackage(input, jobDir) {
   ) ? features.meaningful_drawing_count : 0;
   return { ...report, features };
 }
-
-export function buildPrintLayoutPlan({ range, translated = false } = {}) {
-  if (!translated || !range) return null;
-  const bounds = rangeBounds(range);
-  const columnCount = bounds.endColumn - bounds.startColumn + 1;
-  if (columnCount < 10) return null;
-  return { orientation: "landscape", fitToPagesWide: 1, fitToPagesTall: 0 };
-}
-
 
 function queryRelevantGlossary(manifestPath, outputPath) {
   const bundledPython = path.resolve(path.dirname(process.execPath), "..", "..", "python", "python.exe");
@@ -1010,64 +962,37 @@ export async function verifyTranslations(options) {
 }
 
 
-export async function renderOutput(options) {
+function runExcelOfficeValidation(outputPath) {
+  const script = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "excel_com_verify.ps1");
+  const powershell = process.env.CODEX_POWERSHELL || "powershell.exe";
+  const result = spawnSync(powershell, [
+    "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script,
+    "-InputPath", outputPath,
+  ], { encoding: "utf8", windowsHide: true });
+  if (result.status !== 0) {
+    throw new Error(`Excel COM validation failed: ${result.stderr || result.stdout}`);
+  }
+  return JSON.parse(result.stdout);
+}
+
+
+export async function officeValidateOutput(options, officeRunner = runExcelOfficeValidation) {
   requireOptions(options, ["job-dir", "output"]);
   const jobDir = path.resolve(options["job-dir"]);
   const outputPath = path.resolve(options.output);
   let state = await loadState(jobDir);
-  if (nextStage(state) !== "render") throw new Error(`render requires stage render; found ${nextStage(state)}`);
+  if (nextStage(state) !== "office-validate") {
+    throw new Error(`office-validate requires stage office-validate; found ${nextStage(state)}`);
+  }
   const verification = JSON.parse(await fs.readFile(path.join(jobDir, "verification.json"), "utf8"));
-  if (!verification.passed) throw new Error("render requires a passing verification report");
-  const inventory = JSON.parse(await fs.readFile(path.join(jobDir, "inventory.json"), "utf8"));
-  const manifest = JSON.parse(await fs.readFile(path.join(jobDir, "translation-manifest.json"), "utf8"));
-  const imagePlan = buildImageReviewPlan(manifest.images ?? []);
-  const risk = classifyRisk({
-    extension: path.extname(outputPath).toLowerCase(),
-    features: inventory.features,
-    image_uncertain: imagePlan.strict_reasons.length > 0,
-  });
-  const sheets = inventory.sheets ?? [];
-  const changedSheets = [...new Set(manifest.occurrences.map((item) => item.sheet))];
-  const plan = buildRenderPlan({
-    phase: "final", outputMode: state.outputMode, sheets, changedSheets, risk,
-  });
-  plan.printLayout = Object.fromEntries(
-    plan.sheets
-      .map((sheet) => [sheet.name, buildPrintLayoutPlan({
-        range: sheet.range, translated: changedSheets.includes(sheet.name),
-      })])
-      .filter(([, layout]) => layout),
-  );
-  if (plan.fullPrintPages) {
-    plan.reasons = [...new Set([...plan.reasons, "print-page-verification-required"])];
-    plan.mode = "strict";
-  }
-  const renderDir = path.join(jobDir, "final-renders");
-  await fs.mkdir(renderDir, { recursive: true });
-  if (options["skip-render"] !== "true") {
-    const script = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "excel_com_verify.ps1");
-    const powershell = process.env.CODEX_POWERSHELL || "powershell.exe";
-    const selectedPath = path.join(jobDir, "selected-render-sheets.json");
-    const layoutPath = path.join(jobDir, "print-layout.json");
-    await writeJson(selectedPath, plan.sheets.map((item) => item.name));
-    await writeJson(layoutPath, plan.printLayout);
-    const result = spawnSync(powershell, [
-      "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script,
-      "-InputPath", outputPath, "-OutputDirectory", renderDir,
-      "-SheetNamesPath", selectedPath,
-      "-PrintLayoutPath", layoutPath,
-    ], { encoding: "utf8", windowsHide: true });
-    if (result.status !== 0) {
-      throw new Error(`Excel COM verification failed: ${result.stderr || result.stdout}`);
-    }
-    plan.officeVerification = JSON.parse(result.stdout);
-  }
-  const planPath = path.join(jobDir, "render-plan.json");
-  await writeJson(planPath, { ...plan, image_review: imagePlan });
-  state.strictReasons = [...new Set([...state.strictReasons, ...plan.reasons, ...imagePlan.strict_reasons])];
-  state = completeStage(state, "render", { plan: await sha256File(planPath) });
+  if (!verification.passed) throw new Error("office-validate requires a passing verification report");
+  const report = await officeRunner(outputPath);
+  if (!report?.passed) throw new Error("Microsoft Excel validation did not pass");
+  const reportPath = path.join(jobDir, "office-validation.json");
+  await writeJson(reportPath, report);
+  state = completeStage(state, "office-validate", { report: await sha256File(reportPath) });
   await saveJobState(path.join(jobDir, "job-state.json"), state);
-  return { ...plan, next_stage: nextStage(state) };
+  return { ...report, next_stage: nextStage(state) };
 }
 
 
@@ -1127,8 +1052,8 @@ export async function main(argv = process.argv.slice(2)) {
   else if (command === "prepare") result = await prepareManifest(options);
   else if (command === "apply") result = await applyTranslations(options);
   else if (command === "verify") result = await verifyTranslations(options);
-  else if (command === "render") result = await renderOutput(options);
-  else throw new Error("usage: excel_pipeline.mjs inspect|prepare|apply|verify|render [options]");
+  else if (command === "office-validate") result = await officeValidateOutput(options);
+  else throw new Error("usage: excel_pipeline.mjs inspect|prepare|apply|verify|office-validate [options]");
   process.stdout.write(`${JSON.stringify(result)}\n`);
   if (command === "prepare") process.exitCode = 3;
   if (command === "verify" && !result.passed) process.exitCode = 2;

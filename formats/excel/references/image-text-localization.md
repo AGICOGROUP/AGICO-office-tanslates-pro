@@ -13,7 +13,7 @@ equipment photographs.
 - Prefer an editable worksheet text box or chart-native label when it can replace or cover only the source label without obscuring cells, chart marks, process lines, or unrelated pixels.
 - When raster editing is necessary, limit changes to approved text masks and preserve crop, anchor, aspect ratio, z-order, and all unrelated pixels.
 - Preserve logos, equipment, arrows, symbols, topology, numbers, units, and flow direction.
-- Deep-review and render only sheets containing `localized` or `manual-review` groups. Reject
+- Deep-review only images marked `localized` or `manual-review`. Reject
   overlap, hidden labels, illegible type, or structural movement.
 
 Never flatten the worksheet or chart into an image and never use a large opaque rectangle to hide source content.

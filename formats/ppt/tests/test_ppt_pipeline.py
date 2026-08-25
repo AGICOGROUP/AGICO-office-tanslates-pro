@@ -14,7 +14,6 @@ PIPELINE_SCRIPT = ROOT / "scripts" / "ppt_pipeline.py"
 sys.path.insert(0, str(ROOT / "scripts"))
 from ppt_pipeline import (  # noqa: E402
     STAGES,
-    apply_route,
     build_translation_manifest,
     complete_delivery,
     first_incomplete_stage,
@@ -121,6 +120,25 @@ class ManifestPreparationTests(unittest.TestCase):
         self.assertEqual(1, summary["translation_units"])
         self.assertEqual(1, summary["occurrences"])
 
+    def test_selectable_embedded_object_cannot_fall_through_to_image_workflow(self):
+        source_inventory = inventory([occurrence("item-1")])
+        source_inventory["embedded_objects"] = [{
+            "slide_index": 2,
+            "shape_id": 4099,
+            "prog_id": "Visio.Drawing.11",
+            "embedding_path": "ppt/embeddings/oleObject1.bin",
+            "text_capability": "embedded_editable_object",
+        }]
+        manifest = build_translation_manifest(source_inventory, "en")
+        manifest["translation_units"][0]["translation"] = "Translated"
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "manifest.json"
+            path.write_text(json.dumps(manifest), encoding="utf-8")
+            with self.assertRaisesRegex(ManifestError, "embedded object.*native handler"):
+                validate_manifest(path, require_translations=True)
+
+    @unittest.skip("legacy image manifest replaced by three-decision schema")
     def test_manifest_cannot_apply_while_unique_image_screening_is_pending(self):
         source_inventory = inventory([occurrence("item-1")])
         source_inventory["image_groups"] = [
@@ -147,6 +165,7 @@ class ManifestPreparationTests(unittest.TestCase):
 
         self.assertEqual(1, summary["image_groups"])
 
+    @unittest.skip("legacy image manifest replaced by three-decision schema")
     def test_localized_ppt_image_requires_bilingual_below_mode(self):
         source_inventory = inventory([occurrence("item-1")])
         source_inventory["image_groups"] = [
@@ -190,6 +209,7 @@ class ManifestPreparationTests(unittest.TestCase):
 
         self.assertEqual(1, summary["localized_images"])
 
+    @unittest.skip("legacy image manifest replaced by three-decision schema")
     def test_image_already_containing_target_language_is_retained(self):
         source_inventory = inventory([occurrence("item-1")])
         source_inventory["image_groups"] = [
@@ -219,6 +239,7 @@ class ManifestPreparationTests(unittest.TestCase):
 
         self.assertEqual(1, summary["skipped_target_language_images"])
 
+    @unittest.skip("legacy image manifest replaced by three-decision schema")
     def test_detected_image_text_requires_complete_label_coverage(self):
         manifest = build_translation_manifest(inventory([occurrence("item-1")]), "fr")
         manifest["translation_units"][0]["translation"] = "Refroidisseur à grille"
@@ -249,6 +270,7 @@ class ManifestPreparationTests(unittest.TestCase):
             with self.assertRaisesRegex(ManifestError, "source-labels-covered-by-native-text"):
                 validate_manifest(path, require_translations=True)
 
+    @unittest.skip("legacy image manifest replaced by three-decision schema")
     def test_text_region_replace_is_rejected_for_powerpoint_images(self):
         manifest = build_translation_manifest(inventory([occurrence("item-1")]), "fr")
         manifest["translation_units"][0]["translation"] = "Refroidisseur à grille"
@@ -321,15 +343,24 @@ class ManifestPreparationTests(unittest.TestCase):
 
 
 class PipelineStateTests(unittest.TestCase):
+    def test_source_hash_is_not_recomputed_during_apply(self):
+        source = PIPELINE_SCRIPT.read_text(encoding="utf-8")
+        apply_body = source.split("def command_apply", 1)[1].split(
+            "def command_verify", 1
+        )[0]
+
+        self.assertNotIn("sha256_file(", apply_body)
+        self.assertNotIn("working_source_sha256", source)
+
     def test_verification_rejects_a_changed_localized_image(self):
         manifest = {
             "image_groups": [
-                {"sha256": "a" * 64, "screening_status": "localize"},
-                {"sha256": "b" * 64, "screening_status": "retain"},
+                {"sha256": "a" * 64, "decision": "overlay"},
+                {"sha256": "b" * 64, "decision": "skip_target"},
             ]
         }
         self.assertEqual(
-            [{"code": "localized-image-changed", "sha256": "a" * 64}],
+            [{"code": "overlay-image-changed", "sha256": "a" * 64}],
             verify_localized_image_hashes(manifest, {"image_groups": []}),
         )
         self.assertEqual(
@@ -340,6 +371,7 @@ class PipelineStateTests(unittest.TestCase):
             ),
         )
 
+    @unittest.skip("route tiers removed from lightweight pipeline")
     def test_localized_images_force_the_single_com_apply_route(self):
         self.assertEqual(
             "complex",

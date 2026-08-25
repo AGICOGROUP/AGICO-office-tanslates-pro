@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the schema-v2 PowerPoint translation manifest."""
+"""Validate the lightweight PowerPoint translation manifest."""
 
 from __future__ import annotations
 
@@ -48,48 +48,31 @@ def validate_manifest(path: str | Path, require_translations: bool = False) -> d
     if data.get("schema_version") != 2:
         raise ManifestError("schema_version: expected 2")
     for field in (
-        "source_file",
-        "source_sha256",
-        "source_language",
-        "target_language",
-        "format",
-        "occurrences",
-        "translation_units",
-        "image_groups",
-        "risk_plan",
+        "source_file", "source_sha256", "source_language", "target_language",
+        "format", "occurrences", "translation_units", "image_groups",
     ):
         if field not in data:
             raise ManifestError(f"missing top-level field: {field}")
-    non_empty_string(data["source_file"], "source_file")
-    source_sha = non_empty_string(data["source_sha256"], "source_sha256")
-    if len(source_sha) != 64 or any(character not in "0123456789abcdef" for character in source_sha.lower()):
-        raise ManifestError("source_sha256: expected 64 hexadecimal digits")
-    non_empty_string(data["source_language"], "source_language")
-    non_empty_string(data["target_language"], "target_language")
     if data["format"] != "powerpoint":
         raise ManifestError("format: expected powerpoint")
-    if not isinstance(data["translation_units"], list):
-        raise ManifestError("translation_units: expected an array")
-    if not isinstance(data["occurrences"], list):
-        raise ManifestError("occurrences: expected an array")
-    if not isinstance(data["image_groups"], list):
-        raise ManifestError("image_groups: expected an array")
-    if not isinstance(data["risk_plan"], dict):
-        raise ManifestError("risk_plan: expected an object")
+    source_sha = non_empty_string(data["source_sha256"], "source_sha256")
+    if len(source_sha) != 64 or any(c not in "0123456789abcdef" for c in source_sha.lower()):
+        raise ManifestError("source_sha256: expected 64 hexadecimal digits")
+    for field in ("occurrences", "translation_units", "image_groups"):
+        if not isinstance(data[field], list):
+            raise ManifestError(f"{field}: expected an array")
 
     overlays = data.get("overlays", [])
     if not isinstance(overlays, list):
         raise ManifestError("overlays: expected an array")
-    overlay_ids: set[str] = set()
     overlays_by_id: dict[str, dict] = {}
     for index, overlay in enumerate(overlays, start=1):
         label = f"overlays[{index}]"
         if not isinstance(overlay, dict):
             raise ManifestError(f"{label}: expected an object")
         overlay_id = non_empty_string(overlay.get("id"), f"{label}.id")
-        if overlay_id in overlay_ids:
+        if overlay_id in overlays_by_id:
             raise ManifestError(f"{label}: duplicate id: {overlay_id}")
-        overlay_ids.add(overlay_id)
         overlays_by_id[overlay_id] = overlay
 
     units: dict[str, dict] = {}
@@ -98,14 +81,7 @@ def validate_manifest(path: str | Path, require_translations: bool = False) -> d
         label = f"translation_units[{index}]"
         if not isinstance(unit, dict):
             raise ManifestError(f"{label}: expected an object")
-        for field in (
-            "id",
-            "source_text",
-            "translation",
-            "role",
-            "context_signature",
-            "protected_tokens",
-        ):
+        for field in ("id", "source_text", "translation", "role", "context_signature", "protected_tokens"):
             if field not in unit:
                 raise ManifestError(f"{label}: missing field: {field}")
         unit_id = non_empty_string(unit["id"], f"{label}.id")
@@ -114,51 +90,32 @@ def validate_manifest(path: str | Path, require_translations: bool = False) -> d
         non_empty_string(unit["source_text"], f"{label}.source_text")
         if not isinstance(unit["translation"], str):
             raise ManifestError(f"{label}.translation: expected a string")
-        non_empty_string(unit["role"], f"{label}.role")
-        non_empty_string(unit["context_signature"], f"{label}.context_signature")
-        protected_tokens = string_list(
-            unit["protected_tokens"], f"{label}.protected_tokens"
-        )
-        if unit["translation"].strip():
-            if require_translations:
-                for token in protected_tokens:
-                    if token not in unit["translation"]:
-                        raise ManifestError(
-                            f"{label}: protected token missing from translation: {token}"
-                        )
-            translated += 1
-        elif require_translations:
+        tokens = string_list(unit["protected_tokens"], f"{label}.protected_tokens")
+        if require_translations and not unit["translation"].strip():
             raise ManifestError(f"{label}: empty translation: {unit_id}")
+        if unit["translation"].strip():
+            for token in tokens:
+                if require_translations and token not in unit["translation"]:
+                    raise ManifestError(f"{label}: protected token missing from translation: {token}")
+            translated += 1
         units[unit_id] = unit
 
-    seen_occurrences: set[str] = set()
+    occurrence_ids: set[str] = set()
     for index, occurrence in enumerate(data["occurrences"], start=1):
         label = f"occurrences[{index}]"
         if not isinstance(occurrence, dict):
             raise ManifestError(f"{label}: expected an object")
         for field in (
-            "id",
-            "kind",
-            "source_text",
-            "translation_unit_id",
-            "slide_index",
-            "shape_id",
-            "paragraph_index",
-            "role",
-            "context_signature",
-            "protected_tokens",
+            "id", "kind", "source_text", "translation_unit_id", "slide_index",
+            "shape_id", "paragraph_index", "role", "context_signature", "protected_tokens",
         ):
             if field not in occurrence:
                 raise ManifestError(f"{label}: missing field: {field}")
         occurrence_id = non_empty_string(occurrence["id"], f"{label}.id")
-        if occurrence_id in seen_occurrences:
+        if occurrence_id in occurrence_ids:
             raise ManifestError(f"{label}: duplicate id: {occurrence_id}")
-        seen_occurrences.add(occurrence_id)
-        non_empty_string(occurrence["kind"], f"{label}.kind")
-        non_empty_string(occurrence["source_text"], f"{label}.source_text")
-        unit_id = non_empty_string(
-            occurrence["translation_unit_id"], f"{label}.translation_unit_id"
-        )
+        occurrence_ids.add(occurrence_id)
+        unit_id = non_empty_string(occurrence["translation_unit_id"], f"{label}.translation_unit_id")
         if unit_id not in units:
             raise ManifestError(f"{label}: unknown translation unit: {unit_id}")
         for field in ("slide_index", "shape_id", "paragraph_index"):
@@ -173,124 +130,56 @@ def validate_manifest(path: str | Path, require_translations: bool = False) -> d
         if occurrence["source_text"] != unit["source_text"] or tokens != unit["protected_tokens"]:
             raise ManifestError(f"{label}: occurrence does not match translation unit {unit_id}")
 
-    seen_image_hashes: set[str] = set()
-    localized_images = 0
-    skipped_target_language_images = 0
-    covered_image_labels = 0
+    seen_hashes: set[str] = set()
+    overlay_images = skipped_target_images = skipped_unclear_images = 0
     for index, group in enumerate(data["image_groups"], start=1):
         label = f"image_groups[{index}]"
         if not isinstance(group, dict):
             raise ManifestError(f"{label}: expected an object")
         digest = non_empty_string(group.get("sha256"), f"{label}.sha256")
-        if len(digest) != 64 or any(character not in "0123456789abcdef" for character in digest.lower()):
+        if len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest.lower()):
             raise ManifestError(f"{label}.sha256: expected 64 hexadecimal digits")
-        if digest in seen_image_hashes:
+        if digest in seen_hashes:
             raise ManifestError(f"{label}: duplicate image sha256: {digest}")
-        seen_image_hashes.add(digest)
-        status = non_empty_string(
-            group.get("screening_status"), f"{label}.screening_status"
-        )
-        if status not in {"pending", "retain", "localize", "manual_review"}:
-            raise ManifestError(f"{label}.screening_status: unsupported status: {status}")
-        if require_translations and status == "pending":
-            raise ManifestError(f"{label}: image screening is still pending")
-        screening = group.get("text_screening")
-        if require_translations and not isinstance(screening, dict):
-            raise ManifestError(f"{label}.text_screening: expected an object")
-        if isinstance(screening, dict):
-            if screening.get("method") != "single-pass-ocr-and-visual":
-                raise ManifestError(
-                    f"{label}.text_screening.method: expected single-pass-ocr-and-visual"
-                )
-            source_detected = screening.get("source_language_text_detected")
-            target_present = screening.get("target_language_present")
-            if not isinstance(source_detected, bool) or not isinstance(target_present, bool):
-                raise ManifestError(
-                    f"{label}.text_screening: detection flags must be boolean"
-                )
-            labels = screening.get("labels")
-            if not isinstance(labels, list):
-                raise ManifestError(f"{label}.text_screening.labels: expected an array")
-            if source_detected and not labels:
-                raise ManifestError(
-                    f"{label}.text_screening.labels: detected source text requires labels"
-                )
-            if not source_detected and labels:
-                raise ManifestError(
-                    f"{label}.text_screening.labels: labels contradict detection result"
-                )
-            for label_index, text_label in enumerate(labels, start=1):
-                item_label = f"{label}.text_screening.labels[{label_index}]"
-                if not isinstance(text_label, dict):
-                    raise ManifestError(f"{item_label}: expected an object")
-                non_empty_string(text_label.get("id"), f"{item_label}.id")
-                non_empty_string(text_label.get("source_text"), f"{item_label}.source_text")
-                label_status = non_empty_string(
-                    text_label.get("status"), f"{item_label}.status"
-                )
-                allowed_label_statuses = {
-                    "localized", "target-language-already-present", "manual_review"
-                }
-                if label_status not in allowed_label_statuses:
-                    raise ManifestError(
-                        f"{item_label}.status: incomplete image-label coverage: {label_status}"
-                    )
-                if label_status == "localized":
-                    non_empty_string(
-                        text_label.get("translation"), f"{item_label}.translation"
-                    )
-                    overlay_id = non_empty_string(
-                        text_label.get("overlay_id"), f"{item_label}.overlay_id"
-                    )
-                    if overlay_id not in overlay_ids:
-                        raise ManifestError(f"{item_label}.overlay_id: unknown overlay: {overlay_id}")
-                covered_image_labels += 1
-            if status == "retain" and source_detected:
-                if group.get("reason_code") != "target-language-already-present":
-                    raise ManifestError(
-                        f"{label}.reason_code: source-labels-covered-by-native-text is not allowed; "
-                        "detected image text needs its own target-language status"
-                    )
-                if not target_present or any(
-                    item.get("status") != "target-language-already-present" for item in labels
-                ):
-                    raise ManifestError(
-                        f"{label}: retained source-language image is not fully target-language complete"
-                    )
-        if status in {"retain", "manual_review"}:
-            non_empty_string(group.get("reason_code"), f"{label}.reason_code")
-        if status == "localize":
-            localization_mode = group.get("localization_mode")
-            if localization_mode != "bilingual_below":
-                raise ManifestError(
-                    f"{label}.localization_mode: expected bilingual_below"
-                )
+        seen_hashes.add(digest)
+        decision = non_empty_string(group.get("decision"), f"{label}.decision")
+        if decision == "pending" and require_translations:
+            raise ManifestError(f"{label}: image decision is still pending")
+        if decision not in {"pending", "skip_target", "skip_unclear", "overlay"}:
+            raise ManifestError(f"{label}.decision: unsupported decision: {decision}")
+        overlay_ids = string_list(group.get("overlay_ids", []), f"{label}.overlay_ids")
+        if decision in {"skip_target", "skip_unclear"}:
+            if overlay_ids:
+                raise ManifestError(f"{label}.overlay_ids: skipped images cannot have overlays")
+            skipped_target_images += decision == "skip_target"
+            skipped_unclear_images += decision == "skip_unclear"
+        elif decision == "overlay":
             if group.get("preserve_source_image") is not True:
-                raise ManifestError(
-                    f"{label}.preserve_source_image: expected true"
-                )
-            referenced_overlays = string_list(
-                group.get("overlay_ids"), f"{label}.overlay_ids"
-            )
-            if not referenced_overlays:
+                raise ManifestError(f"{label}.preserve_source_image: expected true")
+            if not overlay_ids:
                 raise ManifestError(f"{label}.overlay_ids: expected at least one overlay")
-            unknown_overlays = sorted(set(referenced_overlays) - overlay_ids)
-            if unknown_overlays:
-                raise ManifestError(
-                    f"{label}.overlay_ids: unknown overlays: {', '.join(unknown_overlays)}"
-                )
-            for overlay_id in referenced_overlays:
-                overlay = overlays_by_id[overlay_id]
-                if overlay.get("localization_mode") not in {None, "bilingual_below"}:
-                    raise ManifestError(
-                        f"overlays[{overlay_id}].localization_mode: expected bilingual_below"
-                    )
-            localized_images += 1
-        elif (
-            status == "retain"
-            and group.get("reason_code") == "target-language-already-present"
-        ):
-            skipped_target_language_images += 1
+            for overlay_id in overlay_ids:
+                overlay = overlays_by_id.get(overlay_id)
+                if overlay is None:
+                    raise ManifestError(f"{label}.overlay_ids: unknown overlay: {overlay_id}")
+                if overlay.get("kind") != "office_overlay":
+                    raise ManifestError(f"overlays[{overlay_id}].kind: expected office_overlay")
+                if overlay.get("localization_mode") != "bilingual_below":
+                    raise ManifestError(f"overlays[{overlay_id}].localization_mode: expected bilingual_below")
+            overlay_images += 1
+
+    embedded_objects = data.get("embedded_objects", [])
+    if not isinstance(embedded_objects, list):
+        raise ManifestError("embedded_objects: expected an array")
+    for index, embedded in enumerate(embedded_objects, start=1):
+        if not isinstance(embedded, dict):
+            raise ManifestError(f"embedded_objects[{index}]: expected an object")
+        status = embedded.get("status", "pending_native_handler")
+        if require_translations and status != "translated":
+            prog_id = embedded.get("prog_id", "unknown")
+            raise ManifestError(
+                f"embedded object {prog_id} requires its native handler before delivery"
+            )
 
     return {
         "source_file": data["source_file"],
@@ -298,11 +187,12 @@ def validate_manifest(path: str | Path, require_translations: bool = False) -> d
         "occurrences": len(data["occurrences"]),
         "translation_units": len(units),
         "image_groups": len(data["image_groups"]),
-        "localized_images": localized_images,
-        "skipped_target_language_images": skipped_target_language_images,
-        "covered_image_labels": covered_image_labels,
+        "overlay_images": overlay_images,
+        "skipped_target_images": skipped_target_images,
+        "skipped_unclear_images": skipped_unclear_images,
         "translated": translated,
         "untranslated": len(units) - translated,
+        "embedded_objects": len(embedded_objects),
     }
 
 
