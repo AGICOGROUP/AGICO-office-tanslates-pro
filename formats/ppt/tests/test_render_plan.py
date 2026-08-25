@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -18,6 +17,7 @@ import sys
 
 sys.path.insert(0, str(ROOT / "scripts"))
 from ppt_pipeline import build_render_plan  # noqa: E402
+from ppt_test_support import powerpoint_com_tests_enabled  # noqa: E402
 
 
 class RenderPlanTests(unittest.TestCase):
@@ -83,17 +83,10 @@ class RenderPlanTests(unittest.TestCase):
         self.assertEqual([], plan["source_high_resolution"])
 
 
-def powerpoint_available() -> bool:
-    if os.name != "nt" or not POWERSHELL:
-        return False
-    result = subprocess.run(
-        [POWERSHELL, "-NoProfile", "-Command", "if([type]::GetTypeFromProgID('PowerPoint.Application')){exit 0}else{exit 2}"],
-        capture_output=True,
-    )
-    return result.returncode == 0
-
-
-@unittest.skipUnless(powerpoint_available(), "Microsoft PowerPoint COM is required")
+@unittest.skipUnless(
+    powerpoint_com_tests_enabled(),
+    "Set AGICO_RUN_POWERPOINT_COM_TESTS=1 to run Microsoft PowerPoint COM tests",
+)
 class OfficePowerPointExportTests(unittest.TestCase):
     def test_one_powerpoint_session_renders_slides_without_pdf(self):
         with tempfile.TemporaryDirectory() as directory:

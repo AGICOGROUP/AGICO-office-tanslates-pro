@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -16,23 +15,14 @@ COM_SCRIPT = ROOT / "scripts" / "ppt_com.ps1"
 PIPELINE_SCRIPT = ROOT / "scripts" / "ppt_pipeline.py"
 POWERSHELL = shutil.which("powershell.exe")
 
-
-def powerpoint_available() -> bool:
-    if os.name != "nt" or not POWERSHELL:
-        return False
-    result = subprocess.run(
-        [
-            POWERSHELL,
-            "-NoProfile",
-            "-Command",
-            "if([type]::GetTypeFromProgID('PowerPoint.Application')){exit 0}else{exit 2}",
-        ],
-        capture_output=True,
-    )
-    return result.returncode == 0
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from ppt_test_support import powerpoint_com_tests_enabled  # noqa: E402
 
 
-@unittest.skipUnless(powerpoint_available(), "Microsoft PowerPoint COM is required")
+@unittest.skipUnless(
+    powerpoint_com_tests_enabled(),
+    "Set AGICO_RUN_POWERPOINT_COM_TESTS=1 to run Microsoft PowerPoint COM tests",
+)
 class PowerPointComPipelineContractTests(unittest.TestCase):
     def test_com_window_guard_starts_before_powerpoint(self):
         script = (ROOT / "scripts" / "ppt_com.ps1").read_text(encoding="utf-8")
