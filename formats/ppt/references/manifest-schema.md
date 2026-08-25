@@ -1,27 +1,46 @@
-# PowerPoint translation manifest
+# PowerPoint translation manifest schema v2
 
-Use UTF-8 JSON. Keep items in slide reading order and never deduplicate repeated text.
+The UTF-8 JSON root requires:
 
 ```json
 {
+  "schema_version": 2,
   "source_file": "sample.pptx",
+  "source_path": "D:/input/sample.pptx",
+  "source_sha256": "64-lowercase-hex-digits",
   "source_language": "zh-CN",
   "target_language": "en",
   "format": "powerpoint",
-  "items": []
+  "occurrences": [],
+  "translation_units": [],
+  "image_groups": [],
+  "overlays": [],
+  "manual_reviews": [],
+  "legal_evidence": [],
+  "risk_plan": {}
 }
 ```
 
-Every item requires `id`, `kind`, `source_text`, `translation`, `context`, `location`, and `protected_tokens`. IDs must be unique. `translation` may be empty during extraction but must be non-empty before apply.
+Every occurrence retains `id`, `kind`, `source_text`, `translation_unit_id`, `slide_index`,
+`shape_id`, `paragraph_index`, `role`, `context_signature`, and `protected_tokens`. Table-cell
+occurrences also retain `row` and `column` for the complex COM route plus
+`package_paragraph_index` for the OOXML fast route.
 
-Supported kinds and locations:
+Every translation unit retains `id`, `reuse_key`, `source_text`, `translation`, `role`,
+`context_signature`, `protected_tokens`, and `occurrence_count`. Fill `translation` only. A unit may
+serve multiple occurrences, but every referenced source text and protected-token sequence must
+match exactly.
 
-| Kind | Required location fields |
-|---|---|
-| `ppt_paragraph` | `slide`, `shape_id`, `paragraph` |
-| `ppt_table_cell` | `slide`, `shape_id`, `row`, `column`, `paragraph` |
-| `ppt_note` | `slide`, `shape_id`, `paragraph` |
-| `ppt_chart_text` | `slide`, `shape_id`, `chart_part` |
-| `office_overlay` | `page_or_slide`, `host_shape_id`, `region_id` |
+`image_groups` stores one record per unique media SHA-256 with all media paths and slide/shape
+occurrences. `text_screening` records the one-pass OCR plus visual result and every detected label's
+final status. Before apply, change `screening_status` from `pending` to `retain`, `localize`, or
+`manual_review`; retained/manual groups require `reason_code`. A localized PowerPoint image uses
+only `bilingual_below`, sets `preserve_source_image: true`, and has non-empty `overlay_ids` that
+reference top-level `overlays`. Every detected source label must end as `localized`,
+`target-language-already-present`, or `manual_review`; incomplete coverage blocks apply.
+An image already fully containing the requested target language uses `retain` with
+`reason_code: target-language-already-present`. `risk_plan` stores route, risk slides, complex
+reasons, and strict reasons.
 
-Preserve numbers, units, formulas, model identifiers, standards, and intentional whitespace in `protected_tokens` or translated text.
+Schema v1 is not a production input. Convert a job by rerunning `inspect` and `prepare` from the
+immutable source.

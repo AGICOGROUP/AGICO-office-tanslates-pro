@@ -308,6 +308,21 @@ function Get-ShapeById {
     return $null
 }
 
+function Get-ShapeCollectionIndexMap {
+    param($Slide)
+    $map = @{}
+    for ($shapeIndex = 1; $shapeIndex -le $Slide.Shapes.Count; $shapeIndex++) {
+        $shape = $Slide.Shapes.Item($shapeIndex)
+        try {
+            $map[[int]$shape.Id] = $shapeIndex
+        }
+        finally {
+            Release-ComObject $shape
+        }
+    }
+    return $map
+}
+
 function Test-TextOverflow {
     param(
         $Shape,
@@ -419,7 +434,8 @@ function Apply-ParagraphTranslation {
         $TextShape,
         $Item,
         [int]$ParagraphIndex,
-        [switch]$TableCell
+        [switch]$TableCell,
+        [switch]$DeferFit
     )
     if ([string]::IsNullOrWhiteSpace([string]$Item.translation)) {
         throw "Manifest item '$($Item.id)' has an empty translation."
@@ -471,6 +487,9 @@ function Apply-ParagraphTranslation {
             Release-ComObject $contentRange
         }
 
+        if ($DeferFit) {
+            return
+        }
         if ($TableCell) {
             Apply-LocalTableCellTextFit `
                 $TextShape `
@@ -500,12 +519,55 @@ function Apply-TranslationManifest {
     )
     $manifestFullPath = Resolve-ExistingPath $Path
     $manifest = Get-Content -LiteralPath $manifestFullPath -Raw -Encoding UTF8 | ConvertFrom-Json
-    if ($null -eq $manifest.items) {
-        throw "Manifest contains no items array: $manifestFullPath"
+    if ([int]$manifest.schema_version -ne 2) {
+        throw "Manifest schema_version must be 2: $manifestFullPath"
+    }
+    if ($null -eq $manifest.occurrences -or $null -eq $manifest.translation_units) {
+        throw "Manifest requires occurrences and translation_units arrays: $manifestFullPath"
+    }
+
+    $unitsById = @{}
+    foreach ($unit in @($manifest.translation_units)) {
+        $unitId = [string]$unit.id
+        if ([string]::IsNullOrWhiteSpace($unitId) -or $unitsById.ContainsKey($unitId)) {
+            throw "Manifest contains an invalid or duplicate translation unit id '$unitId'."
+        }
+        if ([string]::IsNullOrWhiteSpace([string]$unit.translation)) {
+            throw "Translation unit '$unitId' has an empty translation."
+        }
+        $unitsById[$unitId] = $unit
+    }
+
+    $manifestItems = @()
+    foreach ($occurrence in @($manifest.occurrences)) {
+        $unitId = [string]$occurrence.translation_unit_id
+        if (-not $unitsById.ContainsKey($unitId)) {
+            throw "Occurrence '$($occurrence.id)' references unknown translation unit '$unitId'."
+        }
+        $unit = $unitsById[$unitId]
+        if ([string]$occurrence.source_text -cne [string]$unit.source_text) {
+            throw "Occurrence '$($occurrence.id)' differs from translation unit '$unitId'."
+        }
+        $location = [ordered]@{
+            slide = [int]$occurrence.slide_index
+            shape_id = [int]$occurrence.shape_id
+            paragraph = [int]$occurrence.paragraph_index
+        }
+        if ([string]$occurrence.kind -eq "ppt_table_cell") {
+            $location.row = [int]$occurrence.row
+            $location.column = [int]$occurrence.column
+        }
+        $manifestItems += [pscustomobject]@{
+            id = [string]$occurrence.id
+            kind = [string]$occurrence.kind
+            source_text = [string]$occurrence.source_text
+            translation = [string]$unit.translation
+            location = [pscustomobject]$location
+        }
     }
 
     $resolvedItems = @()
-    foreach ($item in $manifest.items) {
+    foreach ($item in $manifestItems) {
         $kind = [string]$item.kind
         $location = $item.location
         switch ($kind) {
@@ -528,16 +590,6 @@ function Apply-TranslationManifest {
                 $paragraphIndex = [int]$location.paragraph
                 $row = [int]$location.row
                 $column = [int]$location.column
-            }
-            "shape_text" {
-                # Backward compatibility for manifests created before typed
-                # PowerPoint locations were introduced.
-                $kind = "ppt_paragraph"
-                $slideIndex = [int]$item.slide_index
-                $shapeId = [int]$item.shape_id
-                $paragraphIndex = [int]$item.paragraph_index
-                $row = 0
-                $column = 0
             }
             default {
                 throw "Unsupported manifest kind '$kind' for '$($item.id)'."
@@ -566,6 +618,9 @@ function Apply-TranslationManifest {
     }
 
     $groups = $resolvedItems | Group-Object TargetKey
+    $shapeIndexesBySlide = @{}
+    $slidesIndexed = 0
+    $fitOperations = 0
     foreach ($group in $groups) {
         $items = @(
             $group.Group |
@@ -587,11 +642,17 @@ function Apply-TranslationManifest {
         $cell = $null
         $cellShape = $null
         $originalShapeGeometry = $null
+        $originalFontSize = 0.0
         try {
-            $shape = Get-ShapeById $slide $shapeId
-            if ($null -eq $shape) {
+            if (-not $shapeIndexesBySlide.ContainsKey($slideIndex)) {
+                $shapeIndexesBySlide[$slideIndex] = Get-ShapeCollectionIndexMap $slide
+                $slidesIndexed++
+            }
+            $shapeIndexMap = $shapeIndexesBySlide[$slideIndex]
+            if (-not $shapeIndexMap.ContainsKey($shapeId)) {
                 throw "Manifest references missing shape $shapeId on slide $slideIndex."
             }
+            $shape = $slide.Shapes.Item([int]$shapeIndexMap[$shapeId])
 
             if ($kind -eq "ppt_table_cell") {
                 if (-not (Test-ShapeHasTable $shape)) {
@@ -620,6 +681,7 @@ function Apply-TranslationManifest {
                         "slide $slideIndex no longer contains editable text."
                     )
                 }
+                $originalFontSize = [double]$cellShape.TextFrame.TextRange.Font.Size
             }
             elseif (-not (Test-ShapeHasText $shape)) {
                 throw "Shape $shapeId on slide $slideIndex no longer contains editable text."
@@ -631,6 +693,7 @@ function Apply-TranslationManifest {
                     Width = [double]$shape.Width
                     Height = [double]$shape.Height
                 }
+                $originalFontSize = [double]$shape.TextFrame.TextRange.Font.Size
             }
 
             foreach ($resolvedItem in $items) {
@@ -644,8 +707,18 @@ function Apply-TranslationManifest {
                     $targetShape `
                     $resolvedItem.Item `
                     ([int]$resolvedItem.Paragraph) `
-                    -TableCell:($kind -eq "ppt_table_cell")
+                    -TableCell:($kind -eq "ppt_table_cell") `
+                    -DeferFit
             }
+            if ($kind -eq "ppt_table_cell") {
+                Apply-LocalTableCellTextFit `
+                    $cellShape 1 $originalFontSize ([string]$items[0].Item.id)
+            }
+            else {
+                Apply-LocalTextFit `
+                    $shape 1 $originalFontSize ([string]$items[0].Item.id)
+            }
+            $fitOperations++
             if ($null -ne $originalShapeGeometry) {
                 $shape.Left = $originalShapeGeometry.Left
                 $shape.Top = $originalShapeGeometry.Top
@@ -660,6 +733,14 @@ function Apply-TranslationManifest {
             Release-ComObject $shape
             Release-ComObject $slide
         }
+    }
+
+    return [ordered]@{
+        occurrences = @($manifest.occurrences).Count
+        translation_units = @($manifest.translation_units).Count
+        slides_indexed = $slidesIndexed
+        target_shapes = @($groups).Count
+        fit_operations = $fitOperations
     }
 }
 
@@ -734,40 +815,12 @@ function Apply-OverlayManifest {
         }
 
         $backgroundMode = "solid"
-        $patchAssetPath = ""
-        $sourceX = $x
-        $sourceY = $y
-        $sourceWidthRatio = $widthRatio
-        $sourceHeightRatio = $heightRatio
         if ($null -ne $item.background -and
             -not [string]::IsNullOrWhiteSpace([string]$item.background.mode)) {
             $backgroundMode = [string]$item.background.mode
         }
-        if ($backgroundMode -notin @("solid", "image_patch", "transparent")) {
+        if ($backgroundMode -notin @("solid", "transparent")) {
             throw "Overlay '$itemId' has unsupported background mode '$backgroundMode'."
-        }
-        if ($backgroundMode -eq "image_patch") {
-            if ($null -eq $item.source_region) {
-                throw "Overlay '$itemId' image_patch requires source_region."
-            }
-            $sourceX = [double]$item.source_region.x
-            $sourceY = [double]$item.source_region.y
-            $sourceWidthRatio = [double]$item.source_region.w
-            $sourceHeightRatio = [double]$item.source_region.h
-            if ($sourceX -lt 0 -or $sourceY -lt 0 -or
-                $sourceWidthRatio -le 0 -or $sourceHeightRatio -le 0 -or
-                ($sourceX + $sourceWidthRatio) -gt 1 -or
-                ($sourceY + $sourceHeightRatio) -gt 1) {
-                throw "Overlay '$itemId' has a source_region outside its host."
-            }
-            $patchAssetPath = [string]$item.background.asset_path
-            if ([string]::IsNullOrWhiteSpace($patchAssetPath)) {
-                throw "Overlay '$itemId' image_patch requires background.asset_path."
-            }
-            if (-not [IO.Path]::IsPathRooted($patchAssetPath)) {
-                $patchAssetPath = Join-Path (Split-Path -Parent $manifestFullPath) $patchAssetPath
-            }
-            $patchAssetPath = Resolve-ExistingPath $patchAssetPath
         }
 
         $fillColor = Convert-RgbHexToOfficeColor ([string]$item.style.fill_rgb) "fill_rgb"
@@ -787,21 +840,12 @@ function Apply-OverlayManifest {
 
         $slide = $Presentation.Slides.Item($slideIndex)
         $overlayShape = $null
-        $patchShape = $null
         $hostShape = $null
         $textRange = $null
         try {
             # Resolve the overlay before the host: releasing candidates while
             # scanning PowerPoint's COM collection can invalidate another RCW
             # for the same shape.
-            if ($backgroundMode -eq "image_patch") {
-                $patchShape = Get-TaggedOverlayShape $slide "maltipal_translate_patch" $itemId
-                if ($null -ne $patchShape) {
-                    $patchShape.Delete()
-                    Release-ComObject $patchShape
-                    $patchShape = $null
-                }
-            }
             $overlayShape = Get-TaggedOverlayShape $slide "maltipal_translate_overlay" $itemId
             $hostShape = Get-ShapeById $slide $hostShapeId
             if ($null -eq $hostShape) {
@@ -812,25 +856,6 @@ function Apply-OverlayManifest {
             $top = [double]$hostShape.Top + ($y * [double]$hostShape.Height)
             $width = $widthRatio * [double]$hostShape.Width
             $height = $heightRatio * [double]$hostShape.Height
-            if ($backgroundMode -eq "image_patch") {
-                $patchLeft = [double]$hostShape.Left + ($sourceX * [double]$hostShape.Width)
-                $patchTop = [double]$hostShape.Top + ($sourceY * [double]$hostShape.Height)
-                $patchWidth = $sourceWidthRatio * [double]$hostShape.Width
-                $patchHeight = $sourceHeightRatio * [double]$hostShape.Height
-                $patchShape = $slide.Shapes.AddPicture(
-                    $patchAssetPath, 0, -1,
-                    $patchLeft, $patchTop, $patchWidth, $patchHeight
-                )
-                $patchShape.LockAspectRatio = 0
-                $patchShape.Left = $patchLeft
-                $patchShape.Top = $patchTop
-                $patchShape.Width = $patchWidth
-                $patchShape.Height = $patchHeight
-                $patchShape.Tags.Add("maltipal_translate_patch", $itemId)
-                # Bring the patch forward first; the translated text is brought
-                # forward after it so the repaired pixels remain directly below.
-                $patchShape.ZOrder(0)
-            }
             if ($null -eq $overlayShape) {
                 # 1 = msoShapeRectangle
                 $overlayShape = $slide.Shapes.AddShape(1, $left, $top, $width, $height)
@@ -867,7 +892,6 @@ function Apply-OverlayManifest {
         finally {
             Release-ComObject $textRange
             Release-ComObject $hostShape
-            Release-ComObject $patchShape
             Release-ComObject $overlayShape
             Release-ComObject $slide
         }
@@ -1701,8 +1725,18 @@ try {
             Copy-Item -LiteralPath $inputFullPath -Destination $outputFullPath -Force
             # ReadOnly=false, Untitled=false, WithWindow=false
             $presentation = $application.Presentations.Open($outputFullPath, 0, 0, 0)
-            Apply-TranslationManifest $presentation $ManifestPath
+            $applyReport = Apply-TranslationManifest $presentation $ManifestPath
+            $combinedManifest = Get-Content -LiteralPath $ManifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+            $overlayCount = 0
+            if ($null -ne $combinedManifest.overlays) {
+                $overlayCount = @($combinedManifest.overlays).Count
+            }
+            if ($overlayCount -gt 0) {
+                Apply-OverlayManifest $presentation $ManifestPath
+            }
+            $applyReport["image_overlays"] = $overlayCount
             $presentation.Save()
+            $applyReport | ConvertTo-Json -Compress
         }
         "apply-overlays" {
             if ([string]::IsNullOrWhiteSpace($ManifestPath)) {
