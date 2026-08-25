@@ -1783,6 +1783,15 @@ try {
             # ReadOnly=false, Untitled=false, WithWindow=false
             $presentation = $application.Presentations.Open($outputFullPath, 0, 0, 0)
             $applyReport = Apply-TranslationManifest $presentation $ManifestPath
+            $combinedManifest = Get-Content -LiteralPath $ManifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+            $overlayCount = 0
+            if ($null -ne $combinedManifest.overlays) {
+                $overlayCount = @($combinedManifest.overlays).Count
+            }
+            if ($overlayCount -gt 0) {
+                Apply-OverlayManifest $presentation $ManifestPath
+            }
+            $applyReport["image_overlays"] = $overlayCount
             $presentation.Save()
             $applyReport | ConvertTo-Json -Compress
         }

@@ -42,6 +42,30 @@ class PowerPointOnlySkillContract(unittest.TestCase):
         self.assertNotIn("Reopen and render every slide", skill)
         self.assertNotIn("use `scripts/ppt_com.ps1`", skill.lower())
 
+    def test_embedded_image_translation_is_bilingual_below_only(self):
+        skill = (ROOT / "SKILL.md").read_text(encoding="utf-8").lower()
+        image_rule = (ROOT / "references" / "image-text-localization.md").read_text(
+            encoding="utf-8"
+        ).lower()
+        overlay_rule = (ROOT / "references" / "overlay-schema.md").read_text(
+            encoding="utf-8"
+        ).lower()
+        manifest_rule = (ROOT / "references" / "manifest-schema.md").read_text(
+            encoding="utf-8"
+        ).lower()
+        cli_rule = (ROOT / "references" / "pipeline-cli.md").read_text(
+            encoding="utf-8"
+        ).lower()
+
+        for text in (skill, image_rule, overlay_rule, manifest_rule, cli_rule):
+            self.assertIn("bilingual_below", text)
+        self.assertIn("preserve the original image", image_rule)
+        self.assertIn("immediately below", image_rule)
+        self.assertIn("do not erase", image_rule)
+        self.assertIn("target-language-already-present", image_rule)
+        self.assertIn("skip", image_rule)
+        self.assertIn("powerpoint embedded images only", skill)
+
     def test_deliverable_has_no_other_format_or_router_content(self):
         suffixes = {".md", ".yaml", ".json", ".py", ".ps1"}
         text = "\n".join(

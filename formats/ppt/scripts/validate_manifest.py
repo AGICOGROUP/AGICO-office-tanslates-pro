@@ -77,6 +77,19 @@ def validate_manifest(path: str | Path, require_translations: bool = False) -> d
     if not isinstance(data["risk_plan"], dict):
         raise ManifestError("risk_plan: expected an object")
 
+    overlays = data.get("overlays", [])
+    if not isinstance(overlays, list):
+        raise ManifestError("overlays: expected an array")
+    overlay_ids: set[str] = set()
+    for index, overlay in enumerate(overlays, start=1):
+        label = f"overlays[{index}]"
+        if not isinstance(overlay, dict):
+            raise ManifestError(f"{label}: expected an object")
+        overlay_id = non_empty_string(overlay.get("id"), f"{label}.id")
+        if overlay_id in overlay_ids:
+            raise ManifestError(f"{label}: duplicate id: {overlay_id}")
+        overlay_ids.add(overlay_id)
+
     units: dict[str, dict] = {}
     translated = 0
     for index, unit in enumerate(data["translation_units"], start=1):
@@ -159,6 +172,8 @@ def validate_manifest(path: str | Path, require_translations: bool = False) -> d
             raise ManifestError(f"{label}: occurrence does not match translation unit {unit_id}")
 
     seen_image_hashes: set[str] = set()
+    localized_images = 0
+    skipped_target_language_images = 0
     for index, group in enumerate(data["image_groups"], start=1):
         label = f"image_groups[{index}]"
         if not isinstance(group, dict):
@@ -178,6 +193,31 @@ def validate_manifest(path: str | Path, require_translations: bool = False) -> d
             raise ManifestError(f"{label}: image screening is still pending")
         if status in {"retain", "manual_review"}:
             non_empty_string(group.get("reason_code"), f"{label}.reason_code")
+        if status == "localize":
+            if group.get("localization_mode") != "bilingual_below":
+                raise ManifestError(
+                    f"{label}.localization_mode: expected bilingual_below"
+                )
+            if group.get("preserve_source_image") is not True:
+                raise ManifestError(
+                    f"{label}.preserve_source_image: expected true"
+                )
+            referenced_overlays = string_list(
+                group.get("overlay_ids"), f"{label}.overlay_ids"
+            )
+            if not referenced_overlays:
+                raise ManifestError(f"{label}.overlay_ids: expected at least one overlay")
+            unknown_overlays = sorted(set(referenced_overlays) - overlay_ids)
+            if unknown_overlays:
+                raise ManifestError(
+                    f"{label}.overlay_ids: unknown overlays: {', '.join(unknown_overlays)}"
+                )
+            localized_images += 1
+        elif (
+            status == "retain"
+            and group.get("reason_code") == "target-language-already-present"
+        ):
+            skipped_target_language_images += 1
 
     return {
         "source_file": data["source_file"],
@@ -185,6 +225,8 @@ def validate_manifest(path: str | Path, require_translations: bool = False) -> d
         "occurrences": len(data["occurrences"]),
         "translation_units": len(units),
         "image_groups": len(data["image_groups"]),
+        "localized_images": localized_images,
+        "skipped_target_language_images": skipped_target_language_images,
         "translated": translated,
         "untranslated": len(units) - translated,
     }

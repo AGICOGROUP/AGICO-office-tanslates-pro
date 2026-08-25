@@ -14,6 +14,9 @@ The UTF-8 JSON root requires:
   "occurrences": [],
   "translation_units": [],
   "image_groups": [],
+  "overlays": [],
+  "manual_reviews": [],
+  "legal_evidence": [],
   "risk_plan": {}
 }
 ```
@@ -30,8 +33,12 @@ match exactly.
 
 `image_groups` stores one record per unique media SHA-256 with all media paths and slide/shape
 occurrences. Before apply, change `screening_status` from `pending` to `retain`, `localize`, or
-`manual_review`; retained/manual groups require `reason_code`. `risk_plan` stores route, risk
-slides, complex reasons, and strict reasons.
+`manual_review`; retained/manual groups require `reason_code`. A localized PowerPoint image must
+set `localization_mode: bilingual_below`, `preserve_source_image: true`, and non-empty
+`overlay_ids` that reference top-level `overlays`. An image already fully containing the requested
+target language uses `retain` with
+`reason_code: target-language-already-present`. `risk_plan` stores route, risk slides, complex
+reasons, and strict reasons.
 
 Schema v1 is not a production input. Convert a job by rerunning `inspect` and `prepare` from the
 immutable source.

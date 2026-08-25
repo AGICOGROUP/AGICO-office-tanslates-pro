@@ -1,24 +1,32 @@
-# PowerPoint image-text localization
+# PowerPoint embedded-image translation
 
 ## Screen unique media only
 
-Use `inventory.json.image_groups`. Review each SHA-256 group once and apply the decision to all
-recorded slide/shape occurrences. Skip the image workflow entirely when no media groups exist.
+Use `inventory.json.image_groups`. Review each SHA-256 group once and apply the decision to every
+recorded slide/shape occurrence. Skip this workflow when no media groups exist.
 
-- `retain`: logo, photograph, no source-language text, or text that must remain unchanged.
-- `localize`: clear source-language labels that the user expects translated.
-- `manual_review`: uncertain reading or unsafe repair area.
+- `retain`: no translatable source text, or the image is already fully bilingual and contains the
+  requested target language.
+- `localize`: source labels need target-language partners.
+- `manual_review`: uncertain reading, incomplete existing bilingual content, or unsafe placement.
 
-Do not export and review identical image occurrences separately.
+When the complete target language is already present, skip the image and record
+`reason_code: target-language-already-present`. Do not add duplicate translations. If only some
+labels have target-language partners, add only the missing partners.
 
-## Localization method
+## Required localization mode
 
-1. Prefer native PowerPoint text when it exists.
-2. On a verified uniform semantic-free background, remove only the source glyph region with
-   `scripts/make_text_patch.py` and add a transparent editable text box.
-3. Where text touches linework, borders, gradients, texture, arrows, or equipment, use a lossless
-   local repair patch that restores every non-text pixel.
-4. Preserve unsafe regions and record manual review instead of guessing.
+PowerPoint embedded images only use `localization_mode: bilingual_below` with
+`preserve_source_image: true`:
 
-Preserve crop, aspect ratio, anchors, z-order, numbers, units, tags, arrows, process lines, symbols,
-equipment, and flow direction. Require zero changed pixels outside approved source-text masks.
+1. Preserve the original image, original pixels, and source-language labels unchanged.
+2. Add each target-language translation as a transparent, editable PowerPoint text box immediately below
+   its corresponding source label.
+3. Match the local alignment, color, and readable scale without covering equipment, arrows,
+   linework, dimensions, or another label.
+4. If the space below is insufficient or the pairing is uncertain, use `manual_review`.
+
+Do not erase, cover, patch, inpaint, or replace the original image text. Preserve crop, aspect
+ratio, anchors, z-order, numbers, units, tags, arrows, process lines, symbols, equipment, and flow
+direction. This rule applies only to images embedded in PowerPoint; other adapters keep their own
+image policies.

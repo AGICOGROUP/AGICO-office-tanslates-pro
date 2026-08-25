@@ -14,11 +14,13 @@ PIPELINE_SCRIPT = ROOT / "scripts" / "ppt_pipeline.py"
 sys.path.insert(0, str(ROOT / "scripts"))
 from ppt_pipeline import (  # noqa: E402
     STAGES,
+    apply_route,
     build_translation_manifest,
     complete_delivery,
     first_incomplete_stage,
     mark_stage,
     new_state,
+    verify_localized_image_hashes,
 )
 from validate_manifest import ManifestError, validate_manifest  # noqa: E402
 
@@ -67,6 +69,7 @@ class ManifestPreparationTests(unittest.TestCase):
         self.assertEqual(1, len(manifest["translation_units"]))
         unit_ids = {item["translation_unit_id"] for item in manifest["occurrences"]}
         self.assertEqual(1, len(unit_ids))
+        self.assertEqual([], manifest["overlays"])
 
     def test_same_short_text_in_different_roles_stays_separate(self):
         manifest = build_translation_manifest(
@@ -134,6 +137,58 @@ class ManifestPreparationTests(unittest.TestCase):
 
         self.assertEqual(1, summary["image_groups"])
 
+    def test_localized_ppt_image_requires_bilingual_below_mode(self):
+        source_inventory = inventory([occurrence("item-1")])
+        source_inventory["image_groups"] = [
+            {
+                "sha256": "b" * 64,
+                "media_paths": ["ppt/media/image1.png"],
+                "occurrences": [{"slide_index": 1, "shape_id": 3}],
+                "screening_status": "localize",
+            }
+        ]
+        manifest = build_translation_manifest(source_inventory, "es")
+        manifest["translation_units"][0]["translation"] = "Enfriador de parrilla"
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "manifest.json"
+            path.write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
+            with self.assertRaisesRegex(ManifestError, "bilingual_below"):
+                validate_manifest(path, require_translations=True)
+
+            image = manifest["image_groups"][0]
+            image["localization_mode"] = "bilingual_below"
+            image["preserve_source_image"] = True
+            path.write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
+            with self.assertRaisesRegex(ManifestError, "overlay_ids"):
+                validate_manifest(path, require_translations=True)
+
+            image["overlay_ids"] = ["image-overlay-1"]
+            manifest["overlays"] = [{"id": "image-overlay-1"}]
+            path.write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
+            summary = validate_manifest(path, require_translations=True)
+
+        self.assertEqual(1, summary["localized_images"])
+
+    def test_image_already_containing_target_language_is_retained(self):
+        source_inventory = inventory([occurrence("item-1")])
+        source_inventory["image_groups"] = [
+            {
+                "sha256": "b" * 64,
+                "media_paths": ["ppt/media/image1.png"],
+                "occurrences": [{"slide_index": 1, "shape_id": 3}],
+                "screening_status": "retain",
+                "reason_code": "target-language-already-present",
+            }
+        ]
+        manifest = build_translation_manifest(source_inventory, "es")
+        manifest["translation_units"][0]["translation"] = "Enfriador de parrilla"
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "manifest.json"
+            path.write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
+            summary = validate_manifest(path, require_translations=True)
+
+        self.assertEqual(1, summary["skipped_target_language_images"])
+
     def test_manifest_rejects_translation_that_drops_a_protected_token(self):
         manifest = build_translation_manifest(
             inventory([occurrence("item-1", text="Motor M1", protected_tokens=["M1"])]),
@@ -159,6 +214,32 @@ class ManifestPreparationTests(unittest.TestCase):
 
 
 class PipelineStateTests(unittest.TestCase):
+    def test_verification_rejects_a_changed_localized_image(self):
+        manifest = {
+            "image_groups": [
+                {"sha256": "a" * 64, "screening_status": "localize"},
+                {"sha256": "b" * 64, "screening_status": "retain"},
+            ]
+        }
+        self.assertEqual(
+            [{"code": "localized-image-changed", "sha256": "a" * 64}],
+            verify_localized_image_hashes(manifest, {"image_groups": []}),
+        )
+        self.assertEqual(
+            [],
+            verify_localized_image_hashes(
+                manifest,
+                {"image_groups": [{"sha256": "a" * 64}]},
+            ),
+        )
+
+    def test_localized_images_force_the_single_com_apply_route(self):
+        self.assertEqual(
+            "complex",
+            apply_route("fast", {"localized_images": 1}),
+        )
+        self.assertEqual("fast", apply_route("fast", {"localized_images": 0}))
+
     def test_state_resumes_from_first_incomplete_stage(self):
         state = new_state(inventory([occurrence("item-1")]), "en")
         self.assertEqual("preflight", first_incomplete_stage(state))

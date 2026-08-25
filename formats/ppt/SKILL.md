@@ -36,7 +36,10 @@ Use `scripts/ppt_pipeline.py` in this order:
 3. Retrieve only relevant glossary entries with `scripts/resolve_repo_glossary.py`: exact phrase,
    then longest non-overlapping listed terms, before model wording. Fill every translation unit.
    Classify each unique image group as `retain`, `localize`, or `manual_review`; `pending` blocks
-   apply.
+   apply. For PowerPoint embedded images only, `localize` always means `bilingual_below`: preserve
+   the original image and add the target language immediately below its corresponding source
+   label. If the image already fully contains the requested target language, use `retain` with
+   `target-language-already-present` and skip it.
 4. Validate the manifest and run `apply` once. Fast `.pptx` uses OOXML; complex work uses one
    internal PowerPoint COM mutation session.
 5. `verify` checks source hash, structure, occurrence coverage, translations, and protected tokens.
@@ -67,8 +70,9 @@ escalates it; it never silently weakens a quality gate.
   verified local repair requires a recorded change.
 - Deduplicate translation tasks only when source text, target language, role, context signature,
   and protected tokens match. Every occurrence remains independently written and verified.
-- Group images by SHA-256 and review each unique byte sequence once. Modify only confirmed source
-  text masks and require zero changed pixels outside approved masks.
+- Group images by SHA-256 and review each unique byte sequence once. PowerPoint embedded images only
+  use `bilingual_below`: preserve every original pixel and source label, then add editable target
+  text immediately below it. Do not erase or replace image text.
 - Allow natural wrapping and reasonable local reflow. Repair only real clipping, overlap,
   overflow, missing text, object displacement, or hierarchy damage.
 - Never install, locate, configure, or invoke LibreOffice automatically. Use it only after

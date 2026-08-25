@@ -33,6 +33,12 @@ def powerpoint_available() -> bool:
 
 @unittest.skipUnless(powerpoint_available(), "Microsoft PowerPoint COM is required")
 class PowerPointComPipelineContractTests(unittest.TestCase):
+    def test_apply_command_adds_image_overlays_before_its_single_save(self):
+        script = COM_SCRIPT.read_text(encoding="utf-8-sig")
+        apply_block = script.split('"apply" {', 1)[1].split('"apply-overlays" {', 1)[0]
+        self.assertIn("Apply-OverlayManifest $presentation $ManifestPath", apply_block)
+        self.assertEqual(1, apply_block.count("$presentation.Save()"))
+
     def test_inspect_converts_legacy_ppt_inside_the_pipeline(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

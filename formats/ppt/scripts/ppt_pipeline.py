@@ -85,6 +85,9 @@ def build_translation_manifest(
         "occurrences": occurrences,
         "translation_units": list(units_by_key.values()),
         "image_groups": inventory.get("image_groups", []),
+        "overlays": [],
+        "manual_reviews": [],
+        "legal_evidence": [],
         "risk_plan": inventory.get(
             "risk_plan",
             {"route": "strict", "complex_reasons": [], "strict_reasons": ["missing-risk-plan"]},
@@ -121,6 +124,25 @@ def first_incomplete_stage(state: dict) -> str | None:
         if not state["stages"][stage]["completed"]:
             return stage
     return None
+
+
+def apply_route(state_route: str, validation: dict) -> str:
+    if int(validation.get("localized_images", 0)) > 0:
+        return "complex"
+    return state_route
+
+
+def verify_localized_image_hashes(manifest: dict, output_inventory: dict) -> list[dict]:
+    output_hashes = {
+        str(group.get("sha256", ""))
+        for group in output_inventory.get("image_groups", [])
+    }
+    return [
+        {"code": "localized-image-changed", "sha256": str(group["sha256"])}
+        for group in manifest.get("image_groups", [])
+        if group.get("screening_status") == "localize"
+        and str(group.get("sha256", "")) not in output_hashes
+    ]
 
 
 def complete_delivery(
@@ -293,7 +315,8 @@ def command_apply(args: argparse.Namespace) -> int:
     mark_stage(state, "translate", str(manifest_path))
     mark_stage(state, "validate", str(manifest_path))
 
-    route = state.get("route", "strict")
+    route = apply_route(state.get("route", "strict"), validation)
+    state["route"] = route
     if route == "fast":
         apply_report = apply_manifest(mutation_source, manifest_path, output)
         apply_report["engine"] = "ooxml"
@@ -348,6 +371,7 @@ def command_verify(args: argparse.Namespace) -> int:
     if sha256_file(source) != inventory["source_sha256"]:
         errors.append({"code": "source-hash-mismatch"})
     output_inventory = inspect_package(output)
+    errors.extend(verify_localized_image_hashes(manifest, output_inventory))
     if len(output_inventory["slides"]) != len(inventory["slides"]):
         errors.append(
             {

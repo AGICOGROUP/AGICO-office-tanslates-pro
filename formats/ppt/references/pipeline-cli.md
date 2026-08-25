@@ -16,7 +16,10 @@ python scripts/ppt_pipeline.py deliver --job-dir <job-dir> --output <translated.
 `prepare` exits with code `3` intentionally after producing the manifest. Fill
 `translation_units[].translation`; do not edit or remove occurrences. Set every unique image
 group to `retain`, `localize`, or `manual_review` with the required evidence. A `pending` image
-group blocks apply.
+group blocks apply. A localized PPT image must use `bilingual_below`, preserve the source image,
+and reference its editable overlays. If the complete target language already exists, use `retain`
+with `target-language-already-present`; the pipeline skips that image. Localized images
+automatically select the single PowerPoint COM apply route so native text and overlays save once.
 
 After `render`, inspect the generated target thumbnails and every requested high-resolution risk
 slide. Run `deliver` only after that visual review passes; `render` never marks the file delivered.
