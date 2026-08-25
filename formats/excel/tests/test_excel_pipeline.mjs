@@ -10,6 +10,7 @@ import {
   buildRenderPlan,
   buildTranslationUnits,
   classifyRisk,
+  classifyBilingualGrid,
   completeStage,
   applyTranslations,
   invalidateFrom,
@@ -324,6 +325,82 @@ test("inspect prepare and apply translate text while preserving numbers and form
     assert.deepEqual(state.completedStages, [
       "preflight", "inspect", "prepare", "translate", "validate", "apply",
     ]);
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
+
+
+test("bilingual fast path rejects complex workbook objects before mutation", () => {
+  assert.deepEqual(classifyBilingualGrid({ features: {} }), { safe: true, reasons: [] });
+  assert.deepEqual(classifyBilingualGrid({
+    features: {
+      has_vba: true,
+      table_count: 1,
+      chart_count: 1,
+      comment_count: 1,
+      external_link_count: 1,
+      unsupported_drawing_count: 1,
+    },
+    image_uncertain: true,
+  }), {
+    safe: false,
+    reasons: [
+      "macro", "table", "chart", "comment", "external-link",
+      "unsupported-drawing", "image-uncertain",
+    ],
+  });
+});
+
+
+test("bilingual apply creates paired blue rows and keeps data only on source rows", async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "excel-bilingual-"));
+  try {
+    const source = path.join(directory, "source.xlsx");
+    const output = path.join(directory, "bilingual.xlsx");
+    const jobDir = path.join(directory, "job");
+    const workbook = Workbook.create();
+    const sheet = workbook.worksheets.add("Data");
+    sheet.getRange("A1:B1").values = [["设备表", null]];
+    sheet.getRange("A1:B1").merge();
+    sheet.getRange("A2:C2").values = [["001", 3, null]];
+    sheet.getRange("C2").formulas = [["=B2*2"]];
+    await (await SpreadsheetFile.exportXlsx(workbook)).save(source);
+
+    await inspectWorkbook({
+      input: source,
+      "job-dir": jobDir,
+      "target-language": "en",
+      "output-mode": "bilingual",
+      "skip-render": "true",
+    });
+    await prepareManifest({ "job-dir": jobDir });
+    const manifestPath = path.join(jobDir, "translation-manifest.json");
+    const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
+    for (const unit of manifest.translation_units) {
+      unit.translation = unit.source === "设备表" ? "Equipment List" : "Identifier";
+      unit.status = "translated";
+    }
+    await fs.writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+    await applyTranslations({ input: source, "job-dir": jobDir, output });
+
+    const result = await SpreadsheetFile.importXlsx(await FileBlob.load(output));
+    const resultSheet = result.worksheets.items.find((item) => item.name === "Data");
+    assert.deepEqual(resultSheet.getRange("A1:C4").values, [
+      ["设备表", null, null],
+      ["Equipment List", null, null],
+      ["001", 3, 6],
+      ["Identifier", null, null],
+    ]);
+    assert.equal(resultSheet.getRange("C3").formulas[0][0], "=B3*2");
+    assert.equal(resultSheet.getRange("C4").formulas[0][0], "");
+    assert.deepEqual(
+      resultSheet.__getMergedCells().map((merge) => `${merge.startAddress}:${merge.endAddress}`),
+      ["A1:B1", "A2:B2"],
+    );
+    assert.equal(resultSheet.getRange("A2").format.fill.color.value, "#EAF2F8");
+    assert.equal(resultSheet.getRange("A2").format.font.color.value, "#1F4E78");
+    assert.equal(resultSheet.getRange("A2").format.font.italic, true);
   } finally {
     await fs.rm(directory, { recursive: true, force: true });
   }

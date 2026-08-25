@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 
 import { createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { FileBlob, SpreadsheetFile } from "@oai/artifact-tool";
+import { FileBlob, SpreadsheetFile, Workbook } from "@oai/artifact-tool";
 
 
 export const JOB_STAGES = [
@@ -84,6 +85,22 @@ export function classifyRisk(meta = {}) {
   ];
   const reasons = checks.filter(([condition]) => Boolean(condition)).map(([, reason]) => reason);
   return { mode: reasons.length ? "strict" : "balanced", reasons };
+}
+
+
+export function classifyBilingualGrid(meta = {}) {
+  const features = meta.features ?? {};
+  const checks = [
+    [features.has_vba, "macro"],
+    [features.table_count > 0, "table"],
+    [features.chart_count > 0, "chart"],
+    [features.comment_count > 0, "comment"],
+    [features.external_link_count > 0, "external-link"],
+    [features.unsupported_drawing_count > 0, "unsupported-drawing"],
+    [meta.image_uncertain, "image-uncertain"],
+  ];
+  const reasons = checks.filter(([condition]) => Boolean(condition)).map(([, reason]) => reason);
+  return { safe: reasons.length === 0, reasons };
 }
 
 
@@ -251,6 +268,32 @@ function rangeOrigin(address) {
 }
 
 
+function rangeBounds(address) {
+  const match = /^\$?([A-Z]+)\$?(\d+)(?::\$?([A-Z]+)\$?(\d+))?$/i.exec(address ?? "");
+  if (!match) throw new Error(`cannot parse range address: ${address}`);
+  return {
+    startColumn: columnNumber(match[1].toUpperCase()),
+    startRow: Number(match[2]),
+    endColumn: columnNumber((match[3] ?? match[1]).toUpperCase()),
+    endRow: Number(match[4] ?? match[2]),
+  };
+}
+
+
+function splitCellAddress(address) {
+  const match = /^\$?([A-Z]+)\$?(\d+)$/i.exec(address ?? "");
+  if (!match) throw new Error(`cannot parse cell address: ${address}`);
+  return { column: match[1].toUpperCase(), row: Number(match[2]) };
+}
+
+
+export function mapFormulaToSourceRows(formula) {
+  return formula.replace(/(\$?[A-Z]{1,3})(\$?)(\d+)/g, (_, column, absolute, row) => (
+    `${column}${absolute}${Number(row) * 2 - 1}`
+  ));
+}
+
+
 function protectedTokens(text) {
   const matches = String(text).match(/(?:https?:\/\/\S+|\b[A-Z]{1,8}[-/]?\d[A-Z0-9./-]*\b|\b\d+(?:\.\d+)?\s*(?:kW|MW|V|kV|A|Hz|mm|cm|m|kg|t\/h|m³\/h)\b)/giu);
   return [...new Set(matches ?? [])];
@@ -270,6 +313,29 @@ function contextForCell(values, rowIndex, columnIndex) {
 
 async function loadState(jobDir) {
   return JSON.parse(await fs.readFile(path.join(jobDir, "job-state.json"), "utf8"));
+}
+
+
+function inspectOoxmlPackage(input, jobDir) {
+  const bundledPython = path.resolve(path.dirname(process.execPath), "..", "..", "python", "python.exe");
+  const python = process.env.CODEX_PYTHON || bundledPython;
+  const script = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "inspect_excel_package.py");
+  const extraction = path.join(jobDir, "images");
+  const result = spawnSync(python, [script, input, "--extract-dir", extraction], {
+    encoding: "utf8",
+    windowsHide: true,
+  });
+  if (result.status !== 0) {
+    throw new Error(`OOXML inspection failed: ${result.stderr || result.stdout}`);
+  }
+  const report = JSON.parse(result.stdout);
+  const features = report.features ?? {};
+  features.unsupported_drawing_count = (
+    features.drawing_count > 0
+    && features.chart_count === 0
+    && features.unique_image_count === 0
+  ) ? features.drawing_count : 0;
+  return { ...report, features };
 }
 
 
@@ -314,6 +380,7 @@ export async function inspectWorkbook(options) {
   if (state.completedStages.length > 0) state = invalidateFrom(state, "preflight");
 
   await fs.mkdir(path.join(jobDir, "renders", "preflight"), { recursive: true });
+  const packageReport = inspectOoxmlPackage(input, jobDir);
   const workbook = await SpreadsheetFile.importXlsx(await FileBlob.load(input));
   const sheets = [];
   const occurrences = [];
@@ -367,6 +434,9 @@ export async function inspectWorkbook(options) {
     output_mode: config.outputMode,
     sheets,
     occurrences,
+    features: packageReport.features,
+    images: packageReport.images,
+    image_uncertain: packageReport.features.unique_image_count > 0,
   };
   const inventoryPath = path.join(jobDir, "inventory.json");
   await writeJson(inventoryPath, inventory);
@@ -432,6 +502,80 @@ function validateTranslatedManifest(manifest, state) {
 }
 
 
+async function buildBilingualWorkbook(sourceWorkbook, manifest, units) {
+  const outputWorkbook = Workbook.create();
+  const occurrencesBySheet = new Map();
+  for (const occurrence of manifest.occurrences) {
+    if (occurrence.kind !== "cell") continue;
+    if (!occurrencesBySheet.has(occurrence.sheet)) occurrencesBySheet.set(occurrence.sheet, []);
+    occurrencesBySheet.get(occurrence.sheet).push(occurrence);
+  }
+
+  for (const source of sourceWorkbook.worksheets.items) {
+    const target = outputWorkbook.worksheets.add(source.name);
+    const used = source.getUsedRange();
+    if (!used?.address) continue;
+    const bounds = rangeBounds(used.address);
+    for (let column = bounds.startColumn; column <= bounds.endColumn; column += 1) {
+      const label = columnLabel(column);
+      const width = source.getRange(`${label}:${label}`).format.columnWidth;
+      if (typeof width === "number" && Number.isFinite(width)) {
+        target.getRange(`${label}:${label}`).format.columnWidth = width;
+      }
+    }
+    for (let row = bounds.startRow; row <= bounds.endRow; row += 1) {
+      const sourceRow = row * 2 - 1;
+      const translationRow = row * 2;
+      const first = columnLabel(bounds.startColumn);
+      const last = columnLabel(bounds.endColumn);
+      const original = source.getRange(`${first}${row}:${last}${row}`);
+      const sourceTarget = target.getRange(`${first}${sourceRow}:${last}${sourceRow}`);
+      const translationTarget = target.getRange(`${first}${translationRow}:${last}${translationRow}`);
+      sourceTarget.copyFrom(original, "all");
+      translationTarget.copyFrom(original, "all");
+      translationTarget.clear({ applyTo: "contents" });
+      const height = original.format.rowHeight;
+      if (typeof height === "number" && Number.isFinite(height)) {
+        sourceTarget.format.rowHeight = height;
+        translationTarget.format.rowHeight = Math.max(height, 18);
+      }
+      translationTarget.format.fill = "#EAF2F8";
+      translationTarget.format.font.name = "Arial";
+      translationTarget.format.font.color = "#1F4E78";
+      translationTarget.format.font.italic = true;
+      translationTarget.format.wrapText = true;
+      for (let column = bounds.startColumn; column <= bounds.endColumn; column += 1) {
+        const offset = column - bounds.startColumn;
+        const formula = original.formulas?.[0]?.[offset];
+        if (typeof formula === "string" && formula) {
+          target.getRange(`${columnLabel(column)}${sourceRow}`).formulas = [[mapFormulaToSourceRows(formula)]];
+        }
+      }
+    }
+
+    const merges = typeof source.__getMergedCells === "function" ? source.__getMergedCells() : [];
+    for (const merge of merges) {
+      const start = splitCellAddress(merge.startAddress);
+      const end = splitCellAddress(merge.endAddress);
+      if (start.row !== end.row) {
+        throw new Error(`bilingual fast path does not support vertical merge ${merge.startAddress}:${merge.endAddress}`);
+      }
+      const sourceRow = start.row * 2 - 1;
+      const translationRow = start.row * 2;
+      target.getRange(`${start.column}${sourceRow}:${end.column}${sourceRow}`).merge();
+      target.getRange(`${start.column}${translationRow}:${end.column}${translationRow}`).merge();
+    }
+
+    for (const occurrence of occurrencesBySheet.get(source.name) ?? []) {
+      const cell = splitCellAddress(occurrence.address);
+      const translation = units.get(occurrence.translation_unit_id).translation;
+      target.getRange(`${cell.column}${cell.row * 2}`).values = [[translation]];
+    }
+  }
+  return outputWorkbook;
+}
+
+
 export async function applyTranslations(options) {
   requireOptions(options, ["input", "job-dir", "output"]);
   const input = path.resolve(options.input);
@@ -450,15 +594,24 @@ export async function applyTranslations(options) {
   const workbook = await SpreadsheetFile.importXlsx(await FileBlob.load(input));
   const sheets = new Map(workbook.worksheets.items.map((sheet) => [sheet.name, sheet]));
   const changedSheets = new Set();
-  for (const occurrence of manifest.occurrences) {
-    if (occurrence.kind !== "cell") continue;
-    const sheet = sheets.get(occurrence.sheet);
-    if (!sheet) throw new Error(`worksheet not found: ${occurrence.sheet}`);
-    sheet.getRange(occurrence.address).values = [[units.get(occurrence.translation_unit_id).translation]];
-    changedSheets.add(occurrence.sheet);
+  let outputWorkbook = workbook;
+  if (state.outputMode === "bilingual") {
+    const inventory = JSON.parse(await fs.readFile(path.join(jobDir, "inventory.json"), "utf8"));
+    const safety = classifyBilingualGrid(inventory);
+    if (!safety.safe) throw new Error(`bilingual strict fallback required: ${safety.reasons.join(", ")}`);
+    outputWorkbook = await buildBilingualWorkbook(workbook, manifest, units);
+    for (const occurrence of manifest.occurrences) changedSheets.add(occurrence.sheet);
+  } else {
+    for (const occurrence of manifest.occurrences) {
+      if (occurrence.kind !== "cell") continue;
+      const sheet = sheets.get(occurrence.sheet);
+      if (!sheet) throw new Error(`worksheet not found: ${occurrence.sheet}`);
+      sheet.getRange(occurrence.address).values = [[units.get(occurrence.translation_unit_id).translation]];
+      changedSheets.add(occurrence.sheet);
+    }
   }
   await fs.mkdir(path.dirname(output), { recursive: true });
-  const blob = await SpreadsheetFile.exportXlsx(workbook);
+  const blob = await SpreadsheetFile.exportXlsx(outputWorkbook);
   await blob.save(output);
   state = completeStage(state, "apply", { output: await sha256File(output) });
   state.outputPaths = { ...state.outputPaths, output };
