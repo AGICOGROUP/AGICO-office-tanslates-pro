@@ -68,18 +68,27 @@ class WordAdapterStructureTests(unittest.TestCase):
         self.assertTrue(skill.is_file())
         text = skill.read_text(encoding="utf-8")
         required_phrases = (
-            "documents:documents",
             "does not depend on another Office translation skill",
             f"../../references/{GLOSSARY_NAME}",
             "editable",
             "image text",
             "protected tokens",
             "Never overwrite",
-            "render every page",
+            "Microsoft Word",
+            "Print Layout",
+            "without an external PDF conversion or rendering gate",
         )
         for phrase in required_phrases:
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, text)
+        for forbidden in (
+            "documents:documents",
+            "render every page",
+            "complete rendered comparison",
+            "ExportAsFixedFormat",
+        ):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, text)
 
     def test_word_ui_metadata_exists(self):
         metadata = ROOT / "formats" / "word" / "agents" / "openai.yaml"
