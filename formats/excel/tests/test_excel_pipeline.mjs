@@ -8,6 +8,7 @@ import { FileBlob, SpreadsheetFile, Workbook } from "@oai/artifact-tool";
 
 import {
   buildRenderPlan,
+  buildImageReviewPlan,
   buildTranslationUnits,
   classifyRisk,
   classifyBilingualGrid,
@@ -19,8 +20,10 @@ import {
   nextStage,
   prepareManifest,
   reconcileJobState,
+  renderOutput,
   saveJobState,
   translationReuseKey,
+  verifyTranslations,
 } from "../scripts/excel_pipeline.mjs";
 
 
@@ -325,6 +328,88 @@ test("inspect prepare and apply translate text while preserving numbers and form
     assert.deepEqual(state.completedStages, [
       "preflight", "inspect", "prepare", "translate", "validate", "apply",
     ]);
+
+    const verification = await verifyTranslations({
+      source, "job-dir": jobDir, output,
+    });
+    assert.equal(verification.passed, true, JSON.stringify(verification));
+    const verifiedState = JSON.parse(await fs.readFile(path.join(jobDir, "job-state.json"), "utf8"));
+    assert.equal(verifiedState.completedStages.at(-1), "verify");
+    const rendered = await renderOutput({
+      "job-dir": jobDir, output, "skip-render": "true",
+    });
+    assert.deepEqual(rendered.sheets.map((item) => item.name), ["S1"]);
+    assert.equal(rendered.next_stage, "deliver");
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
+
+
+test("image review plan skips empty workbooks and reviews duplicate bytes once", () => {
+  assert.deepEqual(buildImageReviewPlan([]), {
+    skipped: true, groups: [], deep_review_ids: [], strict_reasons: [],
+  });
+  const plan = buildImageReviewPlan([
+    {
+      id: "img-a", sha256: "a".repeat(64),
+      occurrences: ["S1!drawing1", "S2!drawing4"],
+      status: "retain", reason_code: "logo-or-brand",
+    },
+    {
+      id: "img-b", sha256: "b".repeat(64),
+      occurrences: ["S1!drawing2"],
+      status: "manual-review", reason_code: "manual-review",
+    },
+  ]);
+  assert.equal(plan.groups.length, 2);
+  assert.deepEqual(plan.deep_review_ids, ["img-b"]);
+  assert.deepEqual(plan.strict_reasons, ["image-manual-review"]);
+});
+
+
+test("verification reports changed formulas numbers merges and missing translations", async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "excel-verify-bad-"));
+  try {
+    const source = path.join(directory, "source.xlsx");
+    const output = path.join(directory, "translated.xlsx");
+    const jobDir = path.join(directory, "job");
+    const workbook = Workbook.create();
+    const sheet = workbook.worksheets.add("S1");
+    sheet.getRange("A1:C2").values = [["标签", 4, null], ["合并", null, null]];
+    sheet.getRange("C1").formulas = [["=B1*2"]];
+    sheet.getRange("A2:B2").merge();
+    await (await SpreadsheetFile.exportXlsx(workbook)).save(source);
+    await inspectWorkbook({
+      input: source, "job-dir": jobDir, "target-language": "en",
+      "output-mode": "monolingual", "skip-render": "true",
+    });
+    await prepareManifest({ "job-dir": jobDir });
+    const manifestPath = path.join(jobDir, "translation-manifest.json");
+    const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
+    for (const unit of manifest.translation_units) {
+      unit.translation = `EN:${unit.source}`;
+      unit.status = "translated";
+    }
+    await fs.writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+    await applyTranslations({ input: source, "job-dir": jobDir, output });
+
+    const damaged = await SpreadsheetFile.importXlsx(await FileBlob.load(output));
+    const damagedSheet = damaged.worksheets.items[0];
+    damagedSheet.getRange("A1").values = [["wrong"]];
+    damagedSheet.getRange("B1").values = [[5]];
+    damagedSheet.getRange("C1").formulas = [["=B1*3"]];
+    damagedSheet.getRange("A2:B2").unmerge();
+    await (await SpreadsheetFile.exportXlsx(damaged)).save(output);
+
+    const report = await verifyTranslations({ source, "job-dir": jobDir, output });
+    assert.equal(report.passed, false);
+    assert.ok(report.errors.includes("missing-translation:S1!A1"));
+    assert.ok(report.errors.includes("non-text-change:S1!B1"));
+    assert.ok(report.errors.includes("formula-change:S1!C1"));
+    assert.ok(report.errors.includes("merge-change:S1"));
+    const state = JSON.parse(await fs.readFile(path.join(jobDir, "job-state.json"), "utf8"));
+    assert.equal(state.completedStages.at(-1), "apply");
   } finally {
     await fs.rm(directory, { recursive: true, force: true });
   }

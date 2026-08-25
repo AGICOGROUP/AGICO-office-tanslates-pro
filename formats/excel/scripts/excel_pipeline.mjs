@@ -142,6 +142,37 @@ export function buildRenderPlan({
 }
 
 
+export function buildImageReviewPlan(inputImages) {
+  if (!Array.isArray(inputImages)) throw new TypeError("images must be an array");
+  if (inputImages.length === 0) {
+    return { skipped: true, groups: [], deep_review_ids: [], strict_reasons: [] };
+  }
+  const byHash = new Map();
+  for (const image of inputImages) {
+    const existing = byHash.get(image.sha256);
+    if (!existing) {
+      byHash.set(image.sha256, { ...image, occurrences: [...(image.occurrences ?? [])] });
+    } else {
+      existing.occurrences = [...new Set([...existing.occurrences, ...(image.occurrences ?? [])])];
+      if (image.status === "manual-review") {
+        existing.status = "manual-review";
+        existing.reason_code = "manual-review";
+      }
+    }
+  }
+  const groups = [...byHash.values()];
+  return {
+    skipped: false,
+    groups,
+    deep_review_ids: groups
+      .filter((image) => ["localized", "manual-review"].includes(image.status))
+      .map((image) => image.id),
+    strict_reasons: groups.some((image) => image.status === "manual-review")
+      ? ["image-manual-review"] : [],
+  };
+}
+
+
 function assertJobConfig({ sourceSha256, targetLanguage, outputMode }) {
   if (typeof sourceSha256 !== "string" || sourceSha256.length !== 64) {
     throw new Error("sourceSha256 must be a 64-character digest");
@@ -464,7 +495,13 @@ export async function prepareManifest(options) {
     output_mode: inventory.output_mode,
     occurrences: built.occurrences,
     translation_units: built.translation_units,
-    images: [],
+    images: (inventory.images ?? []).map((image) => ({
+      id: `img-${image.sha256.slice(0, 16)}`,
+      sha256: image.sha256,
+      occurrences: [...image.occurrences],
+      status: "manual-review",
+      reason_code: "manual-review",
+    })),
   };
   const manifestPath = path.join(jobDir, "translation-manifest.json");
   await writeJson(manifestPath, manifest);
@@ -576,6 +613,203 @@ async function buildBilingualWorkbook(sourceWorkbook, manifest, units) {
 }
 
 
+function normalizedMerges(sheet) {
+  if (typeof sheet.__getMergedCells !== "function") return [];
+  return sheet.__getMergedCells()
+    .map((merge) => `${merge.startAddress}:${merge.endAddress}`)
+    .sort();
+}
+
+
+function cellContent(sheet, address) {
+  const range = sheet.getRange(address);
+  return {
+    value: range.values?.[0]?.[0],
+    formula: range.formulas?.[0]?.[0],
+  };
+}
+
+
+function blank(value) {
+  return value === null || value === undefined || value === "";
+}
+
+
+function expectedBilingualMerges(sourceSheet, errors) {
+  const expected = [];
+  for (const merge of sourceSheet.__getMergedCells?.() ?? []) {
+    const start = splitCellAddress(merge.startAddress);
+    const end = splitCellAddress(merge.endAddress);
+    if (start.row !== end.row) {
+      errors.push(`unsupported-vertical-merge:${sourceSheet.name}!${merge.startAddress}:${merge.endAddress}`);
+      continue;
+    }
+    expected.push(`${start.column}${start.row * 2 - 1}:${end.column}${end.row * 2 - 1}`);
+    expected.push(`${start.column}${start.row * 2}:${end.column}${end.row * 2}`);
+  }
+  return expected.sort();
+}
+
+
+export async function verifyTranslations(options) {
+  requireOptions(options, ["source", "job-dir", "output"]);
+  const sourcePath = path.resolve(options.source);
+  const outputPath = path.resolve(options.output);
+  const jobDir = path.resolve(options["job-dir"]);
+  let state = await loadState(jobDir);
+  if (nextStage(state) !== "verify") throw new Error(`verify requires stage verify; found ${nextStage(state)}`);
+  const errors = [];
+  if (await sha256File(sourcePath) !== state.sourceSha256) errors.push("source-hash-change");
+  const manifest = JSON.parse(await fs.readFile(path.join(jobDir, "translation-manifest.json"), "utf8"));
+  let sourceWorkbook;
+  let outputWorkbook;
+  try {
+    sourceWorkbook = await SpreadsheetFile.importXlsx(await FileBlob.load(sourcePath));
+    outputWorkbook = await SpreadsheetFile.importXlsx(await FileBlob.load(outputPath));
+  } catch (error) {
+    errors.push(`output-open-failure:${error.message}`);
+  }
+
+  if (sourceWorkbook && outputWorkbook) {
+    const sourceNames = sourceWorkbook.worksheets.items.map((sheet) => sheet.name);
+    const outputNames = outputWorkbook.worksheets.items.map((sheet) => sheet.name);
+    if (JSON.stringify(sourceNames) !== JSON.stringify(outputNames)) errors.push("sheet-order-change");
+    const outputSheets = new Map(outputWorkbook.worksheets.items.map((sheet) => [sheet.name, sheet]));
+    const units = new Map(manifest.translation_units.map((unit) => [unit.id, unit]));
+    for (const sourceSheet of sourceWorkbook.worksheets.items) {
+      const outputSheet = outputSheets.get(sourceSheet.name);
+      if (!outputSheet) {
+        errors.push(`missing-sheet:${sourceSheet.name}`);
+        continue;
+      }
+      const expectedMerges = state.outputMode === "bilingual"
+        ? expectedBilingualMerges(sourceSheet, errors)
+        : normalizedMerges(sourceSheet);
+      if (JSON.stringify(expectedMerges) !== JSON.stringify(normalizedMerges(outputSheet))) {
+        errors.push(`merge-change:${sourceSheet.name}`);
+      }
+      const used = sourceSheet.getUsedRange();
+      if (!used?.address) continue;
+      const bounds = rangeBounds(used.address);
+      for (let row = bounds.startRow; row <= bounds.endRow; row += 1) {
+        for (let column = bounds.startColumn; column <= bounds.endColumn; column += 1) {
+          const address = `${columnLabel(column)}${row}`;
+          const sourceCell = cellContent(sourceSheet, address);
+          const targetAddress = state.outputMode === "bilingual"
+            ? `${columnLabel(column)}${row * 2 - 1}` : address;
+          const outputCell = cellContent(outputSheet, targetAddress);
+          if (!blank(sourceCell.formula)) {
+            const expected = state.outputMode === "bilingual"
+              ? mapFormulaToSourceRows(sourceCell.formula) : sourceCell.formula;
+            if (outputCell.formula !== expected) errors.push(`formula-change:${sourceSheet.name}!${address}`);
+          } else if (typeof sourceCell.value !== "string" && sourceCell.value !== outputCell.value) {
+            errors.push(`non-text-change:${sourceSheet.name}!${address}`);
+          } else if (state.outputMode === "bilingual" && typeof sourceCell.value === "string"
+            && sourceCell.value !== outputCell.value) {
+            errors.push(`source-text-change:${sourceSheet.name}!${address}`);
+          }
+          if (state.outputMode === "bilingual") {
+            const translationCell = cellContent(outputSheet, `${columnLabel(column)}${row * 2}`);
+            if ((typeof sourceCell.value !== "string" || !blank(sourceCell.formula))
+              && (!blank(translationCell.value) || !blank(translationCell.formula))) {
+              errors.push(`bilingual-nontext-duplicate:${sourceSheet.name}!${address}`);
+            }
+          }
+        }
+      }
+    }
+    for (const occurrence of manifest.occurrences) {
+      const outputSheet = outputSheets.get(occurrence.sheet);
+      if (!outputSheet) continue;
+      const unit = units.get(occurrence.translation_unit_id);
+      const sourceCell = splitCellAddress(occurrence.address);
+      const targetAddress = state.outputMode === "bilingual"
+        ? `${sourceCell.column}${sourceCell.row * 2}` : occurrence.address;
+      const actual = cellContent(outputSheet, targetAddress).value;
+      if (actual !== unit.translation) errors.push(`missing-translation:${occurrence.id}`);
+      for (const token of unit.protected_tokens ?? []) {
+        if (!String(actual ?? "").includes(token)) errors.push(`protected-token-change:${occurrence.id}:${token}`);
+      }
+    }
+    for (const sheet of outputWorkbook.worksheets.items) {
+      const used = sheet.getUsedRange();
+      for (const row of used?.values ?? []) {
+        for (const value of row) {
+          if (typeof value === "string" && /^#(?:REF!|DIV\/0!|VALUE!|NAME\?|N\/A)$/.test(value)) {
+            errors.push(`formula-error:${sheet.name}:${value}`);
+          }
+        }
+      }
+    }
+  }
+
+  const report = {
+    passed: errors.length === 0,
+    errors: [...new Set(errors)],
+    source_sha256: state.sourceSha256,
+    output_sha256: await sha256File(outputPath).catch(() => null),
+  };
+  const reportPath = path.join(jobDir, "verification.json");
+  await writeJson(reportPath, report);
+  if (report.passed) {
+    state = completeStage(state, "verify", { report: await sha256File(reportPath) });
+  } else {
+    state.strictReasons = [...new Set([...state.strictReasons, ...report.errors.map((item) => item.split(":")[0])])];
+  }
+  await saveJobState(path.join(jobDir, "job-state.json"), state);
+  return report;
+}
+
+
+export async function renderOutput(options) {
+  requireOptions(options, ["job-dir", "output"]);
+  const jobDir = path.resolve(options["job-dir"]);
+  const outputPath = path.resolve(options.output);
+  let state = await loadState(jobDir);
+  if (nextStage(state) !== "render") throw new Error(`render requires stage render; found ${nextStage(state)}`);
+  const verification = JSON.parse(await fs.readFile(path.join(jobDir, "verification.json"), "utf8"));
+  if (!verification.passed) throw new Error("render requires a passing verification report");
+  const inventory = JSON.parse(await fs.readFile(path.join(jobDir, "inventory.json"), "utf8"));
+  const manifest = JSON.parse(await fs.readFile(path.join(jobDir, "translation-manifest.json"), "utf8"));
+  const imagePlan = buildImageReviewPlan(manifest.images ?? []);
+  const risk = classifyRisk({
+    extension: path.extname(outputPath).toLowerCase(),
+    features: inventory.features,
+    image_uncertain: imagePlan.strict_reasons.length > 0,
+  });
+  const workbook = await SpreadsheetFile.importXlsx(await FileBlob.load(outputPath));
+  const sheets = workbook.worksheets.items.map((sheet) => ({
+    name: sheet.name, visible: true, used: Boolean(sheet.getUsedRange()?.address),
+  }));
+  const changedSheets = [...new Set(manifest.occurrences.map((item) => item.sheet))];
+  const plan = buildRenderPlan({
+    phase: "final", outputMode: state.outputMode, sheets, changedSheets, risk,
+  });
+  if (plan.fullPrintPages) {
+    plan.reasons = [...new Set([...plan.reasons, "print-page-verification-required"])];
+    plan.mode = "strict";
+  }
+  const renderDir = path.join(jobDir, "final-renders");
+  await fs.mkdir(renderDir, { recursive: true });
+  if (options["skip-render"] !== "true") {
+    for (const item of plan.sheets) {
+      const sheet = workbook.worksheets.items.find((candidate) => candidate.name === item.name);
+      const rendered = await workbook.render({
+        sheetName: item.name, range: sheet.getUsedRange().address, scale: 1, format: "png",
+      });
+      const safeName = item.name.replace(/[<>:"/\\|?*]/g, "_");
+      await fs.writeFile(path.join(renderDir, `${safeName}.png`), new Uint8Array(await rendered.arrayBuffer()));
+    }
+  }
+  const planPath = path.join(jobDir, "render-plan.json");
+  await writeJson(planPath, { ...plan, image_review: imagePlan });
+  state.strictReasons = [...new Set([...state.strictReasons, ...plan.reasons, ...imagePlan.strict_reasons])];
+  state = completeStage(state, "render", { plan: await sha256File(planPath) });
+  await saveJobState(path.join(jobDir, "job-state.json"), state);
+  return { ...plan, next_stage: nextStage(state) };
+}
+
+
 export async function applyTranslations(options) {
   requireOptions(options, ["input", "job-dir", "output"]);
   const input = path.resolve(options.input);
@@ -627,9 +861,12 @@ export async function main(argv = process.argv.slice(2)) {
   if (command === "inspect") result = await inspectWorkbook(options);
   else if (command === "prepare") result = await prepareManifest(options);
   else if (command === "apply") result = await applyTranslations(options);
-  else throw new Error("usage: excel_pipeline.mjs inspect|prepare|apply [options]");
+  else if (command === "verify") result = await verifyTranslations(options);
+  else if (command === "render") result = await renderOutput(options);
+  else throw new Error("usage: excel_pipeline.mjs inspect|prepare|apply|verify|render [options]");
   process.stdout.write(`${JSON.stringify(result)}\n`);
   if (command === "prepare") process.exitCode = 3;
+  if (command === "verify" && !result.passed) process.exitCode = 2;
 }
 
 
