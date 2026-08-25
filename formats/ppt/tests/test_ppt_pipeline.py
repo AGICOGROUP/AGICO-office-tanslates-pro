@@ -59,6 +59,15 @@ def inventory(items: list[dict]) -> dict:
     }
 
 
+def no_image_text_screening() -> dict:
+    return {
+        "method": "single-pass-ocr-and-visual",
+        "source_language_text_detected": False,
+        "target_language_present": False,
+        "labels": [],
+    }
+
+
 class ManifestPreparationTests(unittest.TestCase):
     def test_same_text_and_context_reuse_one_translation_unit(self):
         manifest = build_translation_manifest(
@@ -120,6 +129,7 @@ class ManifestPreparationTests(unittest.TestCase):
                 "media_paths": ["ppt/media/image1.png"],
                 "occurrences": [{"slide_index": 1, "shape_id": 3}],
                 "screening_status": "pending",
+                "text_screening": no_image_text_screening(),
             }
         ]
         manifest = build_translation_manifest(source_inventory, "en")
@@ -145,10 +155,21 @@ class ManifestPreparationTests(unittest.TestCase):
                 "media_paths": ["ppt/media/image1.png"],
                 "occurrences": [{"slide_index": 1, "shape_id": 3}],
                 "screening_status": "localize",
+                "text_screening": {
+                    "method": "single-pass-ocr-and-visual",
+                    "source_language_text_detected": True,
+                    "target_language_present": False,
+                    "labels": [{
+                        "id": "label-1", "source_text": "冷却机",
+                        "translation": "Enfriador", "status": "localized",
+                        "overlay_id": "image-overlay-1",
+                    }],
+                },
             }
         ]
         manifest = build_translation_manifest(source_inventory, "es")
         manifest["translation_units"][0]["translation"] = "Enfriador de parrilla"
+        manifest["overlays"] = [{"id": "image-overlay-1"}]
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "manifest.json"
             path.write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
@@ -178,6 +199,15 @@ class ManifestPreparationTests(unittest.TestCase):
                 "occurrences": [{"slide_index": 1, "shape_id": 3}],
                 "screening_status": "retain",
                 "reason_code": "target-language-already-present",
+                "text_screening": {
+                    "method": "single-pass-ocr-and-visual",
+                    "source_language_text_detected": True,
+                    "target_language_present": True,
+                    "labels": [{
+                        "id": "label-1", "source_text": "冷却机",
+                        "status": "target-language-already-present",
+                    }],
+                },
             }
         ]
         manifest = build_translation_manifest(source_inventory, "es")
@@ -188,6 +218,93 @@ class ManifestPreparationTests(unittest.TestCase):
             summary = validate_manifest(path, require_translations=True)
 
         self.assertEqual(1, summary["skipped_target_language_images"])
+
+    def test_detected_image_text_requires_complete_label_coverage(self):
+        manifest = build_translation_manifest(inventory([occurrence("item-1")]), "fr")
+        manifest["translation_units"][0]["translation"] = "Refroidisseur à grille"
+        manifest["image_groups"] = [
+            {
+                "sha256": "b" * 64,
+                "media_paths": ["ppt/media/image1.png"],
+                "occurrences": [{"slide_index": 1, "shape_id": 3}],
+                "screening_status": "retain",
+                "reason_code": "source-labels-covered-by-native-text",
+                "text_screening": {
+                    "method": "single-pass-ocr-and-visual",
+                    "source_language_text_detected": True,
+                    "target_language_present": False,
+                    "labels": [
+                        {
+                            "id": "label-1",
+                            "source_text": "平台",
+                            "status": "target-language-already-present",
+                        }
+                    ],
+                },
+            }
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "manifest.json"
+            path.write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
+            with self.assertRaisesRegex(ManifestError, "source-labels-covered-by-native-text"):
+                validate_manifest(path, require_translations=True)
+
+    def test_text_region_replace_requires_masked_patch_and_zero_outside_change(self):
+        manifest = build_translation_manifest(inventory([occurrence("item-1")]), "fr")
+        manifest["translation_units"][0]["translation"] = "Refroidisseur à grille"
+        manifest["overlays"] = [
+            {
+                "id": "image-overlay-1",
+                "kind": "office_overlay",
+                "localization_mode": "text_region_replace",
+                "source_text": "平台",
+                "translation": "Plate-forme",
+                "source_region": {"x": 0.1, "y": 0.1, "w": 0.2, "h": 0.1},
+                "region": {"x": 0.1, "y": 0.1, "w": 0.2, "h": 0.1},
+                "background": {"mode": "image_patch", "asset_path": "patch.png"},
+            }
+        ]
+        manifest["image_groups"] = [
+            {
+                "sha256": "b" * 64,
+                "media_paths": ["ppt/media/image1.png"],
+                "occurrences": [{"slide_index": 1, "shape_id": 3}],
+                "screening_status": "localize",
+                "localization_mode": "text_region_replace",
+                "preserve_source_image": True,
+                "overlay_ids": ["image-overlay-1"],
+                "text_screening": {
+                    "method": "single-pass-ocr-and-visual",
+                    "source_language_text_detected": True,
+                    "target_language_present": False,
+                    "labels": [
+                        {
+                            "id": "label-1",
+                            "source_text": "平台",
+                            "translation": "Plate-forme",
+                            "status": "localized",
+                            "overlay_id": "image-overlay-1",
+                        }
+                    ],
+                },
+                "outside_mask_pixel_check": {"passed": False, "changed_pixels": 12},
+            }
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "manifest.json"
+            path.write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
+            with self.assertRaisesRegex(ManifestError, "outside_mask_pixel_check"):
+                validate_manifest(path, require_translations=True)
+
+            manifest["image_groups"][0]["outside_mask_pixel_check"] = {
+                "passed": True,
+                "changed_pixels": 0,
+            }
+            path.write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
+            summary = validate_manifest(path, require_translations=True)
+
+        self.assertEqual(1, summary["localized_images"])
+        self.assertEqual(1, summary["covered_image_labels"])
 
     def test_manifest_rejects_translation_that_drops_a_protected_token(self):
         manifest = build_translation_manifest(

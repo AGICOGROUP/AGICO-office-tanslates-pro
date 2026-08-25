@@ -32,11 +32,13 @@ serve multiple occurrences, but every referenced source text and protected-token
 match exactly.
 
 `image_groups` stores one record per unique media SHA-256 with all media paths and slide/shape
-occurrences. Before apply, change `screening_status` from `pending` to `retain`, `localize`, or
-`manual_review`; retained/manual groups require `reason_code`. A localized PowerPoint image must
-set `localization_mode: bilingual_below`, `preserve_source_image: true`, and non-empty
-`overlay_ids` that reference top-level `overlays`. An image already fully containing the requested
-target language uses `retain` with
+occurrences. `text_screening` records the one-pass OCR plus visual result and every detected label's
+final status. Before apply, change `screening_status` from `pending` to `retain`, `localize`, or
+`manual_review`; retained/manual groups require `reason_code`. A localized PowerPoint image uses
+`bilingual_below` or `text_region_replace`, sets `preserve_source_image: true`, and has non-empty
+`overlay_ids` that reference top-level `overlays`. `text_region_replace` additionally requires a
+lossless `image_patch`, equal source/target regions, and a passing zero-change outside-mask check.
+An image already fully containing the requested target language uses `retain` with
 `reason_code: target-language-already-present`. `risk_plan` stores route, risk slides, complex
 reasons, and strict reasons.
 

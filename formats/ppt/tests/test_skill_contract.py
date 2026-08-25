@@ -42,7 +42,7 @@ class PowerPointOnlySkillContract(unittest.TestCase):
         self.assertNotIn("Reopen and render every slide", skill)
         self.assertNotIn("use `scripts/ppt_com.ps1`", skill.lower())
 
-    def test_embedded_image_translation_is_bilingual_below_only(self):
+    def test_embedded_image_translation_uses_two_precision_modes(self):
         skill = (ROOT / "SKILL.md").read_text(encoding="utf-8").lower()
         image_rule = (ROOT / "references" / "image-text-localization.md").read_text(
             encoding="utf-8"
@@ -59,9 +59,11 @@ class PowerPointOnlySkillContract(unittest.TestCase):
 
         for text in (skill, image_rule, overlay_rule, manifest_rule, cli_rule):
             self.assertIn("bilingual_below", text)
+            self.assertIn("text_region_replace", text)
         self.assertIn("preserve the original image", image_rule)
         self.assertIn("immediately below", image_rule)
-        self.assertIn("do not erase", image_rule)
+        self.assertIn("outside-mask", image_rule)
+        self.assertIn("single-pass", image_rule)
         self.assertIn("target-language-already-present", image_rule)
         self.assertIn("skip", image_rule)
         self.assertIn("powerpoint embedded images only", skill)

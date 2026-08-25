@@ -81,6 +81,7 @@ def validate_manifest(path: str | Path, require_translations: bool = False) -> d
     if not isinstance(overlays, list):
         raise ManifestError("overlays: expected an array")
     overlay_ids: set[str] = set()
+    overlays_by_id: dict[str, dict] = {}
     for index, overlay in enumerate(overlays, start=1):
         label = f"overlays[{index}]"
         if not isinstance(overlay, dict):
@@ -89,6 +90,7 @@ def validate_manifest(path: str | Path, require_translations: bool = False) -> d
         if overlay_id in overlay_ids:
             raise ManifestError(f"{label}: duplicate id: {overlay_id}")
         overlay_ids.add(overlay_id)
+        overlays_by_id[overlay_id] = overlay
 
     units: dict[str, dict] = {}
     translated = 0
@@ -174,6 +176,7 @@ def validate_manifest(path: str | Path, require_translations: bool = False) -> d
     seen_image_hashes: set[str] = set()
     localized_images = 0
     skipped_target_language_images = 0
+    covered_image_labels = 0
     for index, group in enumerate(data["image_groups"], start=1):
         label = f"image_groups[{index}]"
         if not isinstance(group, dict):
@@ -191,12 +194,76 @@ def validate_manifest(path: str | Path, require_translations: bool = False) -> d
             raise ManifestError(f"{label}.screening_status: unsupported status: {status}")
         if require_translations and status == "pending":
             raise ManifestError(f"{label}: image screening is still pending")
+        screening = group.get("text_screening")
+        if require_translations and not isinstance(screening, dict):
+            raise ManifestError(f"{label}.text_screening: expected an object")
+        if isinstance(screening, dict):
+            if screening.get("method") != "single-pass-ocr-and-visual":
+                raise ManifestError(
+                    f"{label}.text_screening.method: expected single-pass-ocr-and-visual"
+                )
+            source_detected = screening.get("source_language_text_detected")
+            target_present = screening.get("target_language_present")
+            if not isinstance(source_detected, bool) or not isinstance(target_present, bool):
+                raise ManifestError(
+                    f"{label}.text_screening: detection flags must be boolean"
+                )
+            labels = screening.get("labels")
+            if not isinstance(labels, list):
+                raise ManifestError(f"{label}.text_screening.labels: expected an array")
+            if source_detected and not labels:
+                raise ManifestError(
+                    f"{label}.text_screening.labels: detected source text requires labels"
+                )
+            if not source_detected and labels:
+                raise ManifestError(
+                    f"{label}.text_screening.labels: labels contradict detection result"
+                )
+            for label_index, text_label in enumerate(labels, start=1):
+                item_label = f"{label}.text_screening.labels[{label_index}]"
+                if not isinstance(text_label, dict):
+                    raise ManifestError(f"{item_label}: expected an object")
+                non_empty_string(text_label.get("id"), f"{item_label}.id")
+                non_empty_string(text_label.get("source_text"), f"{item_label}.source_text")
+                label_status = non_empty_string(
+                    text_label.get("status"), f"{item_label}.status"
+                )
+                allowed_label_statuses = {
+                    "localized", "target-language-already-present", "manual_review"
+                }
+                if label_status not in allowed_label_statuses:
+                    raise ManifestError(
+                        f"{item_label}.status: incomplete image-label coverage: {label_status}"
+                    )
+                if label_status == "localized":
+                    non_empty_string(
+                        text_label.get("translation"), f"{item_label}.translation"
+                    )
+                    overlay_id = non_empty_string(
+                        text_label.get("overlay_id"), f"{item_label}.overlay_id"
+                    )
+                    if overlay_id not in overlay_ids:
+                        raise ManifestError(f"{item_label}.overlay_id: unknown overlay: {overlay_id}")
+                covered_image_labels += 1
+            if status == "retain" and source_detected:
+                if group.get("reason_code") != "target-language-already-present":
+                    raise ManifestError(
+                        f"{label}.reason_code: source-labels-covered-by-native-text is not allowed; "
+                        "detected image text needs its own target-language status"
+                    )
+                if not target_present or any(
+                    item.get("status") != "target-language-already-present" for item in labels
+                ):
+                    raise ManifestError(
+                        f"{label}: retained source-language image is not fully target-language complete"
+                    )
         if status in {"retain", "manual_review"}:
             non_empty_string(group.get("reason_code"), f"{label}.reason_code")
         if status == "localize":
-            if group.get("localization_mode") != "bilingual_below":
+            localization_mode = group.get("localization_mode")
+            if localization_mode not in {"bilingual_below", "text_region_replace"}:
                 raise ManifestError(
-                    f"{label}.localization_mode: expected bilingual_below"
+                    f"{label}.localization_mode: expected bilingual_below or text_region_replace"
                 )
             if group.get("preserve_source_image") is not True:
                 raise ManifestError(
@@ -212,6 +279,31 @@ def validate_manifest(path: str | Path, require_translations: bool = False) -> d
                 raise ManifestError(
                     f"{label}.overlay_ids: unknown overlays: {', '.join(unknown_overlays)}"
                 )
+            if localization_mode == "text_region_replace":
+                pixel_check = group.get("outside_mask_pixel_check")
+                if (
+                    not isinstance(pixel_check, dict)
+                    or pixel_check.get("passed") is not True
+                    or pixel_check.get("changed_pixels") != 0
+                ):
+                    raise ManifestError(
+                        f"{label}.outside_mask_pixel_check: expected passed=true and changed_pixels=0"
+                    )
+                for overlay_id in referenced_overlays:
+                    overlay = overlays_by_id[overlay_id]
+                    if overlay.get("localization_mode") != "text_region_replace":
+                        raise ManifestError(
+                            f"overlays[{overlay_id}].localization_mode: expected text_region_replace"
+                        )
+                    background = overlay.get("background")
+                    if not isinstance(background, dict) or background.get("mode") != "image_patch":
+                        raise ManifestError(
+                            f"overlays[{overlay_id}].background.mode: expected image_patch"
+                        )
+                    if overlay.get("source_region") != overlay.get("region"):
+                        raise ManifestError(
+                            f"overlays[{overlay_id}]: replacement region must equal source_region"
+                        )
             localized_images += 1
         elif (
             status == "retain"
@@ -227,6 +319,7 @@ def validate_manifest(path: str | Path, require_translations: bool = False) -> d
         "image_groups": len(data["image_groups"]),
         "localized_images": localized_images,
         "skipped_target_language_images": skipped_target_language_images,
+        "covered_image_labels": covered_image_labels,
         "translated": translated,
         "untranslated": len(units) - translated,
     }
