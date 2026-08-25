@@ -7,10 +7,14 @@ import argparse
 from hashlib import sha256
 import json
 from pathlib import Path
+import shutil
+import subprocess
 import sys
 from typing import Any
 
-from inspect_pptx_package import InspectionError, inspect_package
+from inspect_pptx_package import InspectionError, inspect_package, sha256_file
+from pptx_ooxml import OoxmlError, apply_manifest
+from validate_manifest import ManifestError, validate_manifest
 
 
 STAGES = (
@@ -171,6 +175,65 @@ def command_prepare(args: argparse.Namespace) -> int:
     return 3
 
 
+def command_apply(args: argparse.Namespace) -> int:
+    source = args.input.resolve()
+    output = args.output.resolve()
+    if source == output:
+        raise PipelineError("refusing to overwrite the source presentation")
+    inventory = read_json(args.job_dir / "inventory.json")
+    state = read_json(args.job_dir / "job-state.json")
+    manifest_path = args.job_dir / "translation-manifest.json"
+    if sha256_file(source) != inventory["source_sha256"]:
+        raise PipelineError("source hash differs from the inspected source")
+    validation = validate_manifest(manifest_path, require_translations=True)
+    mark_stage(state, "translate", str(manifest_path))
+    mark_stage(state, "validate", str(manifest_path))
+
+    route = state.get("route", "strict")
+    if route == "fast":
+        apply_report = apply_manifest(source, manifest_path, output)
+        apply_report["engine"] = "ooxml"
+    else:
+        powershell = shutil.which("powershell.exe")
+        if not powershell:
+            raise PipelineError("Microsoft PowerPoint COM requires powershell.exe")
+        command = [
+            powershell,
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(Path(__file__).with_name("ppt_com.ps1")),
+            "-Command",
+            "apply",
+            "-InputPath",
+            str(source),
+            "-OutputPath",
+            str(output),
+            "-ManifestPath",
+            str(manifest_path),
+        ]
+        completed = subprocess.run(command, capture_output=True, text=True, encoding="utf-8")
+        if completed.returncode != 0:
+            raise PipelineError(completed.stderr.strip() or "PowerPoint COM apply failed")
+        try:
+            apply_report = json.loads(completed.stdout)
+        except json.JSONDecodeError as exc:
+            raise PipelineError("PowerPoint COM apply returned invalid JSON") from exc
+        apply_report["engine"] = "powerpoint-com"
+        state["metrics"]["powerpoint_starts"] += 1
+        state["metrics"]["presentation_opens"] += 2
+
+    apply_report["manifest_validation"] = validation
+    report_path = args.job_dir / "apply-report.json"
+    write_json(report_path, apply_report)
+    mark_stage(state, "apply", str(report_path))
+    state["output_path"] = str(output)
+    write_json(args.job_dir / "job-state.json", state)
+    print(json.dumps(apply_report, ensure_ascii=False))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -183,6 +246,11 @@ def build_parser() -> argparse.ArgumentParser:
     prepare_parser.add_argument("--job-dir", required=True, type=Path)
     prepare_parser.add_argument("--source-language", default="auto")
     prepare_parser.set_defaults(handler=command_prepare)
+    apply_parser = subparsers.add_parser("apply")
+    apply_parser.add_argument("--input", required=True, type=Path)
+    apply_parser.add_argument("--job-dir", required=True, type=Path)
+    apply_parser.add_argument("--output", required=True, type=Path)
+    apply_parser.set_defaults(handler=command_apply)
     return parser
 
 
@@ -190,7 +258,7 @@ def main() -> int:
     args = build_parser().parse_args()
     try:
         return int(args.handler(args))
-    except (PipelineError, InspectionError) as exc:
+    except (PipelineError, InspectionError, ManifestError, OoxmlError) as exc:
         print(f"pipeline error: {exc}", file=sys.stderr)
         return 2
 

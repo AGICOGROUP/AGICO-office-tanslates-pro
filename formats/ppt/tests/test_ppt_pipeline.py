@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
 import unittest
+from zipfile import ZIP_DEFLATED, ZipFile
 
 
 ROOT = Path(__file__).resolve().parents[1]
+PIPELINE_SCRIPT = ROOT / "scripts" / "ppt_pipeline.py"
 sys.path.insert(0, str(ROOT / "scripts"))
 from ppt_pipeline import (  # noqa: E402
     STAGES,
@@ -114,6 +117,75 @@ class PipelineStateTests(unittest.TestCase):
         mark_stage(state, "inspect")
         self.assertEqual("prepare", first_incomplete_stage(state))
         self.assertEqual(list(STAGES), list(state["stages"]))
+
+    def test_fast_pipeline_applies_all_translations_through_single_entry(self):
+        slide = """<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+        xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree>
+        <p:sp><p:nvSpPr><p:cNvPr id="2" name="Title"/></p:nvSpPr><p:txBody><a:p>
+        <a:r><a:t>篦式冷却机</a:t></a:r></a:p></p:txBody></p:sp>
+        </p:spTree></p:cSld></p:sld>"""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source.pptx"
+            output = root / "output.pptx"
+            job = root / "job"
+            with ZipFile(source, "w", ZIP_DEFLATED) as archive:
+                archive.writestr("[Content_Types].xml", "<Types/>")
+                archive.writestr("ppt/slides/slide1.xml", slide)
+
+            inspected = subprocess.run(
+                [
+                    sys.executable,
+                    str(PIPELINE_SCRIPT),
+                    "inspect",
+                    "--input",
+                    str(source),
+                    "--job-dir",
+                    str(job),
+                    "--target-language",
+                    "en",
+                ],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+            )
+            self.assertEqual(0, inspected.returncode, inspected.stderr)
+            prepared = subprocess.run(
+                [sys.executable, str(PIPELINE_SCRIPT), "prepare", "--job-dir", str(job)],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+            )
+            self.assertEqual(3, prepared.returncode, prepared.stderr)
+            manifest_path = job / "translation-manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["translation_units"][0]["translation"] = "Grate cooler"
+            manifest_path.write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
+
+            applied = subprocess.run(
+                [
+                    sys.executable,
+                    str(PIPELINE_SCRIPT),
+                    "apply",
+                    "--input",
+                    str(source),
+                    "--job-dir",
+                    str(job),
+                    "--output",
+                    str(output),
+                ],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+            )
+            self.assertEqual(0, applied.returncode, applied.stderr)
+            state = json.loads((job / "job-state.json").read_text(encoding="utf-8"))
+            with ZipFile(output) as archive:
+                translated_slide = archive.read("ppt/slides/slide1.xml").decode("utf-8")
+
+        self.assertIn("Grate cooler", translated_slide)
+        self.assertTrue(state["stages"]["apply"]["completed"])
+        self.assertEqual(0, state["metrics"]["powerpoint_starts"])
 
 
 if __name__ == "__main__":

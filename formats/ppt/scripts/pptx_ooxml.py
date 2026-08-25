@@ -218,8 +218,12 @@ def load_manifest(path: Path) -> dict:
         manifest = json.loads(path.read_text(encoding="utf-8-sig"))
     except (OSError, json.JSONDecodeError) as exc:
         raise OoxmlError(f"cannot read manifest {path}: {exc}") from exc
-    if not isinstance(manifest.get("items"), list):
-        raise OoxmlError("manifest contains no items array")
+    if manifest.get("schema_version") != 2:
+        raise OoxmlError("manifest schema_version must be 2")
+    if not isinstance(manifest.get("occurrences"), list):
+        raise OoxmlError("manifest contains no occurrences array")
+    if not isinstance(manifest.get("translation_units"), list):
+        raise OoxmlError("manifest contains no translation_units array")
     return manifest
 
 
@@ -230,9 +234,31 @@ def apply_manifest(input_path: Path, manifest_path: Path, output_path: Path) -> 
         raise OoxmlError(f"input file not found: {input_path}")
 
     manifest = load_manifest(manifest_path)
+    units: dict[str, dict] = {}
+    for unit in manifest["translation_units"]:
+        unit_id = str(unit.get("id", ""))
+        if not unit_id or unit_id in units:
+            raise OoxmlError(f"invalid or duplicate translation unit id: {unit_id!r}")
+        translation = str(unit.get("translation", ""))
+        if not translation.strip():
+            raise OoxmlError(f"translation unit {unit_id!r} has an empty translation")
+        units[unit_id] = unit
+
     items_by_slide: dict[int, list[dict]] = {}
-    for item in manifest["items"]:
-        items_by_slide.setdefault(int(item["slide_index"]), []).append(item)
+    for occurrence in manifest["occurrences"]:
+        unit_id = str(occurrence.get("translation_unit_id", ""))
+        unit = units.get(unit_id)
+        if unit is None:
+            raise OoxmlError(
+                f"{occurrence.get('id', 'unknown')}: unknown translation unit {unit_id!r}"
+            )
+        if str(occurrence.get("source_text", "")) != str(unit.get("source_text", "")):
+            raise OoxmlError(
+                f"{occurrence.get('id', 'unknown')}: source text differs from translation unit"
+            )
+        resolved = dict(occurrence)
+        resolved["translation"] = unit["translation"]
+        items_by_slide.setdefault(int(resolved["slide_index"]), []).append(resolved)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     replaced = 0
@@ -259,7 +285,11 @@ def apply_manifest(input_path: Path, manifest_path: Path, output_path: Path) -> 
                         replaced += len(slide_items)
                 target.writestr(copy.copy(entry), payload)
 
-    return {"items": len(manifest["items"]), "replaced": replaced}
+    return {
+        "occurrences": len(manifest["occurrences"]),
+        "translation_units": len(manifest["translation_units"]),
+        "replaced": replaced,
+    }
 
 
 def main() -> int:
