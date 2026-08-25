@@ -1,20 +1,48 @@
-# PowerPoint workflow
+# PowerPoint balanced workflow
 
-## Choose the mutation path
+## Processing boundary
 
-- `.ppt`: use installed PowerPoint through `scripts/ppt_com.ps1`, save to a new file, and retain the legacy format unless conversion is explicitly requested.
-- `.pptx`: use `scripts/pptx_ooxml.py` for stable ordered text-node replacement. Use PowerPoint COM for native tables, charts, notes, grouped objects, or overlay placement that requires the application object model.
+`scripts/ppt_pipeline.py` is the only production entry. It owns state, stage order, artifact paths,
+risk escalation, and delivery. `pptx_ooxml.py`, `ppt_com.ps1`, and `office_com_pdf.ps1` are internal
+adapters and must not be assembled into a second workflow.
 
-## Native text
+## Inspect once
 
-Replace paragraphs, runs, table-cell text, chart labels, and notes in place. Retain run properties, paragraph properties, object geometry, theme references, and relationships. Apply translations by stable object identity rather than string search.
+The inspector reads the OOXML package once and records every native text occurrence, its stable
+slide/shape/paragraph identity, role, context signature, protected tokens, package features, and
+media relationship. Identical media bytes share one SHA-256 image group while retaining all
+locations.
 
-Before translation, run `../scripts/resolve_repo_glossary.py` and search the resolved repository glossary `../../../references/水泥专业名词中英对照.md` for the complete Chinese phrase and then for the longest contained listed term. Use listed translations before proposing a new model translation. Apply `typography-and-fit.md` after native text replacement and before delivery.
+Plain text boxes and regular tables remain fast when the scanner covers their text nodes. Charts,
+SmartArt, notes, grouped objects, embedded objects, macros, or uncertain image text add explicit
+risk reasons. High-stakes user intent selects strict mode regardless of file features.
 
-## Tables and charts
+## Translate once
 
-Inventory merged cells, row heights, column widths, alignment, fills, borders, formulas, series, axes, legends, and data links. Translate only visible labels. Do not alter numeric data, formulas, chart series, or link targets.
+`occurrences` are the complete location inventory. `translation_units` are the safely reusable
+model tasks. Reuse requires equal source text, target language, role, context signature, and
+protected tokens. Ambiguous short text stays separate.
 
-## Verification
+Search the shared glossary only for text in the current translation units. Use exact matches first,
+then the longest non-overlapping contained terms, then professional contextual translation.
 
-Reopen the saved result, extract all native text, and compare slide/object counts with the original. Render every slide at 2x; render dense diagrams at 3x. Check clipping, wrapping, overlap, contrast, source-language residue, terminology compliance, peer typography, protected tokens, and any approved local additions. Treat geometry changes without verified overflow or collision as failures.
+## Write once
+
+Fast `.pptx` jobs mutate all target OOXML text nodes in one archive pass. Complex jobs index shapes
+once per slide, write all paragraphs for a shape, perform one local fit check for that shape, and
+save once. Never overwrite the source and never carry a prior translated deck forward as input.
+
+## Verify by risk
+
+Deterministic verification precedes visual work: source hash, ZIP integrity, slide count, stable
+occurrence IDs, exact expected translations, protected tokens, relationships, and media. Microsoft
+PowerPoint then opens the final file and exports one PDF in the same session used to create final
+thumbnails. Run that automation in a hidden background session: open presentations with no window,
+suppress alerts, and hide the application window again before PDF export. Keep the stable
+PowerPoint `SaveAs PDF` path; visual suppression must not replace or weaken official verification.
+
+Fast jobs render all final slides at low resolution and risk slides at high resolution. Complex
+jobs add all changed/risk slides at high resolution. Strict jobs render source and target fully.
+After a local repair, rerender only affected slides unless new evidence expands the risk set.
+The render stage produces review evidence but does not complete delivery. Delivery requires an
+explicit successful visual-review gate through the pipeline's `deliver` command.

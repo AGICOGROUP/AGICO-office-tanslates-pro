@@ -1,10 +1,36 @@
 param(
     [Parameter(Mandatory = $true)][string]$InputPath,
     [Parameter(Mandatory = $true)][string]$OutputPdf,
-    [ValidateSet('auto','word','excel','powerpoint')][string]$Application = 'auto'
+    [ValidateSet('auto','word','excel','powerpoint')][string]$Application = 'auto',
+    [string]$ThumbnailDirectory,
+    [string]$HighResolutionSlides = ''
 )
 
 $ErrorActionPreference = 'Stop'
+
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public static class OfficeWindowControl {
+    [DllImport("user32.dll")]
+    public static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);
+}
+'@
+
+function Hide-PowerPointWindow {
+    param($PowerPointApplication)
+    try {
+        $handle = [IntPtr][int64]$PowerPointApplication.HWND
+        if ($handle -ne [IntPtr]::Zero) {
+            # 0 = SW_HIDE
+            [void][OfficeWindowControl]::ShowWindowAsync($handle, 0)
+        }
+    }
+    catch {
+        # WithWindow=false remains the primary control if HWND is unavailable.
+    }
+}
+
 $inputFull = [IO.Path]::GetFullPath($InputPath)
 $outputFull = [IO.Path]::GetFullPath($OutputPdf)
 if (-not (Test-Path -LiteralPath $inputFull -PathType Leaf)) { throw "Input not found: $inputFull" }
@@ -20,6 +46,10 @@ if ($Application -eq 'auto') {
 }
 
 $app = $document = $workbook = $presentation = $null
+$lowResolutionCount = 0
+$highResolutionCount = 0
+$presentationOpens = 0
+$powerpointStarts = 0
 try {
     if ($Application -eq 'word') {
         $app = New-Object -ComObject Word.Application
@@ -37,8 +67,62 @@ try {
     }
     else {
         $app = New-Object -ComObject PowerPoint.Application
-        $presentation = $app.Presentations.Open($inputFull, $true, $false, $false)
+        # 1 = ppAlertsNone.
+        $app.DisplayAlerts = 1
+        Hide-PowerPointWindow $app
+        $powerpointStarts = 1
+        # ReadOnly=true, Untitled=false, WithWindow=false.
+        $presentation = $app.Presentations.Open($inputFull, -1, 0, 0)
+        Hide-PowerPointWindow $app
+        $presentationOpens = 1
+        # 32 = ppSaveAsPDF.
+        Hide-PowerPointWindow $app
         $presentation.SaveAs($outputFull, 32)
+
+        if (-not [string]::IsNullOrWhiteSpace($ThumbnailDirectory)) {
+            $thumbnailFull = [IO.Path]::GetFullPath($ThumbnailDirectory)
+            [IO.Directory]::CreateDirectory($thumbnailFull) | Out-Null
+            $highDirectory = Join-Path $thumbnailFull 'high'
+            $highSet = @{}
+            foreach ($value in ($HighResolutionSlides -split ',')) {
+                $trimmed = $value.Trim()
+                if (-not [string]::IsNullOrWhiteSpace($trimmed)) {
+                    $index = 0
+                    if (-not [int]::TryParse($trimmed, [ref]$index) -or $index -lt 1) {
+                        throw "Invalid HighResolutionSlides value: $trimmed"
+                    }
+                    $highSet[$index] = $true
+                }
+            }
+            if ($highSet.Count -gt 0) {
+                [IO.Directory]::CreateDirectory($highDirectory) | Out-Null
+            }
+            $lowWidth = 640
+            $lowHeight = [int][Math]::Round(
+                $lowWidth * [double]$presentation.PageSetup.SlideHeight /
+                [double]$presentation.PageSetup.SlideWidth
+            )
+            $highWidth = 1920
+            $highHeight = [int][Math]::Round(
+                $highWidth * [double]$presentation.PageSetup.SlideHeight /
+                [double]$presentation.PageSetup.SlideWidth
+            )
+            for ($slideIndex = 1; $slideIndex -le $presentation.Slides.Count; $slideIndex++) {
+                $slide = $presentation.Slides.Item($slideIndex)
+                try {
+                    $name = 'slide-{0:D3}.png' -f $slideIndex
+                    $slide.Export((Join-Path $thumbnailFull $name), 'PNG', $lowWidth, $lowHeight)
+                    $lowResolutionCount++
+                    if ($highSet.ContainsKey($slideIndex)) {
+                        $slide.Export((Join-Path $highDirectory $name), 'PNG', $highWidth, $highHeight)
+                        $highResolutionCount++
+                    }
+                }
+                finally {
+                    [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($slide)
+                }
+            }
+        }
     }
 }
 finally {
@@ -49,8 +133,18 @@ finally {
     foreach ($obj in @($document,$workbook,$presentation,$app)) {
         if ($obj) { [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($obj) }
     }
-    [GC]::Collect(); [GC]::WaitForPendingFinalizers()
+    [GC]::Collect()
+    [GC]::WaitForPendingFinalizers()
 }
 
 if (-not (Test-Path -LiteralPath $outputFull -PathType Leaf)) { throw "Office did not create PDF: $outputFull" }
-Get-Item -LiteralPath $outputFull | Select-Object FullName, Length, LastWriteTime
+[ordered]@{
+    application = $Application
+    input = $inputFull
+    pdf = $outputFull
+    pdf_created = $true
+    powerpoint_starts = $powerpointStarts
+    presentation_opens = $presentationOpens
+    low_resolution_slides = $lowResolutionCount
+    high_resolution_slides = $highResolutionCount
+} | ConvertTo-Json -Compress
