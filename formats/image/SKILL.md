@@ -14,10 +14,11 @@ Translate one static PNG or JPEG image. Return the same image format with the sa
 Read `formats/pdf/scan/SKILL.md` and all references it requires. Apply its OCR inventory, translation, glyph-only cleanup, icon fidelity, terminology, layout, visual review, and residual-language gates without weakening them.
 
 1. Fingerprint the immutable source image and create an isolated job directory.
-2. Run `scripts/image_pdf_bridge.py wrap <source-image> <job/source.pdf> <job/image-metadata.json>`.
-3. Treat `job/source.pdf` as a one-page scan-only PDF. Follow `formats/pdf/scan/SKILL.md` from extraction through verified translated PDF output. Do not run the PDF classifier; the bridge output is deliberately raster-only.
-4. Run `scripts/image_pdf_bridge.py unwrap <translated.pdf> <job/image-metadata.json> <output-image>`.
-5. Visually compare the final image with the original at full view and high zoom. Apply the scan quality gates to the single image, excluding only PDF-specific selectability, font-embedding, and page-count delivery requirements.
+2. Run OCR and inspect the full-resolution source image. If OCR finds zero readable text and full-image visual inspection confirms there is no readable text, record `translation_complete_no_text` with the source hash, empty OCR result, and completed visual review. Mark the translation phase complete and stop. Do not create a translated image or PDF, and do not run cleanup, layout, build, or verification. OCR alone is insufficient for this decision.
+3. Otherwise, run `scripts/image_pdf_bridge.py wrap <source-image> <job/source.pdf> <job/image-metadata.json>`.
+4. Treat `job/source.pdf` as a one-page scan-only PDF. Follow `formats/pdf/scan/SKILL.md` from extraction through verified translated PDF output. Do not run the PDF classifier; the bridge output is deliberately raster-only.
+5. Run `scripts/image_pdf_bridge.py unwrap <translated.pdf> <job/image-metadata.json> <output-image>`.
+6. Visually compare the final image with the original at full view and high zoom. Apply the scan quality gates to the single image, excluding only PDF-specific selectability, font-embedding, and page-count delivery requirements.
 
 ## Image Output Contract
 

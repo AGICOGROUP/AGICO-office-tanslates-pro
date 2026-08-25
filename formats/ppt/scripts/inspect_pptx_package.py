@@ -172,44 +172,83 @@ def extract_slide_images(
     root = ET.fromstring(package.read(slide_name))
     targets = relationship_targets(package, slide_name)
     occurrences: list[dict] = []
-    for picture in root.iter(f"{{{P_NS}}}pic"):
-        identity = picture.find(f".//{{{P_NS}}}cNvPr")
-        blip = picture.find(f".//{{{A_NS}}}blip")
-        if identity is None or blip is None:
+    shape_tree = root.find(f".//{{{P_NS}}}spTree")
+    if shape_tree is None:
+        return occurrences
+    for container in list(shape_tree):
+        if container.find(f".//{{{P_NS}}}oleObj") is not None:
             continue
-        relationship_id = blip.attrib.get(f"{{{R_NS}}}embed", "")
-        media_path = targets.get(relationship_id)
-        if media_path and media_path in package.namelist():
-            occurrences.append(
-                {
-                    "slide_index": slide_index,
-                    "shape_id": int(identity.attrib.get("id", "0")),
-                    "shape_name": identity.attrib.get("name", ""),
-                    "media_path": media_path,
-                }
-            )
+        identity = container.find(f".//{{{P_NS}}}cNvPr")
+        if identity is None:
+            continue
+        for blip in container.findall(f".//{{{A_NS}}}blip"):
+            relationship_id = blip.attrib.get(f"{{{R_NS}}}embed", "")
+            media_path = targets.get(relationship_id)
+            if media_path and media_path in package.namelist():
+                occurrences.append(
+                    {
+                        "slide_index": slide_index,
+                        "shape_id": int(identity.attrib.get("id", "0")),
+                        "shape_name": identity.attrib.get("name", ""),
+                        "media_path": media_path,
+                    }
+                )
     return occurrences
 
 
-def classify_risk(names: set[str], slide_xml: list[bytes]) -> dict:
-    complex_features = {
-        "chart": any(name.startswith("ppt/charts/") for name in names),
-        "smartart": any(name.startswith("ppt/diagrams/") for name in names),
-        "notes": any(name.startswith("ppt/notesSlides/") for name in names),
-        "comment": any("comments/" in name or "commentAuthors" in name for name in names),
-        "embedded_object": any(name.startswith("ppt/embeddings/") for name in names),
-        "grouped_shape": any(b"<p:grpSp" in payload for payload in slide_xml),
-    }
-    strict_reasons = [
-        "vba" for name in names if name.lower().endswith("vbaproject.bin")
-    ]
-    complex_reasons = [name for name, present in complex_features.items() if present]
-    route = "strict" if strict_reasons else "complex" if complex_reasons else "fast"
-    return {
-        "route": route,
-        "complex_reasons": complex_reasons,
-        "strict_reasons": sorted(set(strict_reasons)),
-    }
+def extract_slide_embedded_objects(
+    package: ZipFile, slide_name: str, slide_index: int
+) -> list[dict]:
+    root = ET.fromstring(package.read(slide_name))
+    slide_path = PurePosixPath(slide_name)
+    rels_name = str(slide_path.parent / "_rels" / f"{slide_path.name}.rels")
+    relationships: dict[str, tuple[str, str]] = {}
+    if rels_name in package.namelist():
+        rel_root = ET.fromstring(package.read(rels_name))
+        for relationship in rel_root.findall(f"{{{PKG_REL_NS}}}Relationship"):
+            target = PurePosixPath(relationship.attrib["Target"])
+            combined = PurePosixPath(*slide_path.parent.parts, *target.parts)
+            parts: list[str] = []
+            for part in combined.parts:
+                if part == "..":
+                    if parts:
+                        parts.pop()
+                elif part != ".":
+                    parts.append(part)
+            relationships[relationship.attrib["Id"]] = (
+                relationship.attrib.get("Type", ""),
+                "/".join(parts),
+            )
+
+    objects: list[dict] = []
+    shape_tree = root.find(f".//{{{P_NS}}}spTree")
+    if shape_tree is None:
+        return objects
+    image_targets = relationship_targets(package, slide_name)
+    for container in list(shape_tree):
+        ole_object = container.find(f".//{{{P_NS}}}oleObj")
+        identity = container.find(f".//{{{P_NS}}}cNvPr")
+        if ole_object is None or identity is None:
+            continue
+        relationship_id = ole_object.attrib.get(f"{{{R_NS}}}id", "")
+        relationship_type, embedding_path = relationships.get(relationship_id, ("", ""))
+        if not relationship_type.endswith("/oleObject"):
+            continue
+        preview_paths = []
+        for blip in container.findall(f".//{{{A_NS}}}blip"):
+            preview = image_targets.get(blip.attrib.get(f"{{{R_NS}}}embed", ""))
+            if preview and preview not in preview_paths:
+                preview_paths.append(preview)
+        objects.append({
+            "slide_index": slide_index,
+            "shape_id": int(identity.attrib.get("id", "0")),
+            "shape_name": identity.attrib.get("name", ""),
+            "prog_id": ole_object.attrib.get("progId", ""),
+            "embedding_path": embedding_path,
+            "preview_media_paths": preview_paths,
+            "text_capability": "embedded_editable_object",
+        })
+    return objects
 
 
 def inspect_package(input_path: str | Path) -> dict:
@@ -231,11 +270,13 @@ def inspect_package(input_path: str | Path) -> dict:
                 raise InspectionError("package contains no PowerPoint slides")
             occurrences: list[dict] = []
             image_by_hash: dict[str, dict] = {}
-            slide_payloads: list[bytes] = []
+            embedded_objects: list[dict] = []
             for slide_index, slide_name in slide_entries:
                 payload = package.read(slide_name)
-                slide_payloads.append(payload)
                 occurrences.extend(extract_slide_occurrences(payload, slide_index))
+                embedded_objects.extend(
+                    extract_slide_embedded_objects(package, slide_name, slide_index)
+                )
                 for image in extract_slide_images(package, slide_name, slide_index):
                     data = package.read(image["media_path"])
                     digest = sha256(data).hexdigest()
@@ -246,13 +287,12 @@ def inspect_package(input_path: str | Path) -> dict:
                             "bytes": len(data),
                             "media_paths": [],
                             "occurrences": [],
-                            "screening_status": "pending",
+                            "decision": "pending",
                         },
                     )
                     if image["media_path"] not in group["media_paths"]:
                         group["media_paths"].append(image["media_path"])
                     group["occurrences"].append(image)
-            risk_plan = classify_risk(names, slide_payloads)
     except (BadZipFile, ET.ParseError, KeyError) as exc:
         raise InspectionError(f"cannot inspect PowerPoint package: {exc}") from exc
 
@@ -264,7 +304,7 @@ def inspect_package(input_path: str | Path) -> dict:
         "slides": [{"index": index, "part": name} for index, name in slide_entries],
         "occurrences": occurrences,
         "image_groups": list(image_by_hash.values()),
-        "risk_plan": risk_plan,
+        "embedded_objects": embedded_objects,
         "metrics": {
             "package_passes": 1,
             "slide_count": len(slide_entries),
@@ -273,6 +313,7 @@ def inspect_package(input_path: str | Path) -> dict:
                 len(group["occurrences"]) for group in image_by_hash.values()
             ),
             "unique_image_count": len(image_by_hash),
+            "embedded_object_count": len(embedded_objects),
         },
     }
 

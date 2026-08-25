@@ -10,8 +10,8 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-REPO_ROOT = ROOT.parents[1]
-OFFICE_EXPORT = REPO_ROOT / "scripts" / "office_com_pdf.ps1"
+PPT_COM = ROOT / "scripts" / "ppt_com.ps1"
+PIPELINE = ROOT / "scripts" / "ppt_pipeline.py"
 POWERSHELL = shutil.which("powershell.exe")
 
 import sys
@@ -21,15 +21,23 @@ from ppt_pipeline import build_render_plan  # noqa: E402
 
 
 class RenderPlanTests(unittest.TestCase):
-    def test_powerpoint_pdf_export_hides_automation_window_and_alerts(self):
-        script = OFFICE_EXPORT.read_text(encoding="utf-8")
+    def test_internal_powerpoint_render_hides_automation_window(self):
+        script = PPT_COM.read_text(encoding="utf-8")
+        pipeline = PIPELINE.read_text(encoding="utf-8")
 
-        self.assertIn("ShowWindowAsync", script)
-        self.assertIn("$app.DisplayAlerts = 1", script)
-        self.assertGreaterEqual(script.count("Hide-PowerPointWindow $app"), 2)
-        self.assertIn("$presentation.SaveAs($outputFull, 32)", script)
+        self.assertIn("PowerPointWindowGuard", script)
+        self.assertLess(
+            script.index("$windowGuard.Start()"),
+            script.index("New-Object -ComObject PowerPoint.Application"),
+        )
+        self.assertIn('"render"', script)
+        self.assertIn("ppt_com.ps1", pipeline)
+        self.assertIn('"-Command",', pipeline)
+        self.assertIn('"render",', pipeline)
+        self.assertNotIn("office_com_pdf.ps1", pipeline)
+        self.assertNotIn("final.pdf", pipeline)
 
-    def test_fast_plan_renders_all_targets_low_and_only_risk_slides_high(self):
+    def test_single_plan_renders_every_target_once_at_low_resolution(self):
         inventory = {
             "slides": [{"index": 1}, {"index": 2}, {"index": 3}],
             "risk_plan": {
@@ -44,9 +52,10 @@ class RenderPlanTests(unittest.TestCase):
 
         self.assertEqual([], plan["source_high_resolution"])
         self.assertEqual([1, 2, 3], plan["target_low_resolution"])
-        self.assertEqual([2], plan["target_high_resolution"])
+        self.assertEqual([], plan["target_high_resolution"])
+        self.assertEqual("single", plan["mode"])
 
-    def test_strict_plan_compares_all_source_and_target_slides(self):
+    def test_source_and_high_resolution_sets_stay_empty(self):
         inventory = {
             "slides": [{"index": 1}, {"index": 2}],
             "risk_plan": {
@@ -59,10 +68,10 @@ class RenderPlanTests(unittest.TestCase):
 
         plan = build_render_plan(inventory, verification_passed=True)
 
-        self.assertEqual([1, 2], plan["source_high_resolution"])
-        self.assertEqual([1, 2], plan["target_high_resolution"])
+        self.assertEqual([], plan["source_high_resolution"])
+        self.assertEqual([], plan["target_high_resolution"])
 
-    def test_failed_verification_escalates_to_strict(self):
+    def test_failed_verification_does_not_expand_render_scope(self):
         inventory = {
             "slides": [{"index": 1}, {"index": 2}],
             "risk_plan": {"route": "fast", "risk_slides": []},
@@ -70,8 +79,8 @@ class RenderPlanTests(unittest.TestCase):
 
         plan = build_render_plan(inventory, verification_passed=False)
 
-        self.assertEqual("strict", plan["mode"])
-        self.assertEqual([1, 2], plan["source_high_resolution"])
+        self.assertEqual("single", plan["mode"])
+        self.assertEqual([], plan["source_high_resolution"])
 
 
 def powerpoint_available() -> bool:
@@ -86,11 +95,10 @@ def powerpoint_available() -> bool:
 
 @unittest.skipUnless(powerpoint_available(), "Microsoft PowerPoint COM is required")
 class OfficePowerPointExportTests(unittest.TestCase):
-    def test_one_powerpoint_session_exports_pdf_and_thumbnails(self):
+    def test_one_powerpoint_session_renders_slides_without_pdf(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             source = root / "source.pptx"
-            pdf = root / "final.pdf"
             thumbnails = root / "thumbnails"
             create_script = (
                 "$app=New-Object -ComObject PowerPoint.Application;"
@@ -120,17 +128,13 @@ class OfficePowerPointExportTests(unittest.TestCase):
                     "-ExecutionPolicy",
                     "Bypass",
                     "-File",
-                    str(OFFICE_EXPORT),
+                    str(PPT_COM),
+                    "-Command",
+                    "render",
                     "-InputPath",
                     str(source),
-                    "-OutputPdf",
-                    str(pdf),
-                    "-Application",
-                    "powerpoint",
-                    "-ThumbnailDirectory",
+                    "-OutputDirectory",
                     str(thumbnails),
-                    "-HighResolutionSlides",
-                    "1",
                 ],
                 capture_output=True,
                 text=True,
@@ -138,13 +142,11 @@ class OfficePowerPointExportTests(unittest.TestCase):
                 timeout=30,
             )
             self.assertEqual(0, exported.returncode, exported.stderr)
-            report = json.loads(exported.stdout)
+            rendered = sorted(thumbnails.glob("slide-*.png"))
+            pdfs = list(root.rglob("*.pdf"))
 
-        self.assertTrue(report["pdf_created"])
-        self.assertEqual(1, report["powerpoint_starts"])
-        self.assertEqual(1, report["presentation_opens"])
-        self.assertEqual(1, report["low_resolution_slides"])
-        self.assertEqual(1, report["high_resolution_slides"])
+        self.assertEqual(1, len(rendered))
+        self.assertEqual([], pdfs)
 
 
 if __name__ == "__main__":

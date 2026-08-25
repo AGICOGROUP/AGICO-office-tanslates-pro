@@ -7,7 +7,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 GLOSSARY_NAME = "水泥专业名词中英对照.md"
-EXPECTED_GLOSSARY_SHA256 = "9b74a21a2625e9745666483e0e1b546cc21745b3fcbcccd976a57eeca4a5022f"
+EXPECTED_GLOSSARY_SHA256 = "1fe11d08d4f42ea34c752ea1a7a1f6653dd27235a461dbece51981991a082356"
 
 
 class RootSkillStructureTests(unittest.TestCase):
@@ -41,7 +41,7 @@ class RootSkillStructureTests(unittest.TestCase):
             self.assertNotIn(downstream_rule, text)
 
     def test_selected_office_adapters_do_not_return_to_the_root_router(self):
-        for adapter in ("word", "excel"):
+        for adapter in ("word", "excel", "ppt"):
             text = (ROOT / "formats" / adapter / "SKILL.md").read_text(encoding="utf-8")
             with self.subTest(adapter=adapter):
                 self.assertIn("Top-level routing is complete", text)
@@ -63,45 +63,32 @@ class RootSkillStructureTests(unittest.TestCase):
 
 
 class WordAdapterStructureTests(unittest.TestCase):
-    def test_word_adapter_encodes_the_fast_pipeline_contract(self):
+    def test_word_adapter_encodes_the_preservation_contract(self):
         skill = ROOT / "formats" / "word" / "SKILL.md"
         self.assertTrue(skill.is_file())
         text = skill.read_text(encoding="utf-8")
         required_phrases = (
-            "documents:documents",
             "does not depend on another Office translation skill",
             f"../../references/{GLOSSARY_NAME}",
             "editable",
+            "image text",
             "protected tokens",
             "Never overwrite",
-            "Fast path",
-            "Complex path",
-            "Strict path",
-            "one extraction",
-            "one write pass",
-            "reasonable pagination drift",
-            "Do not OCR images without detected text",
-            "Render every page only on the complex or strict path",
+            "Microsoft Word",
+            "Print Layout",
+            "without an external PDF conversion or rendering gate",
         )
         for phrase in required_phrases:
             with self.subTest(phrase=phrase):
-                self.assertIn(phrase.casefold(), text.casefold())
-
-    def test_word_fast_path_uses_docx_core_gates_without_mandatory_pdf(self):
-        text = (ROOT / "formats" / "word" / "SKILL.md").read_text(encoding="utf-8").casefold()
-        for phrase in (
-            "output opens normally",
-            "translation coverage",
-            "glossary consistency",
-            "protected-token equality",
-            "table integrity",
-            "unexpected source-language residue",
-            "ordinary fast-path documents do not require pdf export",
-            "deliver the validated docx directly",
-            "pdf export failure must not block",
-        ):
-            with self.subTest(phrase=phrase):
                 self.assertIn(phrase, text)
+        for forbidden in (
+            "documents:documents",
+            "render every page",
+            "complete rendered comparison",
+            "ExportAsFixedFormat",
+        ):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, text)
 
     def test_word_ui_metadata_exists(self):
         metadata = ROOT / "formats" / "word" / "agents" / "openai.yaml"

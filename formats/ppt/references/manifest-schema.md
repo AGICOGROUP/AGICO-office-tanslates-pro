@@ -1,46 +1,15 @@
-# PowerPoint translation manifest schema v2
+# PowerPoint lightweight manifest schema
 
-The UTF-8 JSON root requires:
+The UTF-8 manifest stores source identity, target language, native text occurrences, reusable
+translation units, unique image groups, and editable overlays.
 
-```json
-{
-  "schema_version": 2,
-  "source_file": "sample.pptx",
-  "source_path": "D:/input/sample.pptx",
-  "source_sha256": "64-lowercase-hex-digits",
-  "source_language": "zh-CN",
-  "target_language": "en",
-  "format": "powerpoint",
-  "occurrences": [],
-  "translation_units": [],
-  "image_groups": [],
-  "overlays": [],
-  "manual_reviews": [],
-  "legal_evidence": [],
-  "risk_plan": {}
-}
-```
+Every native occurrence retains its source text, translation-unit ID, slide, shape, paragraph,
+role, context, and protected tokens. Every translation unit retains source text, translation,
+context, protected tokens, and occurrence count.
 
-Every occurrence retains `id`, `kind`, `source_text`, `translation_unit_id`, `slide_index`,
-`shape_id`, `paragraph_index`, `role`, `context_signature`, and `protected_tokens`. Table-cell
-occurrences also retain `row` and `column` for the complex COM route plus
-`package_paragraph_index` for the OOXML fast route.
+Each unique image group uses exactly one `decision`:
 
-Every translation unit retains `id`, `reuse_key`, `source_text`, `translation`, `role`,
-`context_signature`, `protected_tokens`, and `occurrence_count`. Fill `translation` only. A unit may
-serve multiple occurrences, but every referenced source text and protected-token sequence must
-match exactly.
-
-`image_groups` stores one record per unique media SHA-256 with all media paths and slide/shape
-occurrences. `text_screening` records the one-pass OCR plus visual result and every detected label's
-final status. Before apply, change `screening_status` from `pending` to `retain`, `localize`, or
-`manual_review`; retained/manual groups require `reason_code`. A localized PowerPoint image uses
-only `bilingual_below`, sets `preserve_source_image: true`, and has non-empty `overlay_ids` that
-reference top-level `overlays`. Every detected source label must end as `localized`,
-`target-language-already-present`, or `manual_review`; incomplete coverage blocks apply.
-An image already fully containing the requested target language uses `retain` with
-`reason_code: target-language-already-present`. `risk_plan` stores route, risk slides, complex
-reasons, and strict reasons.
-
-Schema v1 is not a production input. Convert a job by rerunning `inspect` and `prepare` from the
-immutable source.
+- `skip_target`: target-language text is already visible; `overlay_ids` must be empty.
+- `skip_unclear`: text is unclear; `overlay_ids` must be empty.
+- `overlay`: clear single-language text; `overlay_ids` must reference editable
+  `bilingual_below` overlays and `preserve_source_image` must be true.

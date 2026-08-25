@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 
 
@@ -33,6 +34,14 @@ def powerpoint_available() -> bool:
 
 @unittest.skipUnless(powerpoint_available(), "Microsoft PowerPoint COM is required")
 class PowerPointComPipelineContractTests(unittest.TestCase):
+    def test_com_window_guard_starts_before_powerpoint(self):
+        script = (ROOT / "scripts" / "ppt_com.ps1").read_text(encoding="utf-8")
+        self.assertIn("PowerPointWindowGuard", script)
+        self.assertLess(
+            script.index("$windowGuard.Start()"),
+            script.index("New-Object -ComObject PowerPoint.Application"),
+        )
+
     def test_apply_command_adds_image_overlays_before_its_single_save(self):
         script = COM_SCRIPT.read_text(encoding="utf-8-sig")
         apply_block = script.split('"apply" {', 1)[1].split('"apply-overlays" {', 1)[0]
@@ -88,8 +97,6 @@ class PowerPointComPipelineContractTests(unittest.TestCase):
 
         self.assertEqual("legacy.ppt", inventory["source_file"])
         self.assertTrue(inventory["working_source_path"].endswith("working-source.pptx"))
-        self.assertEqual("complex", inventory["risk_plan"]["route"])
-        self.assertIn("legacy-ppt-conversion", inventory["risk_plan"]["complex_reasons"])
         self.assertEqual(1, state["metrics"]["powerpoint_starts"])
 
     def test_apply_consumes_schema_v2_and_writes_translation(self):
@@ -122,6 +129,10 @@ class PowerPointComPipelineContractTests(unittest.TestCase):
                 timeout=30,
             )
             self.assertEqual(0, created.returncode, created.stderr)
+            deadline = time.monotonic() + 5
+            while not source.is_file() and time.monotonic() < deadline:
+                time.sleep(0.05)
+            self.assertTrue(source.is_file(), "PowerPoint did not finish saving the test deck")
             shape_id = int(created.stdout.strip().splitlines()[-1])
             manifest.write_text(
                 json.dumps(

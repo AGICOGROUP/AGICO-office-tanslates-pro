@@ -1,48 +1,29 @@
-# PowerPoint balanced workflow
+# PowerPoint lightweight workflow
 
-## Processing boundary
+`scripts/ppt_pipeline.py` is the only production entry. It performs one inventory, one preparation,
+one write, one verification, and one final PowerPoint render. Internal OOXML and COM helpers must
+not be assembled into another workflow.
 
-`scripts/ppt_pipeline.py` is the only production entry. It owns state, stage order, artifact paths,
-risk escalation, and delivery. `pptx_ooxml.py`, `ppt_com.ps1`, and `office_com_pdf.ps1` are internal
-adapters and must not be assembled into a second workflow.
+## Inventory and translation
 
-## Inspect once
+Read the OOXML package once. Record native text with stable slide, shape, paragraph, table-cell,
+context, and protected-token locations. Group identical media bytes by SHA-256. Reuse a translation
+only when source text, target language, context, role, and protected tokens match.
 
-The inspector reads the OOXML package once and records every native text occurrence, its stable
-slide/shape/paragraph identity, role, context signature, protected tokens, package features, and
-media relationship. Identical media bytes share one SHA-256 image group while retaining all
-locations.
+Retrieve only glossary terms matched to the extracted source text. Translate all remaining units
+in one batch and write them once.
 
-Plain text boxes and regular tables remain fast when the scanner covers their text nodes. Charts,
-SmartArt, notes, grouped objects, embedded objects, macros, or uncertain image text add explicit
-risk reasons. High-stakes user intent selects strict mode regardless of file features.
+## Images
 
-## Translate once
+Screen each unique image once at normal useful resolution. Use only `skip_target`, `skip_unclear`,
+or `overlay`. Do not repeat OCR, open a high-resolution recognition loop, or block the presentation
+for unclear image text. `overlay` uses `bilingual_below` and editable PowerPoint text while the
+original image remains unchanged.
 
-`occurrences` are the complete location inventory. `translation_units` are the safely reusable
-model tasks. Reuse requires equal source text, target language, role, context signature, and
-protected tokens. Ambiguous short text stays separate.
+## Verification
 
-Search the shared glossary only for text in the current translation units. Use exact matches first,
-then the longest non-overlapping contained terms, then professional contextual translation.
-
-## Write once
-
-Fast `.pptx` jobs mutate all target OOXML text nodes in one archive pass. Complex jobs index shapes
-once per slide, write all paragraphs for a shape, perform one local fit check for that shape, and
-save once. Never overwrite the source and never carry a prior translated deck forward as input.
-
-## Verify by risk
-
-Deterministic verification precedes visual work: source hash, ZIP integrity, slide count, stable
-occurrence IDs, exact expected translations, protected tokens, relationships, and media. Microsoft
-PowerPoint then opens the final file and exports one PDF in the same session used to create final
-thumbnails. Run that automation in a hidden background session: open presentations with no window,
-suppress alerts, and hide the application window again before PDF export. Keep the stable
-PowerPoint `SaveAs PDF` path; visual suppression must not replace or weaken official verification.
-
-Fast jobs render all final slides at low resolution and risk slides at high resolution. Complex
-jobs add all changed/risk slides at high resolution. Strict jobs render source and target fully.
-After a local repair, rerender only affected slides unless new evidence expands the risk set.
-The render stage produces review evidence but does not complete delivery. Delivery requires an
-explicit successful visual-review gate through the pipeline's `deliver` command.
+Hash the source during inspection and compare it once during final verification. Check package
+integrity, slide count, native translations, protected tokens, and required overlays. Then open the
+output in a hidden background session in PowerPoint and create one low-resolution render of every
+final slide without an external PDF conversion gate. The visual review checks only missing native text,
+clipping, overlap, broken layout, and obviously misplaced overlays.

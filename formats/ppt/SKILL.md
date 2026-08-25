@@ -1,92 +1,57 @@
 ---
 name: translate-powerpoint-professionally
-description: Use when translating PowerPoint presentations (.ppt or .pptx), especially technical decks whose editable text, tables, charts, images, engineering graphics, terminology, and layout must be preserved with risk-driven Microsoft PowerPoint verification.
+description: Use when translating PowerPoint presentations (.ppt or .pptx) while preserving editable native text, technical tokens, images, and layout with Microsoft PowerPoint verification.
 ---
 
 # Professional PowerPoint Translation
 
-Run one resumable PowerPoint pipeline. Preserve the immutable source, write one separate output,
-and use Microsoft PowerPoint as the final authority. Do not compose a task from individual COM,
-OOXML, extraction, or render commands.
+Top-level routing is complete when this module starts. Do not run the root Office router again,
+read another format adapter, or consider Word, Excel, PDF, or image workflows.
 
-## Required inputs
+Use `scripts/ppt_pipeline.py` as the single production entry. Preserve the immutable source, write
+one separate `.pptx`, translate native text in place, and use Microsoft PowerPoint as final
+authority.
 
-Read these files completely before execution:
+Classify content by capability: selectable or copyable text belongs to an editable-content handler,
+including charts, SmartArt, and OLE/Visio objects. Never treat an embedded object's preview image as
+the object itself. If its native editor or handler is unavailable, stop instead of applying an image overlay.
 
-- `references/powerpoint-workflow.md`
-- `references/pipeline-cli.md`
-- `references/manifest-schema.md`
+## Read only what is needed
 
-Do not load `../../references/水泥专业名词中英对照.md` in full. Use
-`scripts/resolve_repo_glossary.py` to return only relevant exact and longest matches before model
-translation.
+Read `references/powerpoint-workflow.md`, `references/pipeline-cli.md`, and
+`references/manifest-schema.md`. The shared glossary is
+`../../references/水泥专业名词中英对照.md`; do not load it completely. After text extraction,
+use `scripts/resolve_repo_glossary.py` to retrieve only relevant source-matched terms, resolving
+exact phrases first and then the longest non-overlapping terms before model translation. Read
+`references/image-text-localization.md` only when images exist and `references/overlay-schema.md`
+only when an image needs an overlay.
 
-Read `references/image-text-localization.md` only when inspection reports image groups. Read
-`references/overlay-schema.md` only when a confirmed image label requires an editable overlay.
-Read `references/typography-and-fit.md` only for shapes reported as overflow or collision risks.
+## One lightweight flow
 
-## Single production pipeline
-
-Use `scripts/ppt_pipeline.py` in this order:
-
-1. `inspect` hashes the source, performs one OOXML inventory, groups identical images, classifies
-   risk, and creates `job-state.json`.
-2. `prepare` creates schema-v2 occurrences and safely reusable translation units, then pauses for
-   translation.
-3. Retrieve only relevant glossary entries with `scripts/resolve_repo_glossary.py`: exact phrase,
-   then longest non-overlapping listed terms, before model wording. Fill every translation unit.
-   Screen each unique image once with OCR plus visual confirmation, then classify it as `retain`,
-   `localize`, or `manual_review`; `pending` or an uncovered detected label blocks apply. Use
-   `bilingual_below` when every target label has safe space immediately below its source or in the
-   nearest safe blank area. If any detected label has no safe overlay space, use `manual_review`
-   instead of altering the image. If the image already fully
-   contains the requested target language, use `retain` with
-   `target-language-already-present` and skip it.
-4. Validate the manifest and run `apply` once. Fast `.pptx` uses OOXML; complex work uses one
-   internal PowerPoint COM mutation session.
-5. `verify` checks source hash, structure, occurrence coverage, translations, and protected tokens.
-6. `render` opens the result once in a hidden, alert-suppressed Microsoft PowerPoint session,
-   exports one official PDF, renders all target slides as low-resolution thumbnails, and renders
-   only risk slides at high resolution.
-7. Review those renders, then run `deliver --visual-review-passed`. Rendering alone must never mark
-   a presentation delivered.
-
-Resume from the first incomplete stage. Never recreate task-specific builder or verification
-scripts. Do not read historical translations unless the user explicitly asks to reuse them.
-
-## Risk routes
-
-- **Fast:** ordinary native text and regular tables that the OOXML scanner and writer fully cover.
-- **Complex:** charts, SmartArt, notes, important grouped objects, confirmed image text, embedded
-  objects, or another feature requiring the PowerPoint object model.
-- **Strict:** user-requested page/slide fidelity, bids, contracts, certificates, legal/publication
-  work, macros, repair warnings, invariant mismatches, or failed verification.
-
-A text box alone is not a complex feature. An unexpected condition stops the current route and
-escalates it; it never silently weakens a quality gate.
+1. `inspect`: hash the source once, inventory editable text and tables, and group identical images.
+2. `prepare`: create location-safe, deduplicated translation units and pause for batch translation.
+3. Fill native translations using the matched glossary subset. Screen every unique image once.
+4. Apply exactly one image decision:
+   - `skip_target`: every readable source label already has its target-language equivalent; partial target text never skips the whole image.
+   - `skip_unclear`: no source label is readable with confidence; small but readable labels must not be skipped.
+   - `overlay`: at least one readable source label still lacks the target language; preserve the original image and add editable
+     target-language text immediately below each source label using `bilingual_below`.
+5. `apply`: write all native translations and overlays once.
+6. `verify`: compare the final source hash, package integrity, slide count, translations, protected
+   tokens, and required overlays.
+7. `render`: open the output in one hidden, alert-suppressed Microsoft PowerPoint session and
+   render every final slide once at low resolution. Do not use an external PDF conversion gate.
+8. Review the final slides and run `deliver --visual-review-passed`.
 
 ## Quality boundary
 
-- Keep native text selectable and editable. Never flatten a slide or redraw a complete diagram.
-- Preserve slide size, masters, layouts, themes, object IDs, geometry, z-order, animations,
-  relationships, media, arrows, process lines, numbers, units, models, and standards unless a
-  verified local repair requires a recorded change.
-- Deduplicate translation tasks only when source text, target language, role, context signature,
-  and protected tokens match. Every occurrence remains independently written and verified.
-- PowerPoint embedded images only follow this two-mode policy. Group images by SHA-256 and screen
-  each unique byte sequence once. For each detected source label,
-  record `localized`, `target-language-already-present`, or `manual_review`; outside native text
-  never counts as coverage for text inside an image. Use only `bilingual_below`: preserve the
-  original image and pixels, then add editable target-language text immediately below the source
-  label or in the nearest safe blank area. Never erase, cover, patch, regenerate, or replace image
-  text. If any detected label cannot be placed safely, record `manual_review`; do not silently skip
-  it. Numbers, units, models, arrows, process lines, symbols, equipment, and flow direction remain
-  unchanged.
-- Allow natural wrapping and reasonable local reflow. Repair only real clipping, overlap,
-  overflow, missing text, object displacement, or hierarchy damage.
-- Never install, locate, configure, or invoke LibreOffice automatically. Use it only after
-  Microsoft PowerPoint is unavailable and the user explicitly authorizes that fallback.
+- Preserve masters, layouts, themes, geometry, z-order, animations, relationships, media, arrows,
+  process lines, numbers, units, models, standards, and formulas.
+- Keep native translations and image overlays selectable and editable.
+- PowerPoint embedded images only use `skip_target`, `skip_unclear`, or `overlay`.
+- Never erase, cover, patch, regenerate, redraw, or replace an image.
+- Allow natural wrapping and repair only actual clipping, overlap, missing text, or broken layout.
+- Never use LibreOffice unless PowerPoint is unavailable and the user explicitly authorizes it.
 
-Deliver only after the source remains unchanged, the output reopens in PowerPoint without repair,
-all expected occurrences are translated, protected tokens match, required renders exist, and the
-risk-appropriate visual review passes.
+Deliver when the output opens without repair, native translation coverage passes, protected tokens
+match, image decisions are complete, and the final visual review passes.

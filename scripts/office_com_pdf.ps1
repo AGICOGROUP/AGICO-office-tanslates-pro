@@ -10,10 +10,74 @@ $ErrorActionPreference = 'Stop'
 
 Add-Type -TypeDefinition @'
 using System;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Threading;
 public static class OfficeWindowControl {
     [DllImport("user32.dll")]
     public static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);
+}
+
+public sealed class PowerPointWindowGuard : IDisposable {
+    private readonly HashSet<int> baselineProcessIds = new HashSet<int>();
+    private volatile bool running;
+    private Thread worker;
+
+    private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    private static extern bool EnumWindows(EnumWindowsProc callback, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+
+    [DllImport("user32.dll")]
+    private static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);
+
+    public PowerPointWindowGuard() {
+        foreach (Process process in Process.GetProcessesByName("POWERPNT")) {
+            try { baselineProcessIds.Add(process.Id); }
+            finally { process.Dispose(); }
+        }
+    }
+
+    public void Start() {
+        if (running) return;
+        running = true;
+        worker = new Thread(HideNewPowerPointWindows);
+        worker.IsBackground = true;
+        worker.Name = "PowerPointWindowGuard";
+        worker.Start();
+    }
+
+    private void HideNewPowerPointWindows() {
+        while (running) {
+            foreach (Process process in Process.GetProcessesByName("POWERPNT")) {
+                try {
+                    if (!baselineProcessIds.Contains(process.Id)) HideWindowsForProcess(process.Id);
+                }
+                finally { process.Dispose(); }
+            }
+            Thread.Sleep(10);
+        }
+    }
+
+    private static void HideWindowsForProcess(int targetProcessId) {
+        EnumWindows(delegate(IntPtr hWnd, IntPtr lParam) {
+            uint processId;
+            GetWindowThreadProcessId(hWnd, out processId);
+            if (processId == (uint)targetProcessId) ShowWindowAsync(hWnd, 0);
+            return true;
+        }, IntPtr.Zero);
+    }
+
+    public void Stop() {
+        running = false;
+        if (worker != null && worker.IsAlive) worker.Join(1000);
+    }
+
+    public void Dispose() { Stop(); }
 }
 '@
 
@@ -45,7 +109,7 @@ if ($Application -eq 'auto') {
     else { throw "Unsupported Office extension: $ext" }
 }
 
-$app = $document = $workbook = $presentation = $null
+$app = $document = $workbook = $presentation = $windowGuard = $null
 $lowResolutionCount = 0
 $highResolutionCount = 0
 $presentationOpens = 0
@@ -66,6 +130,8 @@ try {
         $workbook.ExportAsFixedFormat(0, $outputFull)
     }
     else {
+        $windowGuard = New-Object PowerPointWindowGuard
+        $windowGuard.Start()
         $app = New-Object -ComObject PowerPoint.Application
         # 1 = ppAlertsNone.
         $app.DisplayAlerts = 1
@@ -133,6 +199,7 @@ finally {
     foreach ($obj in @($document,$workbook,$presentation,$app)) {
         if ($obj) { [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($obj) }
     }
+    if ($windowGuard) { $windowGuard.Stop() }
     [GC]::Collect()
     [GC]::WaitForPendingFinalizers()
 }
