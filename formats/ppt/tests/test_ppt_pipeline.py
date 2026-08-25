@@ -179,12 +179,32 @@ class PipelineStateTests(unittest.TestCase):
                 encoding="utf-8",
             )
             self.assertEqual(0, applied.returncode, applied.stderr)
+            verified = subprocess.run(
+                [
+                    sys.executable,
+                    str(PIPELINE_SCRIPT),
+                    "verify",
+                    "--source",
+                    str(source),
+                    "--job-dir",
+                    str(job),
+                    "--output",
+                    str(output),
+                ],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+            )
+            self.assertEqual(0, verified.returncode, verified.stderr)
             state = json.loads((job / "job-state.json").read_text(encoding="utf-8"))
+            verification = json.loads((job / "verification.json").read_text(encoding="utf-8"))
             with ZipFile(output) as archive:
                 translated_slide = archive.read("ppt/slides/slide1.xml").decode("utf-8")
 
         self.assertIn("Grate cooler", translated_slide)
         self.assertTrue(state["stages"]["apply"]["completed"])
+        self.assertTrue(state["stages"]["verify"]["completed"])
+        self.assertTrue(verification["passed"])
         self.assertEqual(0, state["metrics"]["powerpoint_starts"])
 
 

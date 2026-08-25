@@ -123,6 +123,41 @@ def first_incomplete_stage(state: dict) -> str | None:
     return None
 
 
+def build_render_plan(inventory: dict, verification_passed: bool) -> dict:
+    all_slides = [int(item["index"]) for item in inventory.get("slides", [])]
+    risk_plan = inventory.get("risk_plan", {})
+    requested_mode = risk_plan.get("route", "strict")
+    mode = requested_mode if verification_passed else "strict"
+    risk_slides = sorted(
+        {int(index) for index in risk_plan.get("risk_slides", []) if int(index) in all_slides}
+    )
+    changed_slides = sorted(
+        {
+            int(item["slide_index"])
+            for item in inventory.get("occurrences", [])
+            if int(item["slide_index"]) in all_slides
+        }
+    )
+    if mode == "strict":
+        source_high = all_slides
+        target_high = all_slides
+    elif mode == "complex":
+        source_high = risk_slides
+        target_high = sorted(set(risk_slides) | set(changed_slides))
+    else:
+        source_high = []
+        target_high = risk_slides
+    return {
+        "mode": mode,
+        "target_low_resolution": all_slides,
+        "source_high_resolution": source_high,
+        "target_high_resolution": target_high,
+        "reasons": list(risk_plan.get("complex_reasons", []))
+        + list(risk_plan.get("strict_reasons", []))
+        + ([] if verification_passed else ["verification-failed"]),
+    }
+
+
 def write_json(path: Path, value: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
@@ -234,6 +269,148 @@ def command_apply(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_verify(args: argparse.Namespace) -> int:
+    source = args.source.resolve()
+    output = args.output.resolve()
+    inventory = read_json(args.job_dir / "inventory.json")
+    state = read_json(args.job_dir / "job-state.json")
+    manifest = read_json(args.job_dir / "translation-manifest.json")
+    errors: list[dict] = []
+    if sha256_file(source) != inventory["source_sha256"]:
+        errors.append({"code": "source-hash-mismatch"})
+    output_inventory = inspect_package(output)
+    if len(output_inventory["slides"]) != len(inventory["slides"]):
+        errors.append(
+            {
+                "code": "slide-count-mismatch",
+                "source": len(inventory["slides"]),
+                "output": len(output_inventory["slides"]),
+            }
+        )
+    units = {item["id"]: item for item in manifest["translation_units"]}
+    output_by_id = {item["id"]: item for item in output_inventory["occurrences"]}
+    for occurrence in manifest["occurrences"]:
+        actual = output_by_id.get(occurrence["id"])
+        expected = str(units[occurrence["translation_unit_id"]]["translation"]).strip()
+        if actual is None:
+            errors.append({"code": "missing-occurrence", "id": occurrence["id"]})
+            continue
+        actual_text = str(actual["source_text"]).strip()
+        if actual_text != expected:
+            errors.append(
+                {
+                    "code": "translation-mismatch",
+                    "id": occurrence["id"],
+                    "expected": expected,
+                    "actual": actual_text,
+                }
+            )
+        for token in occurrence.get("protected_tokens", []):
+            if token not in actual_text:
+                errors.append(
+                    {"code": "protected-token-missing", "id": occurrence["id"], "token": token}
+                )
+    passed = not errors
+    report = {
+        "passed": passed,
+        "source_file": source.name,
+        "output_file": output.name,
+        "source_sha256": inventory["source_sha256"],
+        "output_sha256": output_inventory["source_sha256"],
+        "occurrences_expected": len(manifest["occurrences"]),
+        "occurrences_verified": len(manifest["occurrences"])
+        - sum(1 for error in errors if error["code"] in {"missing-occurrence", "translation-mismatch"}),
+        "errors": errors,
+    }
+    report_path = args.job_dir / "verification.json"
+    write_json(report_path, report)
+    render_plan = build_render_plan(inventory, passed)
+    render_plan_path = args.job_dir / "render-plan.json"
+    write_json(render_plan_path, render_plan)
+    if not passed:
+        state["route"] = "strict"
+    mark_stage(state, "verify", str(report_path))
+    write_json(args.job_dir / "job-state.json", state)
+    print(json.dumps(report, ensure_ascii=False))
+    return 0 if passed else 2
+
+
+def run_office_export(
+    input_path: Path,
+    pdf_path: Path,
+    thumbnail_directory: Path,
+    high_resolution_slides: list[int],
+) -> dict:
+    powershell = shutil.which("powershell.exe")
+    if not powershell:
+        raise PipelineError("Microsoft PowerPoint verification requires powershell.exe")
+    script = Path(__file__).resolve().parents[3] / "scripts" / "office_com_pdf.ps1"
+    command = [
+        powershell,
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        str(script),
+        "-InputPath",
+        str(input_path),
+        "-OutputPdf",
+        str(pdf_path),
+        "-Application",
+        "powerpoint",
+        "-ThumbnailDirectory",
+        str(thumbnail_directory),
+        "-HighResolutionSlides",
+        ",".join(str(index) for index in high_resolution_slides),
+    ]
+    completed = subprocess.run(command, capture_output=True, text=True, encoding="utf-8")
+    if completed.returncode != 0:
+        raise PipelineError(completed.stderr.strip() or "PowerPoint verification export failed")
+    try:
+        return json.loads(completed.stdout)
+    except json.JSONDecodeError as exc:
+        raise PipelineError("PowerPoint verification returned invalid JSON") from exc
+
+
+def command_render(args: argparse.Namespace) -> int:
+    source = args.source.resolve()
+    output = args.output.resolve()
+    state = read_json(args.job_dir / "job-state.json")
+    verification = read_json(args.job_dir / "verification.json")
+    plan = read_json(args.job_dir / "render-plan.json")
+    if not verification.get("passed"):
+        raise PipelineError("structural verification failed; repair before final Office rendering")
+    render_root = args.job_dir / "final-renders"
+    target_report = run_office_export(
+        output,
+        args.job_dir / "final.pdf",
+        render_root / "target",
+        plan["target_high_resolution"],
+    )
+    reports = {"target": target_report}
+    state["metrics"]["powerpoint_starts"] += int(target_report["powerpoint_starts"])
+    state["metrics"]["presentation_opens"] += int(target_report["presentation_opens"])
+    state["metrics"]["full_deck_passes"] += 1
+    if plan["source_high_resolution"]:
+        source_report = run_office_export(
+            source,
+            args.job_dir / "source-baseline.pdf",
+            render_root / "source",
+            plan["source_high_resolution"],
+        )
+        reports["source"] = source_report
+        state["metrics"]["powerpoint_starts"] += int(source_report["powerpoint_starts"])
+        state["metrics"]["presentation_opens"] += int(source_report["presentation_opens"])
+        state["metrics"]["full_deck_passes"] += 1
+    office_report_path = args.job_dir / "office-verification.json"
+    write_json(office_report_path, reports)
+    mark_stage(state, "render", str(office_report_path))
+    mark_stage(state, "deliver", str(output))
+    write_json(args.job_dir / "job-state.json", state)
+    print(json.dumps(reports, ensure_ascii=False))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -251,6 +428,16 @@ def build_parser() -> argparse.ArgumentParser:
     apply_parser.add_argument("--job-dir", required=True, type=Path)
     apply_parser.add_argument("--output", required=True, type=Path)
     apply_parser.set_defaults(handler=command_apply)
+    verify_parser = subparsers.add_parser("verify")
+    verify_parser.add_argument("--source", required=True, type=Path)
+    verify_parser.add_argument("--job-dir", required=True, type=Path)
+    verify_parser.add_argument("--output", required=True, type=Path)
+    verify_parser.set_defaults(handler=command_verify)
+    render_parser = subparsers.add_parser("render")
+    render_parser.add_argument("--source", required=True, type=Path)
+    render_parser.add_argument("--job-dir", required=True, type=Path)
+    render_parser.add_argument("--output", required=True, type=Path)
+    render_parser.set_defaults(handler=command_render)
     return parser
 
 
