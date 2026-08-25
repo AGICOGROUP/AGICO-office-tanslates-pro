@@ -13,9 +13,12 @@ node scripts/excel_pipeline.mjs verify --source <source.xlsx> --job-dir <job-dir
 node scripts/excel_pipeline.mjs render --job-dir <job-dir> --output <translated.xlsx>
 ```
 
-`prepare` exits with code `3` intentionally. This means `translation-manifest.json` is ready for
-Codex/GPT to translate; it is not a failure. Fill every `translation_units[]` record, set `status`
+`inspect` never renders. `prepare` exits with code `3` intentionally. This means
+`translation-manifest.json` and `relevant-glossary.json` are ready for Codex/GPT; it is not a
+failure. Read only the matched glossary file. Fill every `translation_units[]` record, set `status`
 to `translated` or justified `retain`, preserve every protected token, and validate the manifest.
+`prepare` may already mark reviewed English fixed labels as `translated` and standalone identifiers
+as `retain`; translate only records still marked `pending`.
 
 ## State and resume
 
@@ -32,13 +35,16 @@ Never mark a stage complete until its artifact is saved and hashed.
 
 - `inventory.json`: sheets, editable occurrences, OOXML features, and unique image groups.
 - `translation-manifest.json`: schema-v2 occurrences and safely reusable translation units.
+- `relevant-glossary.json`: only glossary rows matched to extracted source text.
+- `fixed-translations.en.json`: reviewed exact English labels and units; never fuzzy-matched.
 - `verification.json`: deterministic pass/fail result and stable reason codes.
-- `render-plan.json`: selected sheets, balanced/strict mode, image plan, and render reasons.
-- `renders/preflight/` and `final-renders/`: required PNG previews.
+- `render-plan.json`: selected sheets, fast/complex/strict mode, local print-layout hints, Office result, and reasons.
+- `final-renders/`: Microsoft Excel PDFs for required sheets; no preflight render directory.
 
 ## Strict escalation
 
-Strict reasons include macro/VBA, unsafe legacy conversion, chart, comment, external link,
-unsupported drawing, repair warning, formula/merge/protected-token change, uncertain image,
-state-hash mismatch, and print-page verification required. A bilingual grid rejected by the safety
+Complex reasons include chart, comment, external link, unsupported drawing, and uncertain image.
+Empty tiny legacy shape fragments are decorative and do not trigger this escalation.
+Strict reasons include macro/VBA, unsafe legacy conversion, repair warning,
+formula/merge/protected-token change, and state-hash mismatch. A bilingual grid rejected by the safety
 classifier must use the existing feature-aware strict workflow and must not leave a partial output.

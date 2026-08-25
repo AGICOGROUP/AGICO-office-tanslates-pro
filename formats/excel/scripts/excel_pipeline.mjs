@@ -2,11 +2,16 @@
 
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { FileBlob, SpreadsheetFile, Workbook } from "@oai/artifact-tool";
+
+const FIXED_ENGLISH_TRANSLATIONS = JSON.parse(readFileSync(
+  new URL("../references/fixed-translations.en.json", import.meta.url), "utf8",
+));
 
 
 export const JOB_STAGES = [
@@ -39,6 +44,142 @@ function translationUnitId(reuseKey) {
 }
 
 
+function parameterizedOccurrence(input) {
+  const match = /^\s*([^：:\n]{1,16})([：:])\s*(.+?)\s*$/.exec(String(input.source));
+  if (!match) return input;
+  const [, label, separator, suffix] = match;
+  const suffixHasLanguage = /[\p{Script=Han}\p{Script=Cyrillic}\p{Script=Arabic}]/u.test(suffix);
+  const suffixLooksTechnical = /^(?:[+-]?\d|[A-Z]{1,8}\d)/u.test(suffix);
+  if (suffixHasLanguage || !suffixLooksTechnical) return input;
+  return {
+    ...input,
+    source: label.trim(),
+    context_key: `parameter:${label.trim()}`,
+    protected_tokens: [],
+    original_source: input.source,
+    original_protected_tokens: [...input.protected_tokens],
+    translation_template: { separator, suffix },
+  };
+}
+
+export function renderOccurrenceTranslation(occurrence, unit) {
+  if (!occurrence.translation_template) return unit.translation;
+  const { separator, suffix } = occurrence.translation_template;
+  return `${unit.translation}${separator}${suffix}`;
+}
+
+function normalizedFixedSource(source) {
+  return String(source).trim().replace(/\s+/gu, " ");
+}
+
+function isSafeIdentifier(source) {
+  const value = String(source).trim();
+  return /^[A-Z]$/u.test(value)
+    || /^(?=[A-Za-z0-9./_-]*\d)[A-Za-z0-9][A-Za-z0-9./_-]*$/u.test(value);
+}
+
+export function applySafeAutofill(units, targetLanguage) {
+  const english = /^(?:en|english)$/iu.test(String(targetLanguage).trim());
+  let fixed = 0;
+  let retained = 0;
+  for (const unit of units) {
+    if (unit.status !== "pending") continue;
+    if (isSafeIdentifier(unit.source)) {
+      unit.translation = unit.source;
+      unit.status = "retain";
+      unit.reason = "identifier/model code retained";
+      retained += 1;
+      continue;
+    }
+    const translation = english
+      ? FIXED_ENGLISH_TRANSLATIONS[normalizedFixedSource(unit.source)] : undefined;
+    if (translation) {
+      unit.translation = translation;
+      unit.status = "translated";
+      fixed += 1;
+    }
+  }
+  return {
+    fixed,
+    retained,
+    pending: units.filter((unit) => unit.status === "pending").length,
+  };
+}
+
+function weightedTextLength(text) {
+  return [...String(text)].reduce(
+    (length, character) => length + (/^[\x00-\x7F]$/u.test(character) ? 1 : 2), 0,
+  );
+}
+
+function estimatedWrappedLines(text, columnWidth) {
+  const width = Number.isFinite(columnWidth) ? columnWidth : 8.43;
+  const capacity = Math.max(6, Math.floor(width * 1.15));
+  return String(text).split(/\r?\n/u).reduce((total, line) => {
+    const words = line.trim().split(/\s+/u).filter(Boolean);
+    if (words.length <= 1) {
+      return total + Math.max(1, Math.ceil(weightedTextLength(line) / capacity));
+    }
+    let lines = 1;
+    let used = 0;
+    for (const word of words) {
+      const length = weightedTextLength(word);
+      if (used === 0) {
+        lines += Math.max(0, Math.ceil(length / capacity) - 1);
+        used = length % capacity || Math.min(length, capacity);
+      } else if (used + 1 + length <= capacity) {
+        used += 1 + length;
+      } else {
+        lines += Math.max(1, Math.ceil(length / capacity));
+        used = length % capacity || Math.min(length, capacity);
+      }
+    }
+    return total + lines;
+  }, 0);
+}
+
+export function shouldWrapTranslatedText({ text, columnWidth }) {
+  return estimatedWrappedLines(text, columnWidth) > 1;
+}
+
+export function estimateTranslatedRowHeight({ text, columnWidth, currentHeight = 15 }) {
+  const lines = estimatedWrappedLines(text, columnWidth);
+  return Math.max(currentHeight, Math.min(60, lines * 15 + 3));
+}
+
+export function findCompressibleBlankRows(values, formulas, startRow = 1) {
+  const blankRows = values.map((row, index) => {
+    const formulaRow = formulas[index] ?? [];
+    const width = Math.max(row?.length ?? 0, formulaRow.length);
+    for (let column = 0; column < width; column += 1) {
+      if (!blank(row?.[column]) || !blank(formulaRow[column])) return false;
+    }
+    return true;
+  });
+  const result = [];
+  for (let index = 0; index < blankRows.length;) {
+    if (!blankRows[index]) { index += 1; continue; }
+    let end = index;
+    while (end < blankRows.length && blankRows[end]) end += 1;
+    if (end - index >= 3) {
+      for (let row = index; row < end; row += 1) result.push(startRow + row);
+    }
+    index = end;
+  }
+  return result;
+}
+
+export function verticalMergeRows(merges) {
+  const rows = new Set();
+  for (const merge of merges ?? []) {
+    const start = splitCellAddress(merge.startAddress);
+    const end = splitCellAddress(merge.endAddress);
+    if (start.row === end.row) continue;
+    for (let row = start.row; row <= end.row; row += 1) rows.add(row);
+  }
+  return rows;
+}
+
 export function buildTranslationUnits(inputOccurrences) {
   if (!Array.isArray(inputOccurrences)) {
     throw new TypeError("occurrences must be an array");
@@ -46,7 +187,8 @@ export function buildTranslationUnits(inputOccurrences) {
 
   const translationUnits = [];
   const unitsByKey = new Map();
-  const occurrences = inputOccurrences.map((input) => {
+  const occurrences = inputOccurrences.map((rawInput) => {
+    const input = parameterizedOccurrence(rawInput);
     const reuseKey = translationReuseKey(input);
     let unit = unitsByKey.get(reuseKey);
     if (!unit) {
@@ -70,21 +212,26 @@ export function buildTranslationUnits(inputOccurrences) {
 
 export function classifyRisk(meta = {}) {
   const features = meta.features ?? {};
-  const checks = [
+  const strictChecks = [
     [meta.extension === ".xlsm" || features.has_vba, "macro"],
     [meta.unsafe_legacy_conversion, "unsafe-legacy-conversion"],
-    [features.chart_count > 0, "chart"],
-    [features.comment_count > 0, "comment"],
-    [features.unsupported_drawing_count > 0, "unsupported-drawing"],
     [meta.repair_warning, "repair-warning"],
     [meta.formula_change, "formula-change"],
     [meta.merge_change, "merge-change"],
     [meta.protected_token_change, "protected-token-change"],
-    [meta.image_uncertain, "image-uncertain"],
     [meta.state_hash_mismatch, "state-hash-mismatch"],
   ];
-  const reasons = checks.filter(([condition]) => Boolean(condition)).map(([, reason]) => reason);
-  return { mode: reasons.length ? "strict" : "balanced", reasons };
+  const complexChecks = [
+    [features.chart_count > 0, "chart"],
+    [features.comment_count > 0, "comment"],
+    [features.external_link_count > 0, "external-link"],
+    [features.unsupported_drawing_count > 0, "unsupported-drawing"],
+    [meta.image_uncertain, "image-uncertain"],
+  ];
+  const strictReasons = strictChecks.filter(([condition]) => Boolean(condition)).map(([, reason]) => reason);
+  const complexReasons = complexChecks.filter(([condition]) => Boolean(condition)).map(([, reason]) => reason);
+  const reasons = [...strictReasons, ...complexReasons];
+  return { mode: strictReasons.length ? "strict" : complexReasons.length ? "complex" : "fast", reasons };
 }
 
 
@@ -120,15 +267,16 @@ export function buildRenderPlan({
     return {
       phase,
       mode: risk.mode,
-      sheets: visibleUsed,
+      sheets: [],
       fullPrintPages: false,
+      skipped: true,
       reasons: [...risk.reasons],
     };
   }
   if (phase !== "final") {
     throw new Error(`unsupported render phase: ${phase}`);
   }
-  const fullCoverage = risk.mode === "strict" || outputMode === "bilingual";
+  const fullCoverage = risk.mode === "strict";
   const selectedNames = new Set([...changedSheets, ...riskSheets]);
   return {
     phase,
@@ -362,11 +510,34 @@ function inspectOoxmlPackage(input, jobDir) {
   const report = JSON.parse(result.stdout);
   const features = report.features ?? {};
   features.unsupported_drawing_count = (
-    features.drawing_count > 0
+    features.meaningful_drawing_count > 0
     && features.chart_count === 0
     && features.unique_image_count === 0
-  ) ? features.drawing_count : 0;
+  ) ? features.meaningful_drawing_count : 0;
   return { ...report, features };
+}
+
+export function buildPrintLayoutPlan({ range, translated = false } = {}) {
+  if (!translated || !range) return null;
+  const bounds = rangeBounds(range);
+  const columnCount = bounds.endColumn - bounds.startColumn + 1;
+  if (columnCount < 10) return null;
+  return { orientation: "landscape", fitToPagesWide: 1, fitToPagesTall: 0 };
+}
+
+
+function queryRelevantGlossary(manifestPath, outputPath) {
+  const bundledPython = path.resolve(path.dirname(process.execPath), "..", "..", "python", "python.exe");
+  const python = process.env.CODEX_PYTHON || bundledPython;
+  const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+  const script = path.resolve(scriptDir, "query_repo_glossary.py");
+  const repoRoot = path.resolve(scriptDir, "..", "..", "..");
+  const result = spawnSync(python, [
+    script, "--repo-root", repoRoot, "--manifest", manifestPath, "--output", outputPath,
+  ], { encoding: "utf8", windowsHide: true });
+  if (result.status !== 0) {
+    throw new Error(`glossary query failed: ${result.stderr || result.stdout}`);
+  }
 }
 
 
@@ -410,7 +581,6 @@ export async function inspectWorkbook(options) {
   }
   if (state.completedStages.length > 0) state = invalidateFrom(state, "preflight");
 
-  await fs.mkdir(path.join(jobDir, "renders", "preflight"), { recursive: true });
   const packageReport = inspectOoxmlPackage(input, jobDir);
   const workbook = await SpreadsheetFile.importXlsx(await FileBlob.load(input));
   const sheets = [];
@@ -442,21 +612,6 @@ export async function inspectWorkbook(options) {
       }
     }
   }
-  const renderPlan = buildRenderPlan({
-    phase: "preflight", outputMode: config.outputMode, sheets,
-  });
-  if (options["skip-render"] !== "true") {
-    for (const sheet of renderPlan.sheets) {
-      const rendered = await workbook.render({
-        sheetName: sheet.name, range: sheet.range, scale: 1, format: "png",
-      });
-      const safeName = sheet.name.replace(/[<>:"/\\|?*]/g, "_");
-      await fs.writeFile(
-        path.join(jobDir, "renders", "preflight", `${safeName}.png`),
-        new Uint8Array(await rendered.arrayBuffer()),
-      );
-    }
-  }
   const inventory = {
     schema_version: 1,
     source_file: input,
@@ -471,7 +626,7 @@ export async function inspectWorkbook(options) {
   };
   const inventoryPath = path.join(jobDir, "inventory.json");
   await writeJson(inventoryPath, inventory);
-  state = completeStage(state, "preflight", { renderPlan: await sha256File(inventoryPath) });
+  state = completeStage(state, "preflight", { inventory: await sha256File(inventoryPath) });
   state = completeStage(state, "inspect", { inventory: await sha256File(inventoryPath) });
   state.outputPaths = { ...state.outputPaths, source: input, jobDir };
   state.counts = { ...state.counts, occurrences: occurrences.length, sheets: sheets.length };
@@ -487,6 +642,7 @@ export async function prepareManifest(options) {
   if (nextStage(state) !== "prepare") throw new Error(`prepare requires stage prepare; found ${nextStage(state)}`);
   const inventory = JSON.parse(await fs.readFile(path.join(jobDir, "inventory.json"), "utf8"));
   const built = buildTranslationUnits(inventory.occurrences);
+  const autofill = applySafeAutofill(built.translation_units, inventory.target_language);
   const manifest = {
     schema_version: 2,
     source_file: inventory.source_file,
@@ -505,10 +661,24 @@ export async function prepareManifest(options) {
   };
   const manifestPath = path.join(jobDir, "translation-manifest.json");
   await writeJson(manifestPath, manifest);
+  const glossaryPath = path.join(jobDir, "relevant-glossary.json");
+  queryRelevantGlossary(manifestPath, glossaryPath);
   state = completeStage(state, "prepare", { manifest: await sha256File(manifestPath) });
-  state.counts = { ...state.counts, translationUnits: built.translation_units.length };
+  state.counts = {
+    ...state.counts,
+    translationUnits: built.translation_units.length,
+    pendingTranslationUnits: autofill.pending,
+    fixedTranslationUnits: autofill.fixed,
+    retainedTranslationUnits: autofill.retained,
+  };
   await saveJobState(path.join(jobDir, "job-state.json"), state);
-  return { next_stage: "translate", manifest: manifestPath, pending: built.translation_units.length };
+  return {
+    next_stage: "translate",
+    manifest: manifestPath,
+    glossary: glossaryPath,
+    pending: autofill.pending,
+    autofill,
+  };
 }
 
 
@@ -605,11 +775,88 @@ async function buildBilingualWorkbook(sourceWorkbook, manifest, units) {
 
     for (const occurrence of occurrencesBySheet.get(source.name) ?? []) {
       const cell = splitCellAddress(occurrence.address);
-      const translation = units.get(occurrence.translation_unit_id).translation;
+      const translation = renderOccurrenceTranslation(
+        occurrence, units.get(occurrence.translation_unit_id),
+      );
       target.getRange(`${cell.column}${cell.row * 2}`).values = [[translation]];
     }
   }
   return outputWorkbook;
+}
+
+function mergedCellWidth(sheet, address) {
+  const cell = splitCellAddress(address);
+  let startColumn = columnNumber(cell.column);
+  let endColumn = startColumn;
+  let verticalMerge = false;
+  for (const merge of sheet.__getMergedCells?.() ?? []) {
+    const start = splitCellAddress(merge.startAddress);
+    const end = splitCellAddress(merge.endAddress);
+    const startNumber = columnNumber(start.column);
+    const endNumber = columnNumber(end.column);
+    if (cell.row >= start.row && cell.row <= end.row
+      && startColumn >= startNumber && startColumn <= endNumber) {
+      startColumn = startNumber;
+      endColumn = endNumber;
+      verticalMerge = start.row !== end.row;
+      break;
+    }
+  }
+  let width = 0;
+  for (let column = startColumn; column <= endColumn; column += 1) {
+    const value = sheet.getRange(`${columnLabel(column)}:${columnLabel(column)}`).format.columnWidth;
+    width += Number.isFinite(value) ? value : 8.43;
+  }
+  return { width, verticalMerge };
+}
+
+function applyMonolingualLayoutRepairs(workbook, manifest, units) {
+  const sheets = new Map(workbook.worksheets.items.map((sheet) => [sheet.name, sheet]));
+  const expandedRows = new Set();
+  const compressedRows = new Set();
+  for (const occurrence of manifest.occurrences) {
+    if (occurrence.kind !== "cell") continue;
+    const sheet = sheets.get(occurrence.sheet);
+    if (!sheet) continue;
+    const cell = splitCellAddress(occurrence.address);
+    const { width, verticalMerge } = mergedCellWidth(sheet, occurrence.address);
+    if (verticalMerge) continue;
+    const rowRange = sheet.getRange(`${cell.row}:${cell.row}`);
+    const currentHeight = Number.isFinite(rowRange.format.rowHeight)
+      ? rowRange.format.rowHeight : 15;
+    const text = renderOccurrenceTranslation(
+      occurrence, units.get(occurrence.translation_unit_id),
+    );
+    const neededHeight = estimateTranslatedRowHeight({
+      text, columnWidth: width, currentHeight,
+    });
+    if (shouldWrapTranslatedText({ text, columnWidth: width })) {
+      sheet.getRange(occurrence.address).format.wrapText = true;
+    }
+    if (neededHeight > currentHeight) {
+      rowRange.format.rowHeight = neededHeight;
+      expandedRows.add(`${sheet.name}!${cell.row}`);
+    }
+  }
+  for (const sheet of workbook.worksheets.items) {
+    const used = sheet.getUsedRange();
+    if (!used?.address) continue;
+    const origin = rangeOrigin(used.address);
+    const mergedRows = verticalMergeRows(sheet.__getMergedCells?.() ?? []);
+    for (const row of findCompressibleBlankRows(
+      used.values ?? [], used.formulas ?? [], origin.row,
+    )) {
+      if (mergedRows.has(row)) continue;
+      const rowRange = sheet.getRange(`${row}:${row}`);
+      const currentHeight = Number.isFinite(rowRange.format.rowHeight)
+        ? rowRange.format.rowHeight : 15;
+      if (currentHeight > 8) {
+        rowRange.format.rowHeight = 8;
+        compressedRows.add(`${sheet.name}!${row}`);
+      }
+    }
+  }
+  return { expandedRows: expandedRows.size, compressedRows: compressedRows.size };
 }
 
 
@@ -726,8 +973,10 @@ export async function verifyTranslations(options) {
       const targetAddress = state.outputMode === "bilingual"
         ? `${sourceCell.column}${sourceCell.row * 2}` : occurrence.address;
       const actual = cellContent(outputSheet, targetAddress).value;
-      if (actual !== unit.translation) errors.push(`missing-translation:${occurrence.id}`);
-      for (const token of unit.protected_tokens ?? []) {
+      if (actual !== renderOccurrenceTranslation(occurrence, unit)) {
+        errors.push(`missing-translation:${occurrence.id}`);
+      }
+      for (const token of occurrence.original_protected_tokens ?? unit.protected_tokens ?? []) {
         if (!String(actual ?? "").includes(token)) errors.push(`protected-token-change:${occurrence.id}:${token}`);
       }
     }
@@ -777,14 +1026,18 @@ export async function renderOutput(options) {
     features: inventory.features,
     image_uncertain: imagePlan.strict_reasons.length > 0,
   });
-  const workbook = await SpreadsheetFile.importXlsx(await FileBlob.load(outputPath));
-  const sheets = workbook.worksheets.items.map((sheet) => ({
-    name: sheet.name, visible: true, used: Boolean(sheet.getUsedRange()?.address),
-  }));
+  const sheets = inventory.sheets ?? [];
   const changedSheets = [...new Set(manifest.occurrences.map((item) => item.sheet))];
   const plan = buildRenderPlan({
     phase: "final", outputMode: state.outputMode, sheets, changedSheets, risk,
   });
+  plan.printLayout = Object.fromEntries(
+    plan.sheets
+      .map((sheet) => [sheet.name, buildPrintLayoutPlan({
+        range: sheet.range, translated: changedSheets.includes(sheet.name),
+      })])
+      .filter(([, layout]) => layout),
+  );
   if (plan.fullPrintPages) {
     plan.reasons = [...new Set([...plan.reasons, "print-page-verification-required"])];
     plan.mode = "strict";
@@ -792,14 +1045,22 @@ export async function renderOutput(options) {
   const renderDir = path.join(jobDir, "final-renders");
   await fs.mkdir(renderDir, { recursive: true });
   if (options["skip-render"] !== "true") {
-    for (const item of plan.sheets) {
-      const sheet = workbook.worksheets.items.find((candidate) => candidate.name === item.name);
-      const rendered = await workbook.render({
-        sheetName: item.name, range: sheet.getUsedRange().address, scale: 1, format: "png",
-      });
-      const safeName = item.name.replace(/[<>:"/\\|?*]/g, "_");
-      await fs.writeFile(path.join(renderDir, `${safeName}.png`), new Uint8Array(await rendered.arrayBuffer()));
+    const script = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "excel_com_verify.ps1");
+    const powershell = process.env.CODEX_POWERSHELL || "powershell.exe";
+    const selectedPath = path.join(jobDir, "selected-render-sheets.json");
+    const layoutPath = path.join(jobDir, "print-layout.json");
+    await writeJson(selectedPath, plan.sheets.map((item) => item.name));
+    await writeJson(layoutPath, plan.printLayout);
+    const result = spawnSync(powershell, [
+      "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script,
+      "-InputPath", outputPath, "-OutputDirectory", renderDir,
+      "-SheetNamesPath", selectedPath,
+      "-PrintLayoutPath", layoutPath,
+    ], { encoding: "utf8", windowsHide: true });
+    if (result.status !== 0) {
+      throw new Error(`Excel COM verification failed: ${result.stderr || result.stdout}`);
     }
+    plan.officeVerification = JSON.parse(result.stdout);
   }
   const planPath = path.join(jobDir, "render-plan.json");
   await writeJson(planPath, { ...plan, image_review: imagePlan });
@@ -828,6 +1089,7 @@ export async function applyTranslations(options) {
   const workbook = await SpreadsheetFile.importXlsx(await FileBlob.load(input));
   const sheets = new Map(workbook.worksheets.items.map((sheet) => [sheet.name, sheet]));
   const changedSheets = new Set();
+  let layoutRepairs = { expandedRows: 0, compressedRows: 0 };
   let outputWorkbook = workbook;
   if (state.outputMode === "bilingual") {
     const inventory = JSON.parse(await fs.readFile(path.join(jobDir, "inventory.json"), "utf8"));
@@ -840,16 +1102,19 @@ export async function applyTranslations(options) {
       if (occurrence.kind !== "cell") continue;
       const sheet = sheets.get(occurrence.sheet);
       if (!sheet) throw new Error(`worksheet not found: ${occurrence.sheet}`);
-      sheet.getRange(occurrence.address).values = [[units.get(occurrence.translation_unit_id).translation]];
+      sheet.getRange(occurrence.address).values = [[renderOccurrenceTranslation(
+        occurrence, units.get(occurrence.translation_unit_id),
+      )]];
       changedSheets.add(occurrence.sheet);
     }
+    layoutRepairs = applyMonolingualLayoutRepairs(outputWorkbook, manifest, units);
   }
   await fs.mkdir(path.dirname(output), { recursive: true });
   const blob = await SpreadsheetFile.exportXlsx(outputWorkbook);
   await blob.save(output);
   state = completeStage(state, "apply", { output: await sha256File(output) });
   state.outputPaths = { ...state.outputPaths, output };
-  state.counts = { ...state.counts, changedSheets: changedSheets.size };
+  state.counts = { ...state.counts, changedSheets: changedSheets.size, ...layoutRepairs };
   await saveJobState(path.join(jobDir, "job-state.json"), state);
   return { next_stage: nextStage(state), output, changed_sheets: [...changedSheets] };
 }

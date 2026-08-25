@@ -10,10 +10,16 @@ import {
   buildRenderPlan,
   buildImageReviewPlan,
   buildTranslationUnits,
+  buildPrintLayoutPlan,
   classifyRisk,
   classifyBilingualGrid,
   completeStage,
   applyTranslations,
+  applySafeAutofill,
+  estimateTranslatedRowHeight,
+  shouldWrapTranslatedText,
+  findCompressibleBlankRows,
+  verticalMergeRows,
   invalidateFrom,
   inspectWorkbook,
   newJobState,
@@ -21,6 +27,7 @@ import {
   prepareManifest,
   reconcileJobState,
   renderOutput,
+  renderOccurrenceTranslation,
   saveJobState,
   translationReuseKey,
   verifyTranslations,
@@ -102,7 +109,7 @@ test("reuse key preserves meaningful newlines and punctuation", () => {
 });
 
 
-test("macro and unsupported workbook features select strict mode", () => {
+test("macro stays strict while ordinary charts and comments are complex", () => {
   const risk = classifyRisk({
     extension: ".xlsm",
     features: {
@@ -117,15 +124,112 @@ test("macro and unsupported workbook features select strict mode", () => {
     risk.reasons,
     ["macro", "chart", "comment", "unsupported-drawing"],
   );
+
+  const complex = classifyRisk({
+    extension: ".xlsx",
+    features: { chart_count: 1, comment_count: 1 },
+  });
+  assert.equal(complex.mode, "complex");
+  assert.deepEqual(complex.reasons, ["chart", "comment"]);
+});
+
+test("parameter rows translate the label once and preserve the technical value", () => {
+  const result = buildTranslationUnits([
+    occurrence({ id: "S1!A1", source: "功率：45kW", protected_tokens: ["45kW"] }),
+    occurrence({ id: "S1!A2", address: "A2", source: "功率：90kW", protected_tokens: ["90kW"] }),
+  ]);
+  assert.equal(result.translation_units.length, 1);
+  assert.equal(result.translation_units[0].source, "功率");
+  assert.deepEqual(result.occurrences[0].translation_template, {
+    separator: "：", suffix: "45kW",
+  });
+  assert.deepEqual(result.occurrences[1].translation_template, {
+    separator: "：", suffix: "90kW",
+  });
+  result.translation_units[0].translation = "Puissance";
+  assert.equal(
+    renderOccurrenceTranslation(result.occurrences[1], result.translation_units[0]),
+    "Puissance：90kW",
+  );
+});
+
+test("natural-language sentences are not treated as parameter rows", () => {
+  const result = buildTranslationUnits([
+    occurrence({ source: "备注：设备由买方提供", protected_tokens: [] }),
+  ]);
+  assert.equal(result.translation_units[0].source, "备注：设备由买方提供");
+  assert.equal(result.occurrences[0].translation_template, undefined);
+});
+
+test("safe English autofill resolves fixed labels units and identifiers only", () => {
+  const units = [
+    { source: "工程名称", translation: "", status: "pending" },
+    { source: "台", translation: "", status: "pending" },
+    { source: "SL2405-GS03", translation: "", status: "pending" },
+    { source: "挡轮形式", translation: "", status: "pending" },
+  ];
+  const result = applySafeAutofill(units, "en");
+  assert.deepEqual(units.map(({ translation, status }) => ({ translation, status })), [
+    { translation: "Project Name", status: "translated" },
+    { translation: "unit", status: "translated" },
+    { translation: "SL2405-GS03", status: "retain" },
+    { translation: "", status: "pending" },
+  ]);
+  assert.deepEqual(result, { fixed: 2, retained: 1, pending: 1 });
+});
+
+test("safe autofill does not apply English labels to another target language", () => {
+  const units = [{ source: "工程名称", translation: "", status: "pending" }];
+  assert.deepEqual(applySafeAutofill(units, "fr"), {
+    fixed: 0, retained: 0, pending: 1,
+  });
+  assert.equal(units[0].status, "pending");
+});
+
+test("long translated text raises only the affected row height", () => {
+  assert.equal(estimateTranslatedRowHeight({
+    text: "To Be Ordered with the Equipment", columnWidth: 14, currentHeight: 18,
+  }), 48);
+  assert.equal(estimateTranslatedRowHeight({
+    text: "Unit", columnWidth: 14, currentHeight: 18,
+  }), 18);
+  assert.equal(estimateTranslatedRowHeight({
+    text: "Main Drive Speed: 0.16~1.62 r/min", columnWidth: 32, currentHeight: 18,
+  }), 18);
+  assert.equal(shouldWrapTranslatedText({
+    text: "Preliminary Design", columnWidth: 11.5,
+  }), true);
+});
+
+test("only runs of three or more completely blank rows are compressed", () => {
+  const values = [["A"], [null], [null], [null], ["B"], [null], [null]];
+  const formulas = values.map(() => [""]);
+  assert.deepEqual(findCompressibleBlankRows(values, formulas, 10), [11, 12, 13]);
+  formulas[2][0] = "=1";
+  assert.deepEqual(findCompressibleBlankRows(values, formulas, 10), []);
+});
+
+test("horizontal merges do not block blank-row compression", () => {
+  assert.deepEqual(verticalMergeRows([
+    { startAddress: "B54", endAddress: "D54" },
+    { startAddress: "A55", endAddress: "A56" },
+  ]), new Set([55, 56]));
+});
+
+test("wide translated tables get a one-page-wide landscape print hint", () => {
+  assert.deepEqual(buildPrintLayoutPlan({ range: "A1:N99", translated: true }), {
+    orientation: "landscape", fitToPagesWide: 1, fitToPagesTall: 0,
+  });
+  assert.equal(buildPrintLayoutPlan({ range: "A1:F20", translated: true }), null);
 });
 
 
-test("ordinary images do not force strict mode", () => {
+test("ordinary images use the fast path", () => {
   const risk = classifyRisk({
     extension: ".xlsx",
     features: { unique_image_count: 3, image_occurrence_count: 8 },
   });
-  assert.deepEqual(risk, { mode: "balanced", reasons: [] });
+  assert.deepEqual(risk, { mode: "fast", reasons: [] });
 });
 
 
@@ -145,7 +249,7 @@ test("unsafe conversion repair warning and uncertain image force strict mode", (
 });
 
 
-test("preflight renders each visible used sheet once", () => {
+test("preflight never renders ordinary workbooks", () => {
   const sheets = [
     { name: "A", visible: true, used: true },
     { name: "B", visible: false, used: true },
@@ -158,8 +262,9 @@ test("preflight renders each visible used sheet once", () => {
     changedSheets: [],
     risk: { mode: "balanced", reasons: [] },
   });
-  assert.deepEqual(plan.sheets.map((sheet) => sheet.name), ["A"]);
+  assert.deepEqual(plan.sheets, []);
   assert.equal(plan.fullPrintPages, false);
+  assert.equal(plan.skipped, true);
 });
 
 
@@ -181,15 +286,14 @@ test("monolingual final render contains only changed and risk sheets", () => {
 });
 
 
-test("bilingual and strict final render use all visible sheets and print pages", () => {
+test("strict final render uses all visible sheets and print pages", () => {
   const sheets = [
     { name: "A", visible: true, used: true },
     { name: "B", visible: true, used: true },
     { name: "Hidden", visible: false, used: true },
   ];
   for (const request of [
-    { outputMode: "bilingual", risk: { mode: "balanced", reasons: [] } },
-    { outputMode: "monolingual", risk: { mode: "strict", reasons: ["chart"] } },
+    { outputMode: "monolingual", risk: { mode: "strict", reasons: ["macro"] } },
   ]) {
     const plan = buildRenderPlan({
       phase: "final",
@@ -200,6 +304,24 @@ test("bilingual and strict final render use all visible sheets and print pages",
     assert.deepEqual(plan.sheets.map((sheet) => sheet.name), ["A", "B"]);
     assert.equal(plan.fullPrintPages, true);
   }
+});
+
+
+test("complex final render is limited to changed and risk sheets", () => {
+  const plan = buildRenderPlan({
+    phase: "final",
+    outputMode: "monolingual",
+    sheets: [
+      { name: "A", visible: true, used: true },
+      { name: "B", visible: true, used: true },
+      { name: "C", visible: true, used: true },
+    ],
+    changedSheets: ["A"],
+    riskSheets: ["B"],
+    risk: { mode: "complex", reasons: ["chart"] },
+  });
+  assert.deepEqual(plan.sheets.map((sheet) => sheet.name), ["A", "B"]);
+  assert.equal(plan.fullPrintPages, false);
 });
 
 
@@ -299,6 +421,10 @@ test("inspect prepare and apply translate text while preserving numbers and form
 
     const prepared = await prepareManifest({ "job-dir": jobDir });
     assert.equal(prepared.next_stage, "translate");
+    const relevantGlossary = JSON.parse(
+      await fs.readFile(path.join(jobDir, "relevant-glossary.json"), "utf8"),
+    );
+    assert.equal(typeof relevantGlossary.matched_entries, "number");
     const manifestPath = path.join(jobDir, "translation-manifest.json");
     const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
     const unit = manifest.translation_units.find((item) => item.source === "设备名称");

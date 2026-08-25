@@ -16,6 +16,31 @@ from zipfile import BadZipFile, ZipFile
 PACKAGE_REL_NS = "http://schemas.openxmlformats.org/package/2006/relationships"
 DOCUMENT_REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 SPREADSHEET_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+DRAWING_NS = "http://schemas.openxmlformats.org/drawingml/2006/main"
+SHEET_DRAWING_NS = "http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing"
+
+
+def _drawing_shape_counts(archive: ZipFile) -> tuple[int, int]:
+    meaningful = decorative = 0
+    for name in archive.namelist():
+        if not name.startswith("xl/drawings/") or not name.endswith(".xml"):
+            continue
+        root = ET.fromstring(archive.read(name))
+        meaningful += sum(
+            len(root.findall(f".//{{{SHEET_DRAWING_NS}}}{tag}"))
+            for tag in ("cxnSp", "graphicFrame", "contentPart")
+        )
+        for shape in root.findall(f".//{{{SHEET_DRAWING_NS}}}sp"):
+            text = "".join(node.text or "" for node in shape.findall(f".//{{{DRAWING_NS}}}t")).strip()
+            extent = shape.find(f".//{{{DRAWING_NS}}}ext")
+            width = int(extent.attrib.get("cx", "0")) if extent is not None else 0
+            height = int(extent.attrib.get("cy", "0")) if extent is not None else 0
+            # 12700 EMU is one point. A sub-2-point dimension is normally a legacy border fragment.
+            if text or (width >= 25400 and height >= 25400):
+                meaningful += 1
+            else:
+                decorative += 1
+    return meaningful, decorative
 
 
 def _rels_path(part: str) -> str:
@@ -100,6 +125,7 @@ def inspect_package(path: str | Path, extract_dir: str | Path | None = None) -> 
     try:
         with ZipFile(source) as archive:
             names = set(archive.namelist())
+            meaningful_drawings, decorative_drawings = _drawing_shape_counts(archive)
             occurrences_by_path = _image_occurrences(archive)
             media_paths = sorted(name for name in names if name.startswith("xl/media/") and not name.endswith("/"))
             groups: dict[str, dict] = {}
@@ -155,6 +181,8 @@ def inspect_package(path: str | Path, extract_dir: str | Path | None = None) -> 
                 "external_link_count": sum(name.startswith("xl/externalLinks/") and name.endswith(".xml") for name in names),
                 "table_count": sum(name.startswith("xl/tables/") and name.endswith(".xml") for name in names),
                 "drawing_count": sum(name.startswith("xl/drawings/") and name.endswith(".xml") for name in names),
+                "meaningful_drawing_count": meaningful_drawings,
+                "decorative_drawing_count": decorative_drawings,
                 "image_occurrence_count": sum(item["occurrence_count"] for item in images),
                 "unique_image_count": len(images),
             }

@@ -49,6 +49,11 @@ Create new jobs with UTF-8 schema v2. Keep every source location in `occurrences
 - Keep every physical workbook location as a separate occurrence, even when several occurrences reference one translation unit.
 - Use status `translated` for translated text. Use `retain` only when the translation equals the source and include a concrete `reason`.
 - Preserve every protected token exactly in the translation.
+- Keep deterministic English fixed-label translations and identifier/model-code retains in the
+  same schema; only `pending` units require model work.
+- Parameter occurrences may add `original_source`, `original_protected_tokens`, and
+  `translation_template`. Their translation unit contains only the reusable label; `apply`
+  deterministically appends the recorded separator and technical suffix.
 
 ## Images
 
