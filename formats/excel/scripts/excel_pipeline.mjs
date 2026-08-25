@@ -1,6 +1,21 @@
 #!/usr/bin/env node
 
 import { createHash } from "node:crypto";
+import fs from "node:fs/promises";
+import path from "node:path";
+
+
+export const JOB_STAGES = [
+  "preflight",
+  "inspect",
+  "prepare",
+  "translate",
+  "validate",
+  "apply",
+  "verify",
+  "render",
+  "deliver",
+];
 
 
 export function translationReuseKey(item) {
@@ -104,4 +119,95 @@ export function buildRenderPlan({
     fullPrintPages: fullCoverage,
     reasons: [...risk.reasons],
   };
+}
+
+
+function assertJobConfig({ sourceSha256, targetLanguage, outputMode }) {
+  if (typeof sourceSha256 !== "string" || sourceSha256.length !== 64) {
+    throw new Error("sourceSha256 must be a 64-character digest");
+  }
+  if (typeof targetLanguage !== "string" || !targetLanguage.trim()) {
+    throw new Error("targetLanguage must be non-empty text");
+  }
+  if (!["monolingual", "bilingual"].includes(outputMode)) {
+    throw new Error("outputMode must be monolingual or bilingual");
+  }
+}
+
+
+export function newJobState(config) {
+  assertJobConfig(config);
+  return {
+    schemaVersion: 1,
+    sourceSha256: config.sourceSha256,
+    targetLanguage: config.targetLanguage,
+    outputMode: config.outputMode,
+    completedStages: [],
+    stageArtifacts: {},
+    outputPaths: {},
+    counts: {},
+    strictReasons: [],
+  };
+}
+
+
+export function nextStage(state) {
+  return JOB_STAGES[state.completedStages.length] ?? null;
+}
+
+
+export function completeStage(state, stage, artifactHashes = {}) {
+  const expected = nextStage(state);
+  if (stage !== expected) {
+    throw new Error(`cannot complete ${stage}; expected ${expected ?? "no further stage"}`);
+  }
+  return {
+    ...state,
+    completedStages: [...state.completedStages, stage],
+    stageArtifacts: {
+      ...state.stageArtifacts,
+      [stage]: { ...artifactHashes },
+    },
+  };
+}
+
+
+export function invalidateFrom(state, stage) {
+  const stageIndex = JOB_STAGES.indexOf(stage);
+  if (stageIndex < 0) {
+    throw new Error(`unknown job stage: ${stage}`);
+  }
+  const completedStages = state.completedStages.filter(
+    (completed) => JOB_STAGES.indexOf(completed) < stageIndex,
+  );
+  const stageArtifacts = Object.fromEntries(
+    Object.entries(state.stageArtifacts).filter(
+      ([completed]) => JOB_STAGES.indexOf(completed) < stageIndex,
+    ),
+  );
+  return { ...state, completedStages, stageArtifacts };
+}
+
+
+export function reconcileJobState(state, config) {
+  assertJobConfig(config);
+  const matches =
+    state.sourceSha256 === config.sourceSha256
+    && state.targetLanguage === config.targetLanguage
+    && state.outputMode === config.outputMode;
+  return matches ? state : newJobState(config);
+}
+
+
+export async function saveJobState(destination, state) {
+  const output = path.resolve(destination);
+  await fs.mkdir(path.dirname(output), { recursive: true });
+  const temporary = `${output}.tmp-${process.pid}-${Date.now()}`;
+  try {
+    await fs.writeFile(temporary, `${JSON.stringify(state, null, 2)}\n`, "utf8");
+    await fs.rename(temporary, output);
+  } catch (error) {
+    await fs.rm(temporary, { force: true });
+    throw error;
+  }
 }

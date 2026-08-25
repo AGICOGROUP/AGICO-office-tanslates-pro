@@ -1,10 +1,19 @@
 import assert from "node:assert/strict";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
 
 import {
   buildRenderPlan,
   buildTranslationUnits,
   classifyRisk,
+  completeStage,
+  invalidateFrom,
+  newJobState,
+  nextStage,
+  reconcileJobState,
+  saveJobState,
   translationReuseKey,
 } from "../scripts/excel_pipeline.mjs";
 
@@ -181,5 +190,73 @@ test("bilingual and strict final render use all visible sheets and print pages",
     });
     assert.deepEqual(plan.sheets.map((sheet) => sheet.name), ["A", "B"]);
     assert.equal(plan.fullPrintPages, true);
+  }
+});
+
+
+test("job state enforces stage order and reports next stage", () => {
+  let state = newJobState({
+    sourceSha256: "a".repeat(64),
+    targetLanguage: "en",
+    outputMode: "monolingual",
+  });
+  assert.equal(nextStage(state), "preflight");
+  assert.throws(() => completeStage(state, "inspect", { inventory: "i1" }), /expected preflight/);
+  state = completeStage(state, "preflight", { report: "p1" });
+  assert.equal(nextStage(state), "inspect");
+  assert.deepEqual(state.completedStages, ["preflight"]);
+  assert.deepEqual(state.stageArtifacts.preflight, { report: "p1" });
+});
+
+
+test("invalidating a stage removes it and every downstream stage", () => {
+  let state = newJobState({
+    sourceSha256: "a".repeat(64),
+    targetLanguage: "en",
+    outputMode: "monolingual",
+  });
+  state = completeStage(state, "preflight", { report: "p1" });
+  state = completeStage(state, "inspect", { inventory: "i1" });
+  state = completeStage(state, "prepare", { manifest: "m1" });
+  state = invalidateFrom(state, "prepare");
+  assert.deepEqual(state.completedStages, ["preflight", "inspect"]);
+  assert.deepEqual(Object.keys(state.stageArtifacts), ["preflight", "inspect"]);
+  assert.equal(nextStage(state), "prepare");
+});
+
+
+test("changed source target or output mode starts a fresh job", () => {
+  let state = newJobState({
+    sourceSha256: "a".repeat(64),
+    targetLanguage: "en",
+    outputMode: "monolingual",
+  });
+  state = completeStage(state, "preflight", { report: "p1" });
+  for (const config of [
+    { sourceSha256: "b".repeat(64), targetLanguage: "en", outputMode: "monolingual" },
+    { sourceSha256: "a".repeat(64), targetLanguage: "es", outputMode: "monolingual" },
+    { sourceSha256: "a".repeat(64), targetLanguage: "en", outputMode: "bilingual" },
+  ]) {
+    const reconciled = reconcileJobState(state, config);
+    assert.deepEqual(reconciled.completedStages, []);
+    assert.equal(nextStage(reconciled), "preflight");
+  }
+});
+
+
+test("job state is saved atomically as JSON", async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "excel-job-state-"));
+  try {
+    const destination = path.join(directory, "job-state.json");
+    const state = newJobState({
+      sourceSha256: "a".repeat(64),
+      targetLanguage: "en",
+      outputMode: "monolingual",
+    });
+    await saveJobState(destination, state);
+    assert.deepEqual(JSON.parse(await fs.readFile(destination, "utf8")), state);
+    assert.deepEqual(await fs.readdir(directory), ["job-state.json"]);
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
   }
 });
