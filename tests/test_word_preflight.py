@@ -132,6 +132,19 @@ class WordPreflightTests(unittest.TestCase):
         self.assertNotIn("unique_texts", summary)
         self.assertEqual(1, full_report["text_occurrence_count"])
 
+    def test_chart_with_human_text_is_reported_as_unsupported(self):
+        with tempfile.TemporaryDirectory() as directory:
+            chart = '<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:v>Sales</c:v></c:chartSpace>'
+            report = self.run_preflight(
+                self.make_docx(
+                    Path(directory),
+                    "<w:p><w:r><w:t>Body</w:t></w:r></w:p>",
+                    {"word/charts/chart1.xml": chart},
+                )
+            )
+
+        self.assertIn("unsupported_chart_text", report["complex_reasons"])
+
 
 if __name__ == "__main__":
     unittest.main()

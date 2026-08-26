@@ -1,6 +1,6 @@
 ---
 name: translate-excel-professionally
-description: Use when translating monolingual or bilingual Excel workbooks (.xls, .xlsx, or .xlsm), especially technical tables whose formulas, layout, images, macros, and editable structure must be preserved.
+description: Use when translating monolingual or bilingual Excel workbooks (.xls or .xlsx), especially technical tables whose formulas, layout, images, and editable structure must be preserved.
 ---
 
 # Professional Excel Translation
@@ -34,10 +34,9 @@ Run `scripts/resolve_repo_glossary.py`; stop if the shared glossary is unavailab
 Run `python scripts/route_excel_file.py <source>` once.
 
 - `.xlsx`: run the standard pipeline below.
-- `.xls`: verify the CFB signature and VBA status, convert an immutable copy with an
-  Excel-compatible converter, verify the conversion, then run the pipeline on the converted file.
-- `.xlsm`: preserve VBA byte-for-byte with a macro-safe Excel engine. Treat it as strict; stop if
-  that engine is unavailable.
+- `.xls`: verify the CFB signature, then run `scripts/excel_com_convert.ps1` once to create and
+  natively reopen an immutable `.xlsx` working copy. The converter rejects VBA.
+- All macro-enabled Office files are rejected before mutation; this adapter does not preserve or run VBA.
 - Reject corrupt, encrypted, extension-mismatched, or ambiguous containers.
 
 ## Single standard pipeline
@@ -51,6 +50,7 @@ Use `scripts/excel_pipeline.mjs` in this order:
    codes, then pauses only for the remaining translation units.
 3. Fill every pending translation unit using glossary-first professional terminology, then run
    `python scripts/validate_manifest.py <job-dir>/translation-manifest.json` and run `apply` once.
+   Resolve each unique image to `reviewed`, `localized`, or `retain`; manual-review is not deliverable.
    Safe deduplication reuses exact text only when context and protected tokens match.
    Parameter rows such as `功率：45kW` translate the label once and reconstruct each original
    technical value deterministically; do not send the unchanged values for repeated translation.
@@ -74,13 +74,13 @@ scripts. Full commands and exit codes are in `references/pipeline-cli.md`.
 - Standard jobs use deterministic checks plus one Excel open/recalculation pass. Do not render a
   source baseline or translated workbook. If the user explicitly requests strict layout inspection,
   perform a separate visual review after the standard pipeline; it is not a delivery gate by default.
-- Complex and strict jobs add only their documented object, macro, or repair checks; they do not
-  export PDF by default.
+- Unsupported complex or strict features fail during the package scan before workbook import or
+  mutation; they do not start a slower alternate workflow.
 - Bilingual output defaults to the paired blue translation-row layout. The fast path is limited to
   verified grid-safe workbooks; complex objects enter strict processing before mutation.
-- Charts, comments, external links, unsupported drawings, and uncertain images select the complex
-  path. `.xlsm`, VBA, unsafe legacy conversion, file repair, or deterministic verification mismatch
-  select the strict path.
+- Charts, comments, external links, unsupported drawings, VBA, unsafe legacy conversion, or file
+  repair requirements are rejected before mutation. A deterministic verification mismatch fails
+  closed; it does not trigger a full-workbook reprocessing loop.
 - Ignore tiny empty legacy shape fragments used as borders. Escalate only drawings with text,
   media, charts, controls, or meaningful geometry.
 - Fixed English translations are exact-match entries in `references/fixed-translations.en.json`.

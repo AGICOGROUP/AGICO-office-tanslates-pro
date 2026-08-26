@@ -101,26 +101,21 @@ class ExcelRouterTests(unittest.TestCase):
             self.assertEqual("xlsx", report["subtype"])
             self.assertEqual("artifact-tool", report["engine"])
 
-    def test_routes_xlsm_and_requires_macro_preservation(self):
+    def test_rejects_xlsm_with_vba(self):
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "equipment.xlsm"
             self.make_ooxml(source, macro=True)
             result = self.run_router(source)
-            self.assertEqual(0, result.returncode, result.stderr)
-            report = json.loads(result.stdout)
-            self.assertEqual("xlsm", report["subtype"])
-            self.assertTrue(report["preserve_vba"])
-            self.assertEqual("excel-com-macro-safe", report["engine"])
+            self.assertEqual(2, result.returncode)
+            self.assertIn("macro-enabled", json.loads(result.stdout)["error"])
 
-    def test_routes_empty_macro_enabled_container_as_xlsm(self):
+    def test_rejects_macro_enabled_container_without_vba_binary(self):
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "equipment.xlsm"
             self.make_ooxml(source, macro_container=True)
             result = self.run_router(source)
-            self.assertEqual(0, result.returncode, result.stderr)
-            report = json.loads(result.stdout)
-            self.assertEqual("xlsm", report["subtype"])
-            self.assertEqual("excel-com-macro-safe", report["engine"])
+            self.assertEqual(2, result.returncode)
+            self.assertIn("macro-enabled", json.loads(result.stdout)["error"])
 
     def test_rejects_extension_signature_mismatch(self):
         with tempfile.TemporaryDirectory() as directory:

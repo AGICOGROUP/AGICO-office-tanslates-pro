@@ -322,6 +322,8 @@ def route(path: str | Path) -> dict:
     expected = ".xlsm" if has_vba or macro_container else ".xlsx"
     if extension != expected:
         raise ValueError(f"extension/signature mismatch: detected {expected}, got {extension or '<none>'}")
+    if expected == ".xlsm":
+        raise ValueError("macro-enabled Excel workbooks are not supported")
     return {
         "format": "excel",
         "subtype": expected[1:],

@@ -9,7 +9,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
-from inspect_pptx_package import inspect_package  # noqa: E402
+from inspect_pptx_package import InspectionError, inspect_package  # noqa: E402
 
 
 def slide_xml(text: str, shape_id: int = 2) -> str:
@@ -71,10 +71,10 @@ OLE_SLIDE_RELS = """<?xml version="1.0" encoding="UTF-8"?>
 
 
 class PowerPointPackageInspectorTests(unittest.TestCase):
-    def make_deck(self, directory: str, texts=("重复术语", "重复术语")) -> Path:
+    def make_deck(self, directory: str, texts=("重复术语", "重复术语"), content_types: str = "<Types/>") -> Path:
         path = Path(directory) / "sample.pptx"
         with ZipFile(path, "w", ZIP_DEFLATED) as archive:
-            archive.writestr("[Content_Types].xml", "<Types/>")
+            archive.writestr("[Content_Types].xml", content_types)
             archive.writestr("ppt/presentation.xml", "<p:presentation xmlns:p='http://schemas.openxmlformats.org/presentationml/2006/main'/>")
             archive.writestr("ppt/media/image1.png", b"same-image-bytes")
             for index, text in enumerate(texts, start=1):
@@ -107,6 +107,41 @@ class PowerPointPackageInspectorTests(unittest.TestCase):
 
         self.assertNotIn("risk_plan", report)
         self.assertEqual(1, len(report["slides"]))
+
+    def test_rejects_human_text_in_unsupported_editable_parts(self):
+        samples = {
+            "ppt/charts/chart1.xml": '<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:v>Sales</c:v></c:chartSpace>',
+            "ppt/diagrams/data1.xml": '<dgm:dataModel xmlns:dgm="http://schemas.openxmlformats.org/drawingml/2006/diagram" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:t>Process</a:t></dgm:dataModel>',
+            "ppt/notesSlides/notesSlide1.xml": '<p:notes xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:t>Speaker note</a:t></p:notes>',
+            "ppt/slideMasters/slideMaster1.xml": '<p:sldMaster xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:t>Confidential</a:t></p:sldMaster>',
+        }
+        for part_name, payload in samples.items():
+            with self.subTest(part=part_name), tempfile.TemporaryDirectory() as directory:
+                deck = self.make_deck(directory, texts=("Title",))
+                with ZipFile(deck, "a", ZIP_DEFLATED) as archive:
+                    archive.writestr(part_name, payload)
+                with self.assertRaisesRegex(InspectionError, "unsupported editable text"):
+                    inspect_package(deck)
+
+    def test_rejects_macro_package_renamed_to_pptx(self):
+        with tempfile.TemporaryDirectory() as directory:
+            deck = self.make_deck(directory, texts=("Title",))
+            with ZipFile(deck, "a", ZIP_DEFLATED) as archive:
+                archive.writestr("ppt/vbaProject.bin", b"macro")
+
+            with self.assertRaisesRegex(InspectionError, "macro-enabled PowerPoint package"):
+                inspect_package(deck)
+
+    def test_rejects_macro_content_type_renamed_to_pptx(self):
+        with tempfile.TemporaryDirectory() as directory:
+            deck = self.make_deck(
+                directory,
+                texts=("Title",),
+                content_types='<Types><Override ContentType="application/vnd.ms-powerpoint.presentation.macroEnabled.main+xml"/></Types>',
+            )
+
+            with self.assertRaisesRegex(InspectionError, "macro-enabled PowerPoint package"):
+                inspect_package(deck)
 
     def test_table_occurrences_keep_com_cell_and_ooxml_paragraph_locations(self):
         with tempfile.TemporaryDirectory() as directory:

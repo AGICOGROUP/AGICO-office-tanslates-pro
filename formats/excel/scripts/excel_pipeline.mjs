@@ -235,6 +235,19 @@ export function classifyRisk(meta = {}) {
 }
 
 
+export function assertSupportedWorkbookRisk(meta = {}) {
+  const extension = String(meta.extension ?? "").toLowerCase();
+  if (extension !== ".xlsx") {
+    throw new Error(`unsupported Excel workbook features: ${extension === ".xlsm" ? "macro" : "container"}`);
+  }
+  const risk = classifyRisk(meta);
+  if (risk.mode !== "fast") {
+    throw new Error(`unsupported Excel workbook features: ${risk.reasons.join(", ")}`);
+  }
+  return risk;
+}
+
+
 export function classifyBilingualGrid(meta = {}) {
   const features = meta.features ?? {};
   const checks = [
@@ -428,9 +441,19 @@ function splitCellAddress(address) {
 
 
 export function mapFormulaToSourceRows(formula) {
-  return formula.replace(/(\$?[A-Z]{1,3})(\$?)(\d+)/g, (_, column, absolute, row) => (
-    `${column}${absolute}${Number(row) * 2 - 1}`
-  ));
+  const mapReferences = (segment) => segment.replace(
+    /(?<![A-Z0-9_.])(\$?[A-Z]{1,3})(\$?)(\d+)(?![A-Z0-9_.]|\s*\()/giu,
+    (_, column, absolute, row) => `${column}${absolute}${Number(row) * 2 - 1}`,
+  );
+  let result = "";
+  let cursor = 0;
+  const quoted = /"(?:""|[^"])*"/gu;
+  for (const match of String(formula).matchAll(quoted)) {
+    result += mapReferences(formula.slice(cursor, match.index));
+    result += match[0];
+    cursor = match.index + match[0].length;
+  }
+  return result + mapReferences(formula.slice(cursor));
 }
 
 
@@ -534,6 +557,10 @@ export async function inspectWorkbook(options) {
   if (state.completedStages.length > 0) state = invalidateFrom(state, "preflight");
 
   const packageReport = inspectOoxmlPackage(input, jobDir);
+  assertSupportedWorkbookRisk({
+    extension: path.extname(input),
+    features: packageReport.features,
+  });
   const workbook = await SpreadsheetFile.importXlsx(await FileBlob.load(input));
   const sheets = [];
   const occurrences = [];
@@ -637,6 +664,7 @@ export async function prepareManifest(options) {
 function validateTranslatedManifest(manifest, state) {
   if (manifest.schema_version !== 2) throw new Error("manifest schema_version must be 2");
   if (manifest.source_sha256 !== state.sourceSha256) throw new Error("manifest source hash mismatch");
+  assertImageDecisionsComplete(manifest);
   const units = new Map();
   for (const unit of manifest.translation_units ?? []) {
     if (!unit.id || units.has(unit.id)) throw new Error(`missing or duplicate translation unit: ${unit.id}`);
@@ -734,6 +762,16 @@ async function buildBilingualWorkbook(sourceWorkbook, manifest, units) {
     }
   }
   return outputWorkbook;
+}
+
+
+export function assertImageDecisionsComplete(manifest = {}) {
+  const unresolved = (manifest.images ?? []).filter(
+    (image) => !["reviewed", "localized", "retain"].includes(image?.status),
+  );
+  if (unresolved.length) {
+    throw new Error(`unresolved image review: ${unresolved.map((image) => image?.id ?? "<unknown>").join(", ")}`);
+  }
 }
 
 function mergedCellWidth(sheet, address) {
@@ -998,6 +1036,8 @@ export async function applyTranslations(options) {
   let state = await loadState(jobDir);
   if (nextStage(state) !== "translate") throw new Error(`apply requires stage translate; found ${nextStage(state)}`);
   if (await sha256File(input) !== state.sourceSha256) throw new Error("input workbook hash changed since inspection");
+  const inventory = JSON.parse(await fs.readFile(path.join(jobDir, "inventory.json"), "utf8"));
+  assertSupportedWorkbookRisk({ extension: path.extname(input), features: inventory.features });
   const manifestPath = path.join(jobDir, "translation-manifest.json");
   const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
   const units = validateTranslatedManifest(manifest, state);
@@ -1010,7 +1050,6 @@ export async function applyTranslations(options) {
   let layoutRepairs = { expandedRows: 0, compressedRows: 0 };
   let outputWorkbook = workbook;
   if (state.outputMode === "bilingual") {
-    const inventory = JSON.parse(await fs.readFile(path.join(jobDir, "inventory.json"), "utf8"));
     const safety = classifyBilingualGrid(inventory);
     if (!safety.safe) throw new Error(`bilingual strict fallback required: ${safety.reasons.join(", ")}`);
     outputWorkbook = await buildBilingualWorkbook(workbook, manifest, units);

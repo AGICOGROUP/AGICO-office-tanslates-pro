@@ -18,6 +18,12 @@ A_NS = "http://schemas.openxmlformats.org/drawingml/2006/main"
 R_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 PKG_REL_NS = "http://schemas.openxmlformats.org/package/2006/relationships"
 SLIDE_RE = re.compile(r"ppt/slides/slide(\d+)\.xml$")
+UNSUPPORTED_TEXT_PARTS = (
+    "ppt/charts/",
+    "ppt/diagrams/",
+    "ppt/notesSlides/",
+    "ppt/slideMasters/",
+)
 PROTECTED_RE = re.compile(
     r"(?:https?://\S+|\b[A-Z]{1,8}[-/]?\d[\w./-]*\b|\b\d+(?:[.,]\d+)?\s*(?:%|mm|cm|m|km|kg|t|kW|MW|V|kV|Hz|°C)\b)",
     re.IGNORECASE,
@@ -38,6 +44,22 @@ def sha256_file(path: Path) -> str:
 
 def local_name(tag: str) -> str:
     return tag.rsplit("}", 1)[-1]
+
+
+def xml_contains_human_text(payload: bytes) -> bool:
+    root = ET.fromstring(payload)
+    return any(
+        node.text and any(character.isalpha() for character in node.text)
+        for node in root.iter()
+        if local_name(node.tag) in {"t", "v"}
+    )
+
+
+def package_has_vba(package: ZipFile, names: set[str]) -> bool:
+    if any(name.casefold().endswith("/vbaproject.bin") for name in names):
+        return True
+    content_types = package.read("[Content_Types].xml").lower() if "[Content_Types].xml" in names else b""
+    return b"macroenabled" in content_types or b"vbaproject" in content_types
 
 
 def paragraph_text(paragraph: ET.Element) -> str:
@@ -258,6 +280,8 @@ def inspect_package(input_path: str | Path) -> dict:
     try:
         with ZipFile(path) as package:
             names = set(package.namelist())
+            if package_has_vba(package, names):
+                raise InspectionError("macro-enabled PowerPoint package is not supported")
             slide_entries = sorted(
                 (
                     (int(match.group(1)), name)
@@ -268,6 +292,17 @@ def inspect_package(input_path: str | Path) -> dict:
             )
             if not slide_entries:
                 raise InspectionError("package contains no PowerPoint slides")
+            unsupported_text = sorted(
+                name
+                for name in names
+                if name.endswith(".xml")
+                and name.startswith(UNSUPPORTED_TEXT_PARTS)
+                and xml_contains_human_text(package.read(name))
+            )
+            if unsupported_text:
+                raise InspectionError(
+                    "unsupported editable text parts: " + ", ".join(unsupported_text)
+                )
             occurrences: list[dict] = []
             image_by_hash: dict[str, dict] = {}
             embedded_objects: list[dict] = []

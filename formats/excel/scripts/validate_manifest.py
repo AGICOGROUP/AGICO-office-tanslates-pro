@@ -128,7 +128,9 @@ def validate_v2(payload: dict[str, Any]) -> dict:
         locations = image.get("occurrences")
         if not isinstance(locations, list) or not locations or not all(_text(item) for item in locations):
             errors.append(f"{prefix}.occurrences must be a non-empty list of locations")
-        if image.get("status") not in {"reviewed", "localized", "retain", "manual-review"}:
+        if image.get("status") == "manual-review":
+            errors.append(f"{prefix} manual-review is not deliverable")
+        elif image.get("status") not in {"reviewed", "localized", "retain"}:
             errors.append(f"{prefix} has invalid status")
         if image.get("reason_code") not in IMAGE_REASON_CODES:
             errors.append(f"{prefix}.reason_code is invalid")

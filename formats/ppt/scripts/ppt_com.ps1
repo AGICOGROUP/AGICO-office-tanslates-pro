@@ -1768,6 +1768,7 @@ $windowGuard.Start()
 
 try {
     $application = New-Object -ComObject PowerPoint.Application
+    $application.AutomationSecurity = 3
     # ReadOnly=true, Untitled=false, WithWindow=false
     $presentation = $application.Presentations.Open($inputFullPath, -1, 0, 0)
 

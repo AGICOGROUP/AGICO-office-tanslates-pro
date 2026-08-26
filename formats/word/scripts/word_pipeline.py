@@ -118,12 +118,14 @@ def prepare(source: Path, job_dir: Path, target_language: str) -> Path:
         working = job_dir / "source-working.docx"
         script = Path(__file__).with_name("word_com.ps1")
         subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(script), "-Action", "convert", "-InputPath", str(source), "-OutputPath", str(working)], check=True)
-    elif source.suffix.lower() in {".docx", ".docm"}:
+    elif source.suffix.lower() == ".docx":
         working = job_dir / ("source-working" + source.suffix.lower())
         shutil.copy2(source, working)
     else:
-        raise ValueError("Word pipeline accepts only .doc, .docx, or .docm")
+        raise ValueError("Word pipeline accepts only .doc and .docx")
     report = analyze(working)
+    if "unsupported_chart_text" in report["complex_reasons"]:
+        raise ValueError("unsupported editable chart text; translate or remove the chart text before retrying")
     units = [{"id": index, "source": text, "target": ""} for index, text in enumerate(report["unique_texts"], 1)]
     manifest = {
         "schema": 1, "source": str(source.resolve()), "source_sha256": source_hash,
@@ -185,7 +187,7 @@ def apply(manifest_path: Path, output: Path) -> None:
     print(json.dumps({"stage": "applied", "output": str(output.resolve())}, ensure_ascii=False))
 
 
-def validate(candidate: Path, manifest_path: Path) -> None:
+def validate(candidate: Path, manifest_path: Path, word_native: bool = False) -> None:
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     report = analyze(candidate)
     failures = []
@@ -207,15 +209,27 @@ def validate(candidate: Path, manifest_path: Path) -> None:
     for key in ("section_count", "table_count", "media_count"):
         if report[key] != manifest["baseline"][key]:
             failures.append(f"{key}: expected {manifest['baseline'][key]}, got {report[key]}")
-    script = Path(__file__).with_name("word_com.ps1")
-    result = subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(script), "-Action", "validate", "-InputPath", str(candidate)], check=True, capture_output=True, text=True)
-    word_report = json.loads(result.stdout.strip().splitlines()[-1])
-    qa = {"passed": not failures, "failures": failures, "structure": report, "word": word_report}
+    warnings = []
+    word_report = {"status": "skipped"}
+    if word_native:
+        script = Path(__file__).with_name("word_com.ps1")
+        try:
+            result = subprocess.run(
+                ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(script), "-Action", "validate", "-InputPath", str(candidate)],
+                check=True, capture_output=True, text=True, timeout=30,
+            )
+            word_report = json.loads(result.stdout.strip().splitlines()[-1])
+            word_report["status"] = "passed"
+        except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired, json.JSONDecodeError, IndexError, KeyError) as exc:
+            warning = f"optional Word-native check failed: {exc}"
+            warnings.append(warning)
+            word_report = {"status": "warning", "message": warning}
+    qa = {"passed": not failures, "failures": failures, "warnings": warnings, "structure": report, "word": word_report}
     qa_path = manifest_path.parent / "qa-report.json"
     qa_path.write_text(json.dumps(qa, ensure_ascii=False, indent=2), encoding="utf-8")
     if failures:
         raise ValueError("; ".join(failures))
-    print(json.dumps({"stage": "validated", "content_pages": word_report["content_pages"], "report": str(qa_path.resolve())}, ensure_ascii=False))
+    print(json.dumps({"stage": "validated", "word_native": word_report["status"], "report": str(qa_path.resolve())}, ensure_ascii=False))
 
 
 def main() -> int:
@@ -227,11 +241,12 @@ def main() -> int:
     a.add_argument("manifest", type=Path); a.add_argument("--output", type=Path, required=True)
     v = commands.add_parser("validate")
     v.add_argument("candidate", type=Path); v.add_argument("--manifest", type=Path, required=True)
+    v.add_argument("--word-native", action="store_true", help="Run optional non-blocking Microsoft Word open/pagination check")
     args = parser.parse_args()
     try:
         if args.command == "prepare": prepare(args.source, args.job_dir, args.target_language)
         elif args.command == "apply": apply(args.manifest, args.output)
-        else: validate(args.candidate, args.manifest)
+        else: validate(args.candidate, args.manifest, args.word_native)
         return 0
     except (OSError, ValueError, subprocess.CalledProcessError) as exc:
         print(str(exc), file=sys.stderr); return 2

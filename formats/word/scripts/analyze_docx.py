@@ -26,6 +26,13 @@ PROTECTED_TOKEN = re.compile(
 SAFE_FIELD_COMMANDS = {"PAGE", "NUMPAGES", "DATE", "TIME", "CREATEDATE", "SAVEDATE", "FILENAME", "AUTHOR"}
 
 
+def package_has_vba(archive: ZipFile, names: set[str]) -> bool:
+    if any(name.casefold().endswith("/vbaproject.bin") for name in names):
+        return True
+    content_types = archive.read("[Content_Types].xml").lower() if "[Content_Types].xml" in names else b""
+    return b"macroenabled" in content_types or b"vbaproject" in content_types
+
+
 def paragraph_text(paragraph: ET.Element) -> str:
     pieces: list[str] = []
     for node in paragraph.iter():
@@ -41,6 +48,15 @@ def paragraph_text(paragraph: ET.Element) -> str:
             else:
                 pieces.append("\n")
     return "".join(pieces).strip()
+
+
+def xml_contains_human_text(payload: bytes) -> bool:
+    root = ET.fromstring(payload)
+    return any(
+        node.text and any(character.isalpha() for character in node.text)
+        for node in root.iter()
+        if node.tag.rsplit("}", 1)[-1] in {"t", "v"}
+    )
 
 
 def analyze(path: Path) -> dict:
@@ -59,10 +75,15 @@ def analyze(path: Path) -> dict:
             names = set(archive.namelist())
             if "word/document.xml" not in names:
                 raise ValueError("OOXML package does not contain word/document.xml")
+            if package_has_vba(archive, names):
+                raise ValueError("macro-enabled Word package is not supported")
 
             media = sorted(name for name in names if name.startswith("word/media/") and not name.endswith("/"))
-            if any(name.startswith("word/charts/") for name in names):
+            chart_parts = sorted(name for name in names if name.startswith("word/charts/") and name.endswith(".xml"))
+            if chart_parts:
                 reasons.add("charts")
+                if any(xml_contains_human_text(archive.read(name)) for name in chart_parts):
+                    reasons.add("unsupported_chart_text")
 
             for part_name in sorted(name for name in names if TEXT_PART.fullmatch(name)):
                 root = ET.fromstring(archive.read(part_name))

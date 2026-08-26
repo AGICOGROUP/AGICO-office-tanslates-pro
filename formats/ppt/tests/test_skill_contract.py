@@ -1,4 +1,5 @@
 import pathlib
+import subprocess
 import unittest
 
 
@@ -45,6 +46,11 @@ class PowerPointOnlySkillContract(unittest.TestCase):
         self.assertNotIn("without deduplicating", skill)
         self.assertNotIn("Reopen and render every slide", skill)
         self.assertNotIn("use `scripts/ppt_com.ps1`", skill.lower())
+
+    def test_com_forces_macro_disable_before_open(self):
+        script = (ROOT / "scripts" / "ppt_com.ps1").read_text(encoding="utf-8-sig")
+        self.assertIn("AutomationSecurity = 3", script)
+        self.assertLess(script.index("AutomationSecurity = 3"), script.index("Presentations.Open"))
 
     def test_embedded_image_translation_uses_only_three_fast_decisions(self):
         skill = (ROOT / "SKILL.md").read_text(encoding="utf-8").lower()
@@ -114,13 +120,20 @@ class PowerPointOnlySkillContract(unittest.TestCase):
 
     def test_no_samples_work_products_or_caches(self):
         forbidden_parts = {"work", "renders", "__pycache__"}
+        tracked = subprocess.run(
+            ["git", "ls-files", "-z", "formats/ppt"],
+            cwd=ROOT.parents[1],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.split("\0")
         offenders = [
-            str(path.relative_to(ROOT))
-            for path in ROOT.rglob("*")
-            if "tests" not in path.relative_to(ROOT).parts
+            path
+            for path in tracked
+            if path and "tests" not in pathlib.Path(path).parts
             and (
-                forbidden_parts.intersection(path.parts)
-                or path.suffix.lower() in {".ppt", ".pptx", ".pyc"}
+                forbidden_parts.intersection(pathlib.Path(path).parts)
+                or pathlib.Path(path).suffix.lower() in {".ppt", ".pptx", ".pyc"}
             )
         ]
         self.assertEqual([], offenders)

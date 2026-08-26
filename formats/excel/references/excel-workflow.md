@@ -2,8 +2,9 @@
 
 ## 1. Route and preserve
 
-Hash the original and run `scripts/route_excel_file.py`. Never overwrite it. Convert `.xls` only
-through a verified Excel-compatible working copy. Keep `.xlsm` on the strict macro-safe route.
+Hash the original and run `scripts/route_excel_file.py`. Never overwrite it. Convert `.xls` once
+with `scripts/excel_com_convert.ps1`; it disables macros, rejects VBA, saves a separate `.xlsx`, and
+reopens that output once. Reject `.xlsm` instead of attempting macro preservation.
 
 ## 2. Run the fixed pipeline
 
@@ -28,6 +29,9 @@ Apply exact phrase, longest valid matched term, then professional contextual tra
 models, identifiers, URLs, standards, punctuation, and meaningful line breaks. Validate the
 schema-v2 manifest before mutation.
 
+Resolve every unique image to `reviewed`, `localized`, or `retain` before `apply`. A remaining
+`manual-review` record blocks writing; duplicate occurrences reuse the same SHA-256 decision.
+
 `apply` imports once, mutates text-bearing cells only, and exports once. For bilingual output, apply
 `bilingual-row-layout.md` only after the grid-safety classifier passes. Otherwise enter strict
 processing before creating an output.
@@ -43,8 +47,8 @@ runs of three or more completely blank, formula-free, unmerged placeholder rows.
   after `office-validate`; do not make it part of the default delivery gate.
 - Images: read `image-text-localization.md`; review one record per unique SHA-256, not each
   occurrence.
-- Strict: add macro-safe and repair checks when macros, unsafe conversion, repair warnings, or
-  deterministic invariant mismatches are present.
+- Unsupported complex or strict workbook features fail during inspection before mutation. Do not
+  enter an expensive alternate rendering or reconstruction path.
 
 Treat sub-2-point empty legacy shape fragments as decorative borders, not unsupported drawings.
 Use Microsoft Excel COM to open source and output read-only, fully recalculate both, check

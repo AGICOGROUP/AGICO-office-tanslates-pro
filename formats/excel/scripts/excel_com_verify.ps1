@@ -71,6 +71,7 @@ function Convert-SourceErrorKeysForBilingual {
 $excel = $null
 try {
     $excel = New-Object -ComObject Excel.Application
+    $excel.AutomationSecurity = 3
     $excel.Visible = $false
     $excel.DisplayAlerts = $false
     $excel.AskToUpdateLinks = $false

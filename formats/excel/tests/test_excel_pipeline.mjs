@@ -15,12 +15,15 @@ import {
   completeStage,
   applyTranslations,
   applySafeAutofill,
+  assertImageDecisionsComplete,
+  assertSupportedWorkbookRisk,
   estimateTranslatedRowHeight,
   shouldWrapTranslatedText,
   findCompressibleBlankRows,
   verticalMergeRows,
   invalidateFrom,
   inspectWorkbook,
+  mapFormulaToSourceRows,
   newJobState,
   nextStage,
   prepareManifest,
@@ -132,6 +135,28 @@ test("macro stays strict while ordinary charts and comments are complex", () => 
   assert.deepEqual(complex.reasons, ["chart", "comment"]);
 });
 
+test("production risk gate rejects unsupported workbooks before translation", () => {
+  assert.throws(
+    () => assertSupportedWorkbookRisk({ extension: ".xlsm", features: { has_vba: true } }),
+    /unsupported Excel workbook features: macro/,
+  );
+  assert.throws(
+    () => assertSupportedWorkbookRisk({ extension: ".xlsx", features: { chart_count: 1 } }),
+    /unsupported Excel workbook features: chart/,
+  );
+  assert.deepEqual(
+    assertSupportedWorkbookRisk({ extension: ".xlsx", features: { unique_image_count: 2 } }),
+    { mode: "fast", reasons: [] },
+  );
+});
+
+test("bilingual formula mapping changes cell rows without changing function names", () => {
+  assert.equal(mapFormulaToSourceRows("=LOG10(A1)"), "=LOG10(A1)");
+  assert.equal(mapFormulaToSourceRows("=ATAN2(A1,B2)"), "=ATAN2(A1,B3)");
+  assert.equal(mapFormulaToSourceRows("=DEC2BIN(A1)"), "=DEC2BIN(A1)");
+  assert.equal(mapFormulaToSourceRows("=SUM(A1:B2)"), "=SUM(A1:B3)");
+});
+
 test("parameter rows translate the label once and preserve the technical value", () => {
   const result = buildTranslationUnits([
     occurrence({ id: "S1!A1", source: "功率：45kW", protected_tokens: ["45kW"] }),
@@ -221,6 +246,50 @@ test("ordinary images use the fast path", () => {
     features: { unique_image_count: 3, image_occurrence_count: 8 },
   });
   assert.deepEqual(risk, { mode: "fast", reasons: [] });
+});
+
+test("unresolved image decisions block apply without rejecting reviewed images", () => {
+  assert.throws(
+    () => assertImageDecisionsComplete({ images: [{ id: "img-a", status: "manual-review" }] }),
+    /unresolved image review: img-a/,
+  );
+  assert.doesNotThrow(() => assertImageDecisionsComplete({ images: [
+    { id: "img-logo", status: "retain", reason_code: "logo-or-brand" },
+    { id: "img-localized", status: "localized", reason_code: "localized" },
+    { id: "img-reviewed", status: "reviewed", reason_code: "no-source-text" },
+  ] }));
+});
+
+test("apply refuses a manifest whose unique image decision is unresolved", async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "excel-image-gate-"));
+  try {
+    const source = path.join(directory, "source.xlsx");
+    const output = path.join(directory, "translated.xlsx");
+    const jobDir = path.join(directory, "job");
+    const workbook = Workbook.create();
+    workbook.worksheets.add("S1").getRange("A1").values = [["Equipment"]];
+    await (await SpreadsheetFile.exportXlsx(workbook)).save(source);
+    await inspectWorkbook({
+      input: source, "job-dir": jobDir, "target-language": "en", "output-mode": "monolingual",
+    });
+    await prepareManifest({ "job-dir": jobDir });
+    const manifestPath = path.join(jobDir, "translation-manifest.json");
+    const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
+    for (const unit of manifest.translation_units) {
+      unit.translation = unit.source;
+      unit.status = "retain";
+    }
+    manifest.images.push({ id: "img-a", status: "manual-review" });
+    await fs.writeFile(manifestPath, JSON.stringify(manifest), "utf8");
+
+    await assert.rejects(
+      applyTranslations({ input: source, "job-dir": jobDir, output }),
+      /unresolved image review: img-a/,
+    );
+    await assert.rejects(fs.access(output));
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
 });
 
 

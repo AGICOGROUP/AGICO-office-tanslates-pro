@@ -9,6 +9,7 @@ $word = $null
 $document = $null
 try {
     $word = New-Object -ComObject Word.Application
+    $word.AutomationSecurity = 3
     $word.DisplayAlerts = 0
     if ($Action -eq "convert") {
         if (-not $OutputPath) { throw "OutputPath is required for conversion" }

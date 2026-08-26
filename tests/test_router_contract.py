@@ -87,6 +87,19 @@ class OfficeRouterContractTests(unittest.TestCase):
                     self.assertIsNone(report["adapter"])
                     self.assertIn("unsupported", report["error"])
 
+    def test_rejects_macro_enabled_office_formats(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for filename in ("sample.docm", "sample.xlsm", "sample.pptm"):
+                with self.subTest(filename=filename):
+                    source = root / filename
+                    source.write_bytes(b"not-opened-by-root-router")
+                    result = self.run_router(source)
+                    self.assertEqual(2, result.returncode)
+                    report = json.loads(result.stdout)
+                    self.assertIsNone(report["format"])
+                    self.assertIn("unsupported", report["error"])
+
     def test_extension_is_authoritative_even_when_container_looks_like_another_format(self):
         with tempfile.TemporaryDirectory() as directory:
             source = self.make_ooxml(Path(directory), "wrong.xlsx", "word/document.xml")

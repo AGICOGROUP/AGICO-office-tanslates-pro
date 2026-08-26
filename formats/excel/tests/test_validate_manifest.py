@@ -158,6 +158,21 @@ class ManifestValidatorTests(unittest.TestCase):
         self.assertIn("changed protected token", errors)
         self.assertIn("reason_code", errors)
 
+    def test_v2_rejects_unresolved_manual_image_review(self):
+        payload = self.make_v2_manifest()
+        payload["images"] = [
+            {
+                "id": "img-001",
+                "sha256": "b" * 64,
+                "occurrences": ["S1#Image1"],
+                "status": "manual-review",
+                "reason_code": "manual-review",
+            }
+        ]
+        report = validate_manifest.validate(payload)
+        self.assertFalse(report["passed"])
+        self.assertIn("manual-review is not deliverable", " ".join(report["errors"]))
+
     def test_v2_rejects_retain_unit_when_translation_differs(self):
         payload = deepcopy(self.make_v2_manifest())
         payload["translation_units"][0].update(

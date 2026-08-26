@@ -97,7 +97,8 @@ class WordAdapterStructureTests(unittest.TestCase):
             with self.subTest(forbidden=forbidden):
                 self.assertNotIn(forbidden, text)
         self.assertIn("word_pipeline.py", text)
-        self.assertIn("one Word-native validation", text)
+        self.assertIn("optional and non-blocking", text)
+        self.assertNotIn("Deliver only after that one Word-native validation passes", text)
 
     def test_word_ui_metadata_exists(self):
         metadata = ROOT / "formats" / "word" / "agents" / "openai.yaml"

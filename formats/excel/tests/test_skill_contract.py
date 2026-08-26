@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import subprocess
 import unittest
 
 
@@ -21,6 +22,7 @@ class ExcelSkillContractTests(unittest.TestCase):
             "scripts/excel_pipeline.mjs",
             "scripts/resolve_repo_glossary.py",
             "scripts/query_repo_glossary.py",
+            "scripts/excel_com_convert.ps1",
             "scripts/excel_com_verify.ps1",
             "scripts/validate_manifest.py",
         }
@@ -29,6 +31,8 @@ class ExcelSkillContractTests(unittest.TestCase):
 
     def test_com_verifier_opens_recalculates_and_scans_without_exporting_pdf(self):
         script = (ROOT / "scripts" / "excel_com_verify.ps1").read_text(encoding="utf-8")
+        self.assertIn("AutomationSecurity = 3", script)
+        self.assertLess(script.index("AutomationSecurity = 3"), script.index("$source = Get-WorkbookReport"))
         for token in (
             "SourcePath",
             "InputPath",
@@ -47,11 +51,30 @@ class ExcelSkillContractTests(unittest.TestCase):
         pipeline = (ROOT / "scripts" / "excel_pipeline.mjs").read_text(encoding="utf-8")
         self.assertNotIn("errors.push(`formula-error:", pipeline)
 
+    def test_legacy_converter_is_macro_safe_and_validates_the_xlsx_once(self):
+        script = (ROOT / "scripts" / "excel_com_convert.ps1").read_text(encoding="utf-8")
+        for token in (
+            "AutomationSecurity = 3",
+            "ReadOnly",
+            "HasVBProject",
+            "SaveAs",
+            "51",
+            "source_sha256",
+            "output_sha256",
+        ):
+            self.assertIn(token, script)
+        self.assertLess(script.index("AutomationSecurity = 3"), script.index("Workbooks.Open"))
+
     def test_standard_flow_has_no_baseline_or_final_visual_render_gate(self):
         skill = (ROOT / "SKILL.md").read_text(encoding="utf-8")
         workflow = (ROOT / "references" / "excel-workflow.md").read_text(encoding="utf-8")
         combined = (skill + "\n" + workflow).casefold()
-        for phrase in ("do not render a source baseline", "new error cells", "explicitly requests"):
+        for phrase in (
+            "do not render a source baseline",
+            "new error cells",
+            "explicitly requests",
+            "manual-review is not deliverable",
+        ):
             self.assertIn(phrase, combined)
         self.assertNotIn("visual-review", combined)
         self.assertNotIn("visual-review", (ROOT / "references" / "pipeline-cli.md").read_text(encoding="utf-8"))
@@ -87,7 +110,7 @@ class ExcelSkillContractTests(unittest.TestCase):
             "spreadsheets:Spreadsheets",
             ".xls",
             ".xlsx",
-            ".xlsm",
+            "macro-enabled Office files are rejected",
             "relevant-glossary.json",
             "route_excel_file.py",
             "resolve_repo_glossary.py",
@@ -126,7 +149,6 @@ class ExcelSkillContractTests(unittest.TestCase):
 
     def test_no_placeholders_or_generated_caches(self):
         placeholders = []
-        caches = []
         for path in ROOT.rglob("*"):
             if not path.is_file():
                 continue
@@ -137,8 +159,16 @@ class ExcelSkillContractTests(unittest.TestCase):
                 text = path.read_text(encoding="utf-8", errors="ignore")
                 if "TODO" in text or "[TODO" in text:
                     placeholders.append(str(relative))
-            if "__pycache__" in relative.parts or path.suffix.lower() == ".pyc":
-                caches.append(str(relative))
+        tracked = subprocess.run(
+            ["git", "ls-files", "-z", "formats/excel"],
+            cwd=ROOT.parents[1],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.split("\0")
+        caches = sorted(
+            path for path in tracked if "__pycache__" in Path(path).parts or path.endswith(".pyc")
+        )
         self.assertEqual([], placeholders)
         self.assertEqual([], caches)
 

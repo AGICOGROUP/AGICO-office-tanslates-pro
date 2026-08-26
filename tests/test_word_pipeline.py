@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from zipfile import ZipFile
 
 
@@ -27,15 +28,66 @@ class WordPipelineContractTests(unittest.TestCase):
             sys.path.pop(0)
         return module
 
-    def make_docx(self, root: Path, body: str | None = None) -> Path:
+    def make_docx(self, root: Path, body: str | None = None, content_types: str = "<Types/>") -> Path:
         path = root / "source.docx"
         body = body or '<w:p><w:r><w:t>设备</w:t></w:r></w:p>'
         xml = f'<w:document xmlns:w="{W_NS}" xmlns:custom="urn:keep-me"><w:body>{body}</w:body></w:document>'
         with ZipFile(path, "w") as archive:
-            archive.writestr("[Content_Types].xml", "<Types/>")
+            archive.writestr("[Content_Types].xml", content_types)
             archive.writestr("word/document.xml", xml)
             archive.writestr("word/media/image1.png", b"keep")
         return path
+
+    def test_rejects_macro_enabled_word_input(self):
+        pipeline = self.load_pipeline()
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "source.docm"
+            source.write_bytes(b"macro-enabled-placeholder")
+            with self.assertRaisesRegex(ValueError, "only .doc and .docx"):
+                pipeline.prepare(source, Path(directory) / "job", "English")
+
+    def test_rejects_macro_package_renamed_to_docx(self):
+        pipeline = self.load_pipeline()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = self.make_docx(root)
+            with ZipFile(source, "a") as archive:
+                archive.writestr("word/vbaProject.bin", b"macro")
+
+            with self.assertRaisesRegex(ValueError, "macro-enabled Word package"):
+                pipeline.prepare(source, root / "job", "English")
+
+    def test_rejects_macro_content_type_renamed_to_docx(self):
+        pipeline = self.load_pipeline()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = self.make_docx(
+                root,
+                content_types='<Types><Override ContentType="application/vnd.ms-word.document.macroEnabled.main+xml"/></Types>',
+            )
+
+            with self.assertRaisesRegex(ValueError, "macro-enabled Word package"):
+                pipeline.prepare(source, root / "job", "English")
+
+    def test_prepare_rejects_chart_text_instead_of_silently_omitting_it(self):
+        pipeline = self.load_pipeline()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "chart.docx"
+            document = f'<w:document xmlns:w="{W_NS}"><w:body><w:p><w:r><w:t>Body</w:t></w:r></w:p></w:body></w:document>'
+            chart = '<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:v>Sales</c:v></c:chartSpace>'
+            with ZipFile(source, "w") as archive:
+                archive.writestr("[Content_Types].xml", "<Types/>")
+                archive.writestr("word/document.xml", document)
+                archive.writestr("word/charts/chart1.xml", chart)
+
+            with self.assertRaisesRegex(ValueError, "unsupported editable chart text"):
+                pipeline.prepare(source, root / "job", "English")
+
+    def test_com_forces_macro_disable_before_open(self):
+        script = WORD_COM.read_text(encoding="utf-8-sig")
+        self.assertIn("AutomationSecurity = 3", script)
+        self.assertLess(script.index("AutomationSecurity = 3"), script.index("Documents.Open"))
 
     def test_prepare_creates_complete_translation_manifest(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -164,6 +216,52 @@ class WordPipelineContractTests(unittest.TestCase):
         self.assertIn("source file hash changed", text)
         self.assertIn("missing target text", text)
         self.assertIn("protected token mismatch", text)
+
+    def test_word_native_check_failure_is_warning_not_delivery_blocker(self):
+        pipeline = self.load_pipeline()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = self.make_docx(root)
+            job = root / "job"
+            manifest_path = pipeline.prepare(source, job, "English")
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["units"][0]["target"] = "Equipment"
+            manifest_path.write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
+            output = root / "translated.docx"
+            pipeline.apply(manifest_path, output)
+
+            with mock.patch.object(
+                pipeline.subprocess,
+                "run",
+                side_effect=subprocess.CalledProcessError(1, ["powershell"]),
+            ):
+                pipeline.validate(output, manifest_path, word_native=True)
+
+            qa = json.loads((job / "qa-report.json").read_text(encoding="utf-8"))
+            self.assertTrue(qa["passed"])
+            self.assertEqual("warning", qa["word"]["status"])
+            self.assertIn("optional Word-native check failed", qa["warnings"][0])
+
+    def test_static_validation_skips_word_native_check_by_default(self):
+        pipeline = self.load_pipeline()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = self.make_docx(root)
+            job = root / "job"
+            manifest_path = pipeline.prepare(source, job, "English")
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["units"][0]["target"] = "Equipment"
+            manifest_path.write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
+            output = root / "translated.docx"
+            pipeline.apply(manifest_path, output)
+
+            with mock.patch.object(pipeline.subprocess, "run") as run:
+                pipeline.validate(output, manifest_path)
+
+            run.assert_not_called()
+            qa = json.loads((job / "qa-report.json").read_text(encoding="utf-8"))
+            self.assertTrue(qa["passed"])
+            self.assertEqual("skipped", qa["word"]["status"])
 
     def test_protected_token_normalization_accepts_equivalent_office_notation(self):
         pipeline = self.load_pipeline()

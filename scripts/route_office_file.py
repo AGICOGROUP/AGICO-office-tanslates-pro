@@ -8,9 +8,9 @@ import json
 from pathlib import Path
 import sys
 EXTENSIONS = {
-    ".doc": ("word", True), ".docx": ("word", False), ".docm": ("word", False),
-    ".xls": ("excel", True), ".xlsx": ("excel", False), ".xlsm": ("excel", False),
-    ".ppt": ("ppt", True), ".pptx": ("ppt", False), ".pptm": ("ppt", False),
+    ".doc": ("word", True), ".docx": ("word", False),
+    ".xls": ("excel", True), ".xlsx": ("excel", False),
+    ".ppt": ("ppt", True), ".pptx": ("ppt", False),
 }
 
 

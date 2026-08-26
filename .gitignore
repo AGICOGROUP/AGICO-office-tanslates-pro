@@ -3,3 +3,14 @@ __pycache__/
 .pytest_cache/
 work/
 renders/
+
+# Customer Office artifacts belong outside the source repository.
+/*.doc
+/*.docx
+/*.docm
+/*.xls
+/*.xlsx
+/*.xlsm
+/*.ppt
+/*.pptx
+/*.pptm

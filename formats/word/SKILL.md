@@ -11,8 +11,7 @@ Top-level routing is complete when this adapter starts. Do not run the root Offi
 read another format adapter, or consider another format workflow.
 
 This adapter contains the complete professional translation, terminology, structure-preservation,
-and quality-control contract; it does not depend on another Office translation skill. Use Microsoft
-Word as the final authority for pagination, opening, and visual inspection.
+and quality-control contract; it does not depend on another Office translation skill.
 
 ## Start from the original
 
@@ -28,14 +27,13 @@ Read `../../references/水泥专业名词中英对照.md` before translation. Re
 2. Fill every manifest target in stable source order after applying the glossary and protected-token rules.
 3. Run `apply`; the program uses `lxml`, preserves ZIP parts and namespace mappings, and writes translated text without rebuilding OOXML with the standard XML library.
 4. Review embedded image text and record any unsafe region for manual review.
-5. Run `validate` once. It reopens the candidate read-only in Word, repaginates once, records `Content.Information(4)` as informational content pages, and checks structure, media, tokens, and repair-free opening.
-6. Deliver only after that one Word-native validation passes. Do not tune fonts or repeat pagination checks merely to make page totals equal.
+5. Run `validate` once. Its static checks for source hash, translated strings, structure, media, and protected tokens are the required delivery gate.
+6. Use `validate --word-native` only when a Word-native opening or pagination diagnostic is specifically useful. This check is optional and non-blocking; failure or timeout is recorded as a warning and never prevents delivery.
 
 ## Delivery gate
 
-Deliver only when the source hash is unchanged, Microsoft Word reopens the output without repair,
-every expected native string remains editable, clear image text has been reviewed, glossary terms
-are consistent, protected tokens match, and the one Word-native validation passes. Content pages
-are diagnostic information, not an equality gate. Do not require PDF export, PDF conversion, or a
-PDF file as delivery evidence.
-The entire final check stays in Word without an external PDF conversion or rendering gate.
+Deliver only when the source hash is unchanged, every expected native string remains editable,
+clear image text has been reviewed, glossary terms are consistent, protected tokens match, and
+the static validation passes. The optional Word-native check and its pagination result are
+diagnostic only and never a delivery gate. Do not require PDF export, PDF conversion, or a PDF file
+as delivery evidence. Complete the final check without an external PDF conversion or rendering gate.

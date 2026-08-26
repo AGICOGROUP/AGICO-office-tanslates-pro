@@ -5,6 +5,12 @@ Use `work/<source-stem>-<sha256-prefix>/` as the job directory.
 
 ## Commands
 
+For legacy input, convert once before the commands below:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/excel_com_convert.ps1 -SourcePath <source.xls> -OutputPath <working.xlsx>
+```
+
 ```powershell
 node scripts/excel_pipeline.mjs inspect --input <source.xlsx> --job-dir <job-dir> --target-language <language> --output-mode <monolingual|bilingual>
 node scripts/excel_pipeline.mjs prepare --job-dir <job-dir>
@@ -45,10 +51,9 @@ Never mark a stage complete until its artifact is saved and hashed.
 - `office-validation.json`: Microsoft Excel source/output recalculation comparison, worksheet names,
   used ranges, and baseline/output/new error counts.
 
-## Strict escalation
+## Unsupported-feature boundary
 
-Complex reasons include chart, comment, external link, unsupported drawing, and uncertain image.
-Empty tiny legacy shape fragments are decorative and do not trigger this escalation.
-Strict reasons include macro/VBA, unsafe legacy conversion, repair warning,
-formula/merge/protected-token change, and state-hash mismatch. A bilingual grid rejected by the safety
-classifier must use the existing feature-aware strict workflow and must not leave a partial output.
+Charts, comments, external links, unsupported drawings, uncertain images, macro/VBA content, unsafe
+legacy conversion, and repair requirements fail before mutation. Empty tiny legacy shape fragments
+remain decorative. Formula, merge, protected-token, and state-hash mismatches fail closed without
+starting a second translation or full-workbook rendering pass.
