@@ -787,7 +787,7 @@ function applyMonolingualLayoutRepairs(workbook, manifest, units) {
     }
     if (neededHeight > currentHeight) {
       rowRange.format.rowHeight = neededHeight;
-      expandedRows.add(`${sheet.name}!${cell.row}`);
+      expandedRows.add(`${sheet.name}!${cell.row}:${cell.row}`);
     }
   }
   for (const sheet of workbook.worksheets.items) {
@@ -804,7 +804,7 @@ function applyMonolingualLayoutRepairs(workbook, manifest, units) {
         ? rowRange.format.rowHeight : 15;
       if (currentHeight > 8) {
         rowRange.format.rowHeight = 8;
-        compressedRows.add(`${sheet.name}!${row}`);
+        compressedRows.add(`${sheet.name}!${row}:${row}`);
       }
     }
   }
@@ -932,16 +932,6 @@ export async function verifyTranslations(options) {
         if (!String(actual ?? "").includes(token)) errors.push(`protected-token-change:${occurrence.id}:${token}`);
       }
     }
-    for (const sheet of outputWorkbook.worksheets.items) {
-      const used = sheet.getUsedRange();
-      for (const row of used?.values ?? []) {
-        for (const value of row) {
-          if (typeof value === "string" && /^#(?:REF!|DIV\/0!|VALUE!|NAME\?|N\/A)$/.test(value)) {
-            errors.push(`formula-error:${sheet.name}:${value}`);
-          }
-        }
-      }
-    }
   }
 
   const report = {
@@ -962,13 +952,15 @@ export async function verifyTranslations(options) {
 }
 
 
-function runExcelOfficeValidation(outputPath) {
+function runExcelOfficeValidation(sourcePath, outputPath, outputMode) {
   const script = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "excel_com_verify.ps1");
   const powershell = process.env.CODEX_POWERSHELL || "powershell.exe";
-  const result = spawnSync(powershell, [
+  const args = [
     "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script,
-    "-InputPath", outputPath,
-  ], { encoding: "utf8", windowsHide: true });
+    "-SourcePath", sourcePath, "-InputPath", outputPath,
+  ];
+  if (outputMode === "bilingual") args.push("-Bilingual");
+  const result = spawnSync(powershell, args, { encoding: "utf8", windowsHide: true });
   if (result.status !== 0) {
     throw new Error(`Excel COM validation failed: ${result.stderr || result.stdout}`);
   }
@@ -986,7 +978,8 @@ export async function officeValidateOutput(options, officeRunner = runExcelOffic
   }
   const verification = JSON.parse(await fs.readFile(path.join(jobDir, "verification.json"), "utf8"));
   if (!verification.passed) throw new Error("office-validate requires a passing verification report");
-  const report = await officeRunner(outputPath);
+  const sourcePath = path.resolve(state.outputPaths.source);
+  const report = await officeRunner(sourcePath, outputPath, state.outputMode);
   if (!report?.passed) throw new Error("Microsoft Excel validation did not pass");
   const reportPath = path.join(jobDir, "office-validation.json");
   await writeJson(reportPath, report);
@@ -1039,7 +1032,12 @@ export async function applyTranslations(options) {
   await blob.save(output);
   state = completeStage(state, "apply", { output: await sha256File(output) });
   state.outputPaths = { ...state.outputPaths, output };
-  state.counts = { ...state.counts, changedSheets: changedSheets.size, ...layoutRepairs };
+  state.counts = {
+    ...state.counts,
+    changedSheets: changedSheets.size,
+    expandedRows: layoutRepairs.expandedRows,
+    compressedRows: layoutRepairs.compressedRows,
+  };
   await saveJobState(path.join(jobDir, "job-state.json"), state);
   return { next_stage: nextStage(state), output, changed_sheets: [...changedSheets] };
 }

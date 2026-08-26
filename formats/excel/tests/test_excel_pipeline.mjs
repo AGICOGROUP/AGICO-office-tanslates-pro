@@ -240,9 +240,11 @@ test("unsafe conversion repair warning and uncertain image force strict mode", (
 });
 
 
-test("final stage validates in Excel without a PDF render stage", () => {
+test("standard pipeline ends after Excel validation without visual rendering", () => {
   assert.ok(JOB_STAGES.includes("office-validate"));
+  assert.ok(!JOB_STAGES.includes("visual-review"));
   assert.ok(!JOB_STAGES.includes("render"));
+  assert.equal(JOB_STAGES.at(-1), "deliver");
 });
 
 
@@ -374,6 +376,7 @@ test("inspect prepare and apply translate text while preserving numbers and form
     assert.deepEqual(state.completedStages, [
       "preflight", "inspect", "prepare", "translate", "validate", "apply",
     ]);
+    assert.equal(state.visualReview, undefined);
 
     const verification = await verifyTranslations({
       source, "job-dir": jobDir, output,
@@ -383,16 +386,56 @@ test("inspect prepare and apply translate text while preserving numbers and form
     assert.equal(verifiedState.completedStages.at(-1), "verify");
     const officeValidated = await officeValidateOutput(
       { "job-dir": jobDir, output },
-      () => ({
+      (sourcePath, outputPath, outputMode) => ({
         passed: true,
         application: "Microsoft Excel",
+        source: sourcePath,
+        output: outputPath,
+        output_mode: outputMode,
         worksheets: ["S1"],
-        formula_error_count: 0,
-        value_error_count: 0,
+        source_formula_error_count: 1,
+        output_formula_error_count: 1,
+        new_formula_error_count: 0,
+        source_value_error_count: 0,
+        output_value_error_count: 0,
+        new_value_error_count: 0,
       }),
     );
     assert.equal(officeValidated.passed, true);
+    assert.equal(officeValidated.source, source);
+    assert.equal(officeValidated.output, output);
+    assert.equal(officeValidated.output_mode, "monolingual");
     assert.equal(officeValidated.next_stage, "deliver");
+    await assert.rejects(fs.access(path.join(jobDir, "visual-review.json")));
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("office validation completes delivery without creating a visual gate", async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "excel-office-final-"));
+  try {
+    const jobDir = path.join(directory, "job");
+    await fs.mkdir(jobDir, { recursive: true });
+    let state = newJobState({
+      sourceSha256: "a".repeat(64), targetLanguage: "en", outputMode: "monolingual",
+    });
+    for (const stage of JOB_STAGES.slice(0, JOB_STAGES.indexOf("office-validate"))) {
+      state = completeStage(state, stage, {});
+    }
+    state.outputPaths.source = path.join(directory, "source.xlsx");
+    await fs.writeFile(path.join(jobDir, "job-state.json"), JSON.stringify(state));
+    await fs.writeFile(path.join(jobDir, "verification.json"), JSON.stringify({ passed: true }));
+    await fs.writeFile(path.join(jobDir, "inventory.json"), JSON.stringify({
+      output_mode: "monolingual", features: {}, images: [], image_uncertain: false,
+      sheets: [{ name: "S1", used: true }],
+    }));
+    const result = await officeValidateOutput(
+      { "job-dir": jobDir, output: path.join(directory, "output.xlsx") },
+      () => ({ passed: true, application: "Microsoft Excel" }),
+    );
+    assert.equal(result.next_stage, "deliver");
+    await assert.rejects(fs.access(path.join(jobDir, "visual-review.json")));
   } finally {
     await fs.rm(directory, { recursive: true, force: true });
   }

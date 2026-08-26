@@ -27,6 +27,10 @@ hashes, output paths, counts, and strict reasons. Stages are:
 
 `preflight → inspect → prepare → translate → validate → apply → verify → office-validate → deliver`
 
+`office-validate` advances directly to `deliver`. The standard pipeline does not render a source
+baseline or translated workbook. Visual inspection is separate and runs only when the user explicitly
+requests strict layout inspection.
+
 Resume at the first incomplete stage. A changed source hash, target language, or output mode starts
 a fresh job. If an earlier artifact changes, invalidate that stage and every downstream stage.
 Never mark a stage complete until its artifact is saved and hashed.
@@ -38,8 +42,8 @@ Never mark a stage complete until its artifact is saved and hashed.
 - `relevant-glossary.json`: only glossary rows matched to extracted source text.
 - `fixed-translations.en.json`: reviewed exact English labels and units; never fuzzy-matched.
 - `verification.json`: deterministic pass/fail result and stable reason codes.
-- `office-validation.json`: Microsoft Excel open/recalculation result, worksheet names, used ranges,
-  and formula/value error counts.
+- `office-validation.json`: Microsoft Excel source/output recalculation comparison, worksheet names,
+  used ranges, and baseline/output/new error counts.
 
 ## Strict escalation
 

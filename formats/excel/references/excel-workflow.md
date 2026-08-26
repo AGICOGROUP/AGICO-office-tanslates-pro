@@ -7,8 +7,9 @@ through a verified Excel-compatible working copy. Keep `.xlsm` on the strict mac
 
 ## 2. Run the fixed pipeline
 
-Run `scripts/excel_pipeline.mjs` in the fixed sequence `inspect`, `prepare`, `apply`, `verify`,
-`office-validate`. Store artifacts under `work/<source-stem>-<hash-prefix>/` and resume from
+Run `scripts/excel_pipeline.mjs` in the fixed sequence `inspect`, `prepare`, `apply`, `verify`, and
+`office-validate`. Store artifacts under
+`work/<source-stem>-<hash-prefix>/` and resume from
 `job-state.json`; do not repeat completed stages whose artifact hashes still match.
 
 `inspect` performs one non-rendering pass, inventories editable text and OOXML risks, and groups
@@ -34,25 +35,28 @@ For monolingual output, estimate wrapped line count from final text and effectiv
 Increase only affected row heights, cap automatic height at 60 points, and compress to 8 points only
 runs of three or more completely blank, formula-free, unmerged placeholder rows.
 
-## 3. Conditional checks
+## 3. Final checks
 
-- Fast: verify deterministic invariants and run one Microsoft Excel validation pass.
-- Complex: add checks for affected charts, comments, drawings, or image text.
-- Bilingual: verify every source/translation pair and the translated workbook structure.
+- For every job, verify deterministic invariants and run one Microsoft Excel validation pass.
+- Do not render a source baseline or translated workbook in the standard pipeline.
+- Only when the user explicitly requests strict layout inspection, perform a separate visual review
+  after `office-validate`; do not make it part of the default delivery gate.
 - Images: read `image-text-localization.md`; review one record per unique SHA-256, not each
   occurrence.
 - Strict: add macro-safe and repair checks when macros, unsafe conversion, repair warnings, or
   deterministic invariant mismatches are present.
 
 Treat sub-2-point empty legacy shape fragments as decorative borders, not unsupported drawings.
-Use Microsoft Excel COM for one final read-only open, full recalculation, worksheet/used-range access
-check, and formula/value error scan. Do not export PDF or invoke LibreOffice on the default path. If
-Microsoft Excel is unavailable, stop and report the validation blocker.
+Use Microsoft Excel COM to open source and output read-only, fully recalculate both, check
+worksheet/used-range access, and compare formula/value error cells. Reject new error cells introduced
+by translation; do not fail only because the source already contained the same error cells. Do not
+export PDF or invoke LibreOffice. If Microsoft Excel is unavailable, stop and report the blocker.
 
 Verification must reject changed formulas or typed values, broken merges, missing occurrences,
-protected-token loss, incomplete bilingual pairs, formula errors, or output-open failure.
+protected-token loss, incomplete bilingual pairs, or output-open failure. Excel-native validation
+owns the source/output error-cell comparison so the same condition is not checked twice.
 
 ## 4. Delivery
 
-Deliver one new workbook only after `verify` and `office-validate` pass. Report strict reasons
+Deliver one new workbook immediately after `verify` and `office-validate` pass. Report strict reasons
 when present. The source hash must still match the value recorded at `inspect`.

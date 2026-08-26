@@ -13,6 +13,8 @@ read another format adapter, or consider another format workflow. The container
 route below is Excel-internal validation only.
 
 **REQUIRED SUB-SKILL:** Use `spreadsheets:Spreadsheets` and its artifact-tool contract.
+This adapter supersedes its baseline and final-render requirements: do not render a source baseline
+and do not add a visual gate to the standard translation flow.
 
 ## Required inputs
 
@@ -55,9 +57,10 @@ Use `scripts/excel_pipeline.mjs` in this order:
 4. For monolingual output, `apply` estimates translated line length, increases only affected row
    heights, and compresses only runs of at least three completely blank, unmerged placeholder rows.
 5. `verify` reopens source and output and checks formulas, typed values, merges, sheet order,
-   occurrence coverage, protected tokens, bilingual pairs, and formula errors.
-6. `office-validate` opens the output read-only in Microsoft Excel, performs a full recalculation,
-   confirms every worksheet and used range is accessible, and rejects formula or value error cells.
+   occurrence coverage, protected tokens, and bilingual pairs.
+6. `office-validate` opens source and output read-only in Microsoft Excel, performs a full
+   recalculation, confirms every worksheet and used range is accessible, and rejects only formula
+   or value error cells newly introduced in the output.
 
 Resume from the first incomplete stage in `job-state.json`; do not recreate task-specific workbook
 scripts. Full commands and exit codes are in `references/pipeline-cli.md`.
@@ -68,8 +71,11 @@ scripts. Full commands and exit codes are in `references/pipeline-cli.md`.
   formulas, and source-file SHA-256.
 - Group identical images by SHA-256 and review each unique byte sequence once. Deep-review only
   localized or uncertain groups.
-- Fast jobs use deterministic checks plus one Excel open/recalculation pass. Complex and strict jobs
-  add only their documented object or macro checks; they do not export PDF by default.
+- Standard jobs use deterministic checks plus one Excel open/recalculation pass. Do not render a
+  source baseline or translated workbook. If the user explicitly requests strict layout inspection,
+  perform a separate visual review after the standard pipeline; it is not a delivery gate by default.
+- Complex and strict jobs add only their documented object, macro, or repair checks; they do not
+  export PDF by default.
 - Bilingual output defaults to the paired blue translation-row layout. The fast path is limited to
   verified grid-safe workbooks; complex objects enter strict processing before mutation.
 - Charts, comments, external links, unsupported drawings, and uncertain images select the complex
@@ -80,5 +86,5 @@ scripts. Full commands and exit codes are in `references/pipeline-cli.md`.
 - Fixed English translations are exact-match entries in `references/fixed-translations.en.json`.
   Add only reviewed, context-stable labels; leave ambiguous equipment terminology pending.
 
-Deliver only after deterministic verification and `office-validate` pass, the output reopens without
-repair, the source remains untouched, and no required translation is missing.
+Deliver immediately after deterministic verification and `office-validate` pass, the output reopens
+without repair, the source remains untouched, and no required translation is missing.

@@ -29,10 +29,32 @@ class ExcelSkillContractTests(unittest.TestCase):
 
     def test_com_verifier_opens_recalculates_and_scans_without_exporting_pdf(self):
         script = (ROOT / "scripts" / "excel_com_verify.ps1").read_text(encoding="utf-8")
-        for token in ("InputPath", "CalculateFullRebuild", "SpecialCells", "formula_error_count"):
+        for token in (
+            "SourcePath",
+            "InputPath",
+            "CalculateFullRebuild",
+            "SpecialCells",
+            "source_formula_error_count",
+            "output_formula_error_count",
+            "new_formula_error_count",
+            "Bilingual",
+        ):
             self.assertIn(token, script)
+        self.assertIn("new Excel error cells", script)
+        self.assertNotIn("if ($formulaErrors -gt 0 -or $valueErrors -gt 0)", script)
         self.assertNotIn("ExportAsFixedFormat", script)
         self.assertNotIn("OutputDirectory", script)
+        pipeline = (ROOT / "scripts" / "excel_pipeline.mjs").read_text(encoding="utf-8")
+        self.assertNotIn("errors.push(`formula-error:", pipeline)
+
+    def test_standard_flow_has_no_baseline_or_final_visual_render_gate(self):
+        skill = (ROOT / "SKILL.md").read_text(encoding="utf-8")
+        workflow = (ROOT / "references" / "excel-workflow.md").read_text(encoding="utf-8")
+        combined = (skill + "\n" + workflow).casefold()
+        for phrase in ("do not render a source baseline", "new error cells", "explicitly requests"):
+            self.assertIn(phrase, combined)
+        self.assertNotIn("visual-review", combined)
+        self.assertNotIn("visual-review", (ROOT / "references" / "pipeline-cli.md").read_text(encoding="utf-8"))
 
     def test_skill_routes_every_job_through_risk_driven_resumable_pipeline(self):
         skill = (ROOT / "SKILL.md").read_text(encoding="utf-8")
