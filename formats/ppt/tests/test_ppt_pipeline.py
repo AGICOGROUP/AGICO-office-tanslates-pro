@@ -120,7 +120,7 @@ class ManifestPreparationTests(unittest.TestCase):
         self.assertEqual(1, summary["translation_units"])
         self.assertEqual(1, summary["occurrences"])
 
-    def test_selectable_embedded_object_cannot_fall_through_to_image_workflow(self):
+    def test_embedded_object_is_preserved_with_warning_by_default(self):
         source_inventory = inventory([occurrence("item-1")])
         source_inventory["embedded_objects"] = [{
             "slide_index": 2,
@@ -131,6 +131,31 @@ class ManifestPreparationTests(unittest.TestCase):
         }]
         manifest = build_translation_manifest(source_inventory, "en")
         manifest["translation_units"][0]["translation"] = "Translated"
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "manifest.json"
+            path.write_text(json.dumps(manifest), encoding="utf-8")
+            summary = validate_manifest(path, require_translations=True)
+
+        self.assertEqual("preserved_untranslated", manifest["embedded_objects"][0]["status"])
+        self.assertEqual(1, summary["preserved_embedded_objects"])
+        self.assertEqual(
+            ["embedded object Visio.Drawing.11 preserved without translation"],
+            summary["warnings"],
+        )
+
+    def test_explicit_embedded_translation_request_still_requires_native_handler(self):
+        source_inventory = inventory([occurrence("item-1")])
+        source_inventory["embedded_objects"] = [{
+            "slide_index": 2,
+            "shape_id": 4099,
+            "prog_id": "Visio.Drawing.11",
+            "embedding_path": "ppt/embeddings/oleObject1.bin",
+            "text_capability": "embedded_editable_object",
+        }]
+        manifest = build_translation_manifest(source_inventory, "en")
+        manifest["translation_units"][0]["translation"] = "Translated"
+        manifest["embedded_objects"][0]["status"] = "pending_native_handler"
 
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "manifest.json"

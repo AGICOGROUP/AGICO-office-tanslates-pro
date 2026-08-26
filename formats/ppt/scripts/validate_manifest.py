@@ -171,14 +171,23 @@ def validate_manifest(path: str | Path, require_translations: bool = False) -> d
     embedded_objects = data.get("embedded_objects", [])
     if not isinstance(embedded_objects, list):
         raise ManifestError("embedded_objects: expected an array")
+    warnings: list[str] = []
+    preserved_embedded_objects = 0
     for index, embedded in enumerate(embedded_objects, start=1):
         if not isinstance(embedded, dict):
             raise ManifestError(f"embedded_objects[{index}]: expected an object")
-        status = embedded.get("status", "pending_native_handler")
-        if require_translations and status != "translated":
-            prog_id = embedded.get("prog_id", "unknown")
+        status = embedded.get("status", "preserved_untranslated")
+        prog_id = embedded.get("prog_id", "unknown")
+        if status == "preserved_untranslated":
+            preserved_embedded_objects += 1
+            warnings.append(f"embedded object {prog_id} preserved without translation")
+        elif status == "pending_native_handler" and require_translations:
             raise ManifestError(
                 f"embedded object {prog_id} requires its native handler before delivery"
+            )
+        elif status not in {"pending_native_handler", "translated"}:
+            raise ManifestError(
+                f"embedded_objects[{index}].status: unsupported status: {status}"
             )
 
     return {
@@ -193,6 +202,8 @@ def validate_manifest(path: str | Path, require_translations: bool = False) -> d
         "translated": translated,
         "untranslated": len(units) - translated,
         "embedded_objects": len(embedded_objects),
+        "preserved_embedded_objects": preserved_embedded_objects,
+        "warnings": warnings,
     }
 
 

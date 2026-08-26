@@ -2,8 +2,10 @@
 
 This path is only for static graphics whose text is not selectable or copyable. An embedded object,
 chart, SmartArt item, or other selectable or copyable content is not an image. Its preview image
-must never be translated as a substitute for the editable object; route the object to its native
-editable-content handler and stop if that handler is unavailable.
+must never be translated as a substitute for the editable object. Preserve an embedded object's
+binary content and preview image unchanged with status `preserved_untranslated`, record a warning,
+and continue. Only route it to a native editable-content handler when the user explicitly requests
+translation inside that object; use `pending_native_handler` and stop if the handler is unavailable.
 
 Use one single-pass screen for each unique image. Do not retry OCR or enlarge unclear text for repeated recognition.
 Apply exactly one decision:

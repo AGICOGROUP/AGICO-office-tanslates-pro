@@ -13,8 +13,11 @@ one separate `.pptx`, translate native text in place, and use Microsoft PowerPoi
 authority.
 
 Classify content by capability: selectable or copyable text belongs to an editable-content handler,
-including charts, SmartArt, and OLE/Visio objects. Never treat an embedded object's preview image as
-the object itself. If its native editor or handler is unavailable, stop instead of applying an image overlay.
+including charts and SmartArt. Preserve OLE/Visio/PDF embedded objects, their binary content, and
+their preview images unchanged by default; record a warning and continue translating ordinary slide
+content. Never translate the preview image as a substitute for the object. Only when the user explicitly
+requests translation inside an embedded object, set it to `pending_native_handler` and stop if its native
+editor or handler is unavailable.
 
 ## Read only what is needed
 
@@ -48,6 +51,7 @@ only when an image needs an overlay.
 - Preserve masters, layouts, themes, geometry, z-order, animations, relationships, media, arrows,
   process lines, numbers, units, models, standards, and formulas.
 - Keep native translations and image overlays selectable and editable.
+- Keep default-preserved embedded objects byte-for-byte unchanged and report them as untranslated warnings.
 - PowerPoint embedded images only use `skip_target`, `skip_unclear`, or `overlay`.
 - Never erase, cover, patch, regenerate, redraw, or replace an image.
 - Allow natural wrapping and repair only actual clipping, overlap, missing text, or broken layout.

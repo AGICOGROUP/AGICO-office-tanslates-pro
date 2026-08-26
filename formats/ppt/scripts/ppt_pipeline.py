@@ -87,7 +87,7 @@ def build_translation_manifest(
     embedded_objects = []
     for source_object in inventory.get("embedded_objects", []):
         embedded = dict(source_object)
-        embedded["status"] = "pending_native_handler"
+        embedded["status"] = "preserved_untranslated"
         embedded_objects.append(embedded)
 
     return {

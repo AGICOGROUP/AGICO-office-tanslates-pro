@@ -13,6 +13,10 @@ only when source text, target language, context, role, and protected tokens matc
 Retrieve only glossary terms matched to the extracted source text. Translate all remaining units
 in one batch and write them once.
 
+Preserve OLE/Visio/PDF embedded objects and their preview images unchanged by default, report them
+as untranslated warnings, and continue. Require a native handler only when the user explicitly asks
+to translate content inside an embedded object.
+
 ## Images
 
 Screen each unique image once at normal useful resolution. Use only `skip_target`, `skip_unclear`,

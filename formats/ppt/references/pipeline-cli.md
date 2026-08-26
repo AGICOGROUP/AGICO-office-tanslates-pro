@@ -16,6 +16,10 @@ python scripts/ppt_pipeline.py deliver --job-dir <job> --output <output.pptx> --
 exactly one decision: `skip_target`, `skip_unclear`, or `overlay`. Use `bilingual_below` for editable
 overlays. Do not rerun OCR for unclear images.
 
+Embedded objects default to `preserved_untranslated`: retain their binary content and preview images,
+report warnings, and continue. Set `pending_native_handler` only for an explicit request to translate
+inside an embedded object; validation then blocks delivery until its status becomes `translated`.
+
 The source hash is calculated during `inspect` and compared during `verify`. `render` uses the PPT
 module's hidden PowerPoint session to create one low-resolution image for every final slide, with no
 external PDF conversion gate. Resume from the first
