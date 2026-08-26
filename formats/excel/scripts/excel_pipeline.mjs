@@ -12,6 +12,9 @@ import { FileBlob, SpreadsheetFile, Workbook } from "@oai/artifact-tool";
 const FIXED_ENGLISH_TRANSLATIONS = JSON.parse(readFileSync(
   new URL("../references/fixed-translations.en.json", import.meta.url), "utf8",
 ));
+const SAFE_UPPERCASE_CODES = new Set([
+  "CT", "DCS", "GGD", "GCS", "HMI", "KYN", "MCC", "MNS", "PLC", "PT", "VFD",
+]);
 
 
 export const JOB_STAGES = [
@@ -75,7 +78,13 @@ function normalizedFixedSource(source) {
 function isSafeIdentifier(source) {
   const value = String(source).trim();
   return /^[A-Z]$/u.test(value)
+    || SAFE_UPPERCASE_CODES.has(value)
     || /^(?=[A-Za-z0-9./_-]*\d)[A-Za-z0-9][A-Za-z0-9./_-]*$/u.test(value);
+}
+
+function isSafeDimension(source) {
+  const value = String(source).trim();
+  return /^(?:\d+(?:[.,]\d+)?\s*[*×xX]\s*){1,3}\d+(?:[.,]\d+)?(?:\s*(?:mm|cm|m))?$/iu.test(value);
 }
 
 export function applySafeAutofill(units, targetLanguage) {
@@ -84,6 +93,13 @@ export function applySafeAutofill(units, targetLanguage) {
   let retained = 0;
   for (const unit of units) {
     if (unit.status !== "pending") continue;
+    if (isSafeDimension(unit.source)) {
+      unit.translation = unit.source;
+      unit.status = "retain";
+      unit.reason = "dimension retained";
+      retained += 1;
+      continue;
+    }
     if (isSafeIdentifier(unit.source)) {
       unit.translation = unit.source;
       unit.status = "retain";

@@ -210,6 +210,33 @@ test("safe autofill does not apply English labels to another target language", (
   assert.equal(units[0].status, "pending");
 });
 
+test("safe autofill retains uppercase model codes and dimensions for every target language", () => {
+  const units = [
+    { source: "GGD ", translation: "", status: "pending" },
+    { source: "800*800*2200", translation: "", status: "pending" },
+    { source: "1000 × 800 × 2200 mm", translation: "", status: "pending" },
+    { source: "PLC", translation: "", status: "pending" },
+    { source: "UNIT", translation: "", status: "pending" },
+    { source: "设备名称", translation: "", status: "pending" },
+  ];
+
+  assert.deepEqual(applySafeAutofill(units, "es"), {
+    fixed: 0, retained: 4, pending: 2,
+  });
+  assert.deepEqual(
+    units.slice(0, 4).map(({ source, translation, status, reason }) => (
+      { source, translation, status, reason }
+    )),
+    [
+      { source: "GGD ", translation: "GGD ", status: "retain", reason: "identifier/model code retained" },
+      { source: "800*800*2200", translation: "800*800*2200", status: "retain", reason: "dimension retained" },
+      { source: "1000 × 800 × 2200 mm", translation: "1000 × 800 × 2200 mm", status: "retain", reason: "dimension retained" },
+      { source: "PLC", translation: "PLC", status: "retain", reason: "identifier/model code retained" },
+    ],
+  );
+  assert.equal(units[4].status, "pending");
+});
+
 test("long translated text raises only the affected row height", () => {
   assert.equal(estimateTranslatedRowHeight({
     text: "To Be Ordered with the Equipment", columnWidth: 14, currentHeight: 18,

@@ -3,13 +3,26 @@
 Run commands from `formats/excel/` with the Node.js runtime supplied by the Codex workspace.
 Use `work/<source-stem>-<sha256-prefix>/` as the job directory.
 
-## Commands
+## Standard commands
 
-For legacy input, convert once before the commands below:
+Prepare routing, optional legacy conversion, inspection, and the compact worklist in one command:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/excel_com_convert.ps1 -SourcePath <source.xls> -OutputPath <working.xlsx>
+python scripts/excel_fast_pipeline.py prepare --source <source.xls|xlsx> --job-dir <job-dir> --target-language <language> --output-mode <monolingual|bilingual> --node-path <node.exe> --node-modules <node_modules>
 ```
+
+Fill only `<job-dir>/translation-worklist.json`, then finish all gates in one command:
+
+```powershell
+python scripts/excel_fast_pipeline.py finalize --job-dir <job-dir> --output <translated.xlsx> --node-path <node.exe> --node-modules <node_modules>
+```
+
+The runner writes compact JSON to stdout and stage durations to `stage-timings.json`. It suppresses
+full inventory output. `finalize` resumes after a completed `apply` or `verify` gate.
+
+## Manual recovery
+
+Use the commands below only when diagnosing a runner failure:
 
 ```powershell
 node scripts/excel_pipeline.mjs inspect --input <source.xlsx> --job-dir <job-dir> --target-language <language> --output-mode <monolingual|bilingual>
@@ -19,10 +32,9 @@ node scripts/excel_pipeline.mjs verify --source <source.xlsx> --job-dir <job-dir
 node scripts/excel_pipeline.mjs office-validate --job-dir <job-dir> --output <translated.xlsx>
 ```
 
-`inspect` never renders. `prepare` exits with code `3` intentionally. This means
-`translation-manifest.json` and `relevant-glossary.json` are ready for Codex/GPT; it is not a
-failure. Read only the matched glossary file. Fill every `translation_units[]` record, set `status`
-to `translated` or justified `retain`, preserve every protected token, and validate the manifest.
+`inspect` never renders. Manual `prepare` exits with code `3` intentionally; the fast runner handles
+this pause and returns success. Fill only pending records in `translation-worklist.json`; the runner
+validates and merges them into `translation-manifest.json`.
 `prepare` may already mark reviewed English fixed labels as `translated` and standalone identifiers
 as `retain`; translate only records still marked `pending`.
 
@@ -45,11 +57,13 @@ Never mark a stage complete until its artifact is saved and hashed.
 
 - `inventory.json`: sheets, editable occurrences, OOXML features, and unique image groups.
 - `translation-manifest.json`: schema-v2 occurrences and safely reusable translation units.
+- `translation-worklist.json`: compact model-facing pending decisions; do not add extra IDs.
 - `relevant-glossary.json`: only glossary rows matched to extracted source text.
 - `fixed-translations.en.json`: reviewed exact English labels and units; never fuzzy-matched.
 - `verification.json`: deterministic pass/fail result and stable reason codes.
 - `office-validation.json`: Microsoft Excel source/output recalculation comparison, worksheet names,
   used ranges, and baseline/output/new error counts.
+- `stage-timings.json`: cumulative milliseconds for each runner stage.
 
 ## Unsupported-feature boundary
 

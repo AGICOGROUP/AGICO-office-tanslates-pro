@@ -2,6 +2,11 @@
 
 Create new jobs with UTF-8 schema v2. Keep every source location in `occurrences`; store reusable model work in `translation_units`.
 
+The standard runner exposes only `translation-worklist.json` to the model. It contains pending
+`translation_units` with `id`, `source`, `context_key`, `protected_tokens`, `status`, `translation`,
+and `reason`, plus unresolved image decisions. Do not add, remove, or rename IDs. `finalize` merges
+the worklist into the full manifest and validates this schema.
+
 ```json
 {
   "schema_version": 2,

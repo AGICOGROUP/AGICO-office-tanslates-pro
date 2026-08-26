@@ -20,6 +20,7 @@ class ExcelSkillContractTests(unittest.TestCase):
             "references/pipeline-cli.md",
             "scripts/route_excel_file.py",
             "scripts/excel_pipeline.mjs",
+            "scripts/excel_fast_pipeline.py",
             "scripts/resolve_repo_glossary.py",
             "scripts/query_repo_glossary.py",
             "scripts/excel_com_convert.ps1",
@@ -28,6 +29,17 @@ class ExcelSkillContractTests(unittest.TestCase):
         }
         missing = sorted(path for path in required if not (ROOT / path).is_file())
         self.assertEqual([], missing)
+
+    def test_skill_uses_compact_one_command_prepare_and_finalize_flow(self):
+        skill = (ROOT / "SKILL.md").read_text(encoding="utf-8")
+        for token in (
+            "excel_fast_pipeline.py prepare",
+            "translation-worklist.json",
+            "excel_fast_pipeline.py finalize",
+            "stage-timings.json",
+        ):
+            self.assertIn(token, skill)
+        self.assertNotIn("Read these files completely before execution", skill)
 
     def test_com_verifier_opens_recalculates_and_scans_without_exporting_pdf(self):
         script = (ROOT / "scripts" / "excel_com_verify.ps1").read_text(encoding="utf-8")

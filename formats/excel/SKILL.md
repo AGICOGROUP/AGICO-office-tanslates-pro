@@ -5,86 +5,63 @@ description: Use when translating monolingual or bilingual Excel workbooks (.xls
 
 # Professional Excel Translation
 
-Translate with Codex/GPT through one resumable pipeline. Mutate only human-language text, keep
-formulas and native text editable, preserve the source hash, and always write a separate output.
+Translate through one resumable Excel-only pipeline. Change human-language text only, preserve the
+source SHA-256, formulas, native editability, and layout, and always save a separate output.
 
-Top-level routing is complete when this adapter starts. Do not run the root Office router again,
-read another format adapter, or consider another format workflow. The container
-route below is Excel-internal validation only.
+Top-level routing is complete. Do not read another format adapter.
+Do not run the root Office router again. **REQUIRED SUB-SKILL:** Use `spreadsheets:Spreadsheets`;
+this adapter supersedes its baseline
+and final-render requirements. Do not render a source baseline or add a visual delivery gate.
 
-**REQUIRED SUB-SKILL:** Use `spreadsheets:Spreadsheets` and its artifact-tool contract.
-This adapter supersedes its baseline and final-render requirements: do not render a source baseline
-and do not add a visual gate to the standard translation flow.
+## Fast standard path
 
-## Required inputs
+1. Run `python scripts/excel_fast_pipeline.py prepare ...` once. It runs the Excel-internal
+   `route_excel_file.py`, validates `resolve_repo_glossary.py`, converts `.xls` once when required,
+   then executes `inspect` and `prepare` through `excel_pipeline.mjs`.
+2. Read only `<job-dir>/translation-worklist.json` and
+   `<job-dir>/relevant-glossary.json`. Do not read `inventory.json`, the complete manifest, the full
+   glossary, or pipeline references during an ordinary job.
+3. Fill every pending worklist record with glossary-first professional terminology. Preserve every
+   protected token. Use `translated` for translated text; use justified `retain` only when output
+   equals source. Safe deduplication reuses exact text only when context and protected tokens match.
+4. Run `python scripts/excel_fast_pipeline.py finalize ...` once. It merges the worklist, runs
+   `validate_manifest.py`, then executes `apply`, `verify`, and `office-validate`. Deliver after it
+   returns `next_stage: deliver`.
 
-Read these files completely before execution:
-
-- `references/excel-workflow.md`
-- `references/pipeline-cli.md`
-- `references/manifest-schema.md`
-
-Run `scripts/resolve_repo_glossary.py`; stop if the shared glossary is unavailable. After
-`prepare`, read only `<job-dir>/relevant-glossary.json`; do not load the complete glossary. Read
+Use `references/pipeline-cli.md` only for troubleshooting. Read
 `references/bilingual-row-layout.md` only for bilingual output. Read
-`references/image-text-localization.md` only when inspection finds images.
+`references/image-text-localization.md` only when the worklist contains images.
 
-## Container route
+## Runner contract
 
-Run `python scripts/route_excel_file.py <source>` once.
-
-- `.xlsx`: run the standard pipeline below.
-- `.xls`: verify the CFB signature, then run `scripts/excel_com_convert.ps1` once to create and
-  natively reopen an immutable `.xlsx` working copy. The converter rejects VBA.
-- All macro-enabled Office files are rejected before mutation; this adapter does not preserve or run VBA.
-- Reject corrupt, encrypted, extension-mismatched, or ambiguous containers.
-
-## Single standard pipeline
-
-Use `scripts/excel_pipeline.mjs` in this order:
-
-1. `inspect` performs one scan and creates the inventory, OOXML risk/image report,
-   and `job-state.json`.
-2. `prepare` creates schema-v2 translation units plus a source-matched glossary subset and
-   safely pre-fills verified English table labels, units, parameter labels, and identifier/model
-   codes, then pauses only for the remaining translation units.
-3. Fill every pending translation unit using glossary-first professional terminology, then run
-   `python scripts/validate_manifest.py <job-dir>/translation-manifest.json` and run `apply` once.
-   Resolve each unique image to `reviewed`, `localized`, or `retain`; manual-review is not deliverable.
-   Safe deduplication reuses exact text only when context and protected tokens match.
-   Parameter rows such as `功率：45kW` translate the label once and reconstruct each original
-   technical value deterministically; do not send the unchanged values for repeated translation.
-4. For monolingual output, `apply` estimates translated line length, increases only affected row
-   heights, and compresses only runs of at least three completely blank, unmerged placeholder rows.
-5. `verify` reopens source and output and checks formulas, typed values, merges, sheet order,
-   occurrence coverage, protected tokens, and bilingual pairs.
-6. `office-validate` opens source and output read-only in Microsoft Excel, performs a full
-   recalculation, confirms every worksheet and used range is accessible, and rejects only formula
-   or value error cells newly introduced in the output.
-
-Resume from the first incomplete stage in `job-state.json`; do not recreate task-specific workbook
-scripts. Full commands and exit codes are in `references/pipeline-cli.md`.
+- `.xlsx` is used directly after internal validation. `.xls` must have a valid CFB signature; the
+  runner creates and natively reopens one immutable `.xlsx` working copy. The converter disables
+  macros and rejects VBA. All macro-enabled Office files are rejected before mutation.
+- Reject corrupt, encrypted, extension-mismatched, ambiguous, or repair-requiring containers.
+- `prepare` performs one scan, creates `job-state.json`, groups identical images by SHA-256, and
+  emits only pending decisions. It safely pre-fills reviewed English labels and retains pure
+  dimensions, uppercase technical codes, identifiers, and model codes with reasons.
+- Parameter rows such as `功率：45kW` translate the label once and reconstruct each original value.
+- For monolingual output, `apply` changes text cells once, expands only affected row heights, and
+  compresses only runs of at least three blank, formula-free, unmerged placeholder rows.
+- `verify` checks formulas, typed values, merges, sheet order, coverage, protected tokens, and
+  bilingual pairs. `office-validate` uses Microsoft Excel read-only, recalculates, confirms every
+  worksheet and used range, and rejects only new error cells introduced in the output.
+- `finalize` resumes after the last completed gate in `job-state.json`. Stage durations are written
+  to `stage-timings.json`; do not recreate task-specific scripts.
 
 ## Quality boundary
 
-- Preserve numbers, units, model codes, standards, URLs, identifiers, meaningful line breaks,
-  formulas, and source-file SHA-256.
-- Group identical images by SHA-256 and review each unique byte sequence once. Deep-review only
-  localized or uncertain groups.
-- Standard jobs use deterministic checks plus one Excel open/recalculation pass. Do not render a
-  source baseline or translated workbook. If the user explicitly requests strict layout inspection,
-  perform a separate visual review after the standard pipeline; it is not a delivery gate by default.
-- Unsupported complex or strict features fail during the package scan before workbook import or
-  mutation; they do not start a slower alternate workflow.
-- Bilingual output defaults to the paired blue translation-row layout. The fast path is limited to
-  verified grid-safe workbooks; complex objects enter strict processing before mutation.
-- Charts, comments, external links, unsupported drawings, VBA, unsafe legacy conversion, or file
-  repair requirements are rejected before mutation. A deterministic verification mismatch fails
-  closed; it does not trigger a full-workbook reprocessing loop.
-- Ignore tiny empty legacy shape fragments used as borders. Escalate only drawings with text,
-  media, charts, controls, or meaningful geometry.
-- Fixed English translations are exact-match entries in `references/fixed-translations.en.json`.
-  Add only reviewed, context-stable labels; leave ambiguous equipment terminology pending.
+- Preserve numbers, units, model codes, standards, URLs, identifiers, meaningful line breaks, and
+  formulas. The source file remains untouched.
+- Resolve each unique image to `reviewed`, `localized`, or `retain`; manual-review is not deliverable.
+- Charts, comments, external links, unsupported drawings, VBA, unsafe legacy conversion, repair
+  requirements, or deterministic mismatches fail before delivery; they do not start a slower
+  alternate or strict reconstruction path.
+- Bilingual output defaults to paired blue translation rows and is limited to grid-safe workbooks.
+- Do not export PDF or use LibreOffice. Only when the user explicitly requests strict layout
+  inspection, perform a separate visual review after `office-validate`.
+- Fixed English translations are exact matches only; ambiguous equipment terminology stays pending.
 
-Deliver immediately after deterministic verification and `office-validate` pass, the output reopens
-without repair, the source remains untouched, and no required translation is missing.
+Deliver immediately when `verify` and `office-validate` pass, the output reopens without repair,
+the source hash is unchanged, and no required translation is missing.
