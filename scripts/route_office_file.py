@@ -7,21 +7,11 @@ import argparse
 import json
 from pathlib import Path
 import sys
-import zipfile
-
-
-CFB_SIGNATURE = bytes.fromhex("D0CF11E0A1B11AE1")
-OOXML_MARKERS = {
-    "word": "word/document.xml",
-    "excel": "xl/workbook.xml",
-    "ppt": "ppt/presentation.xml",
+EXTENSIONS = {
+    ".doc": ("word", True), ".docx": ("word", False), ".docm": ("word", False),
+    ".xls": ("excel", True), ".xlsx": ("excel", False), ".xlsm": ("excel", False),
+    ".ppt": ("ppt", True), ".pptx": ("ppt", False), ".pptm": ("ppt", False),
 }
-OOXML_EXTENSIONS = {
-    "word": {".docx", ".docm"},
-    "excel": {".xlsx", ".xlsm"},
-    "ppt": {".pptx", ".pptm"},
-}
-LEGACY_EXTENSIONS = {".doc": "word", ".xls": "excel", ".ppt": "ppt"}
 
 
 def report(
@@ -47,52 +37,15 @@ def route(source: Path) -> tuple[int, dict[str, object]]:
         return 2, report(error="source file not found")
 
     suffix = source.suffix.lower()
-    try:
-        with source.open("rb") as stream:
-            leading_bytes = stream.read(len(CFB_SIGNATURE))
-
-        if zipfile.is_zipfile(source):
-            with zipfile.ZipFile(source) as archive:
-                entries = set(archive.namelist())
-            matches = [name for name, marker in OOXML_MARKERS.items() if marker in entries]
-            if len(matches) > 1:
-                return 2, report(
-                    detection="ooxml-signature",
-                    error="ambiguous OOXML package contains markers for multiple Office formats",
-                )
-            if not matches:
-                return 2, report(
-                    detection="zip-signature",
-                    error="unsupported ZIP package: no recognized Office document marker",
-                )
-            format_name = matches[0]
-            mismatch = suffix not in OOXML_EXTENSIONS[format_name]
-            if mismatch:
-                return 2, report(
-                    format_name=format_name,
-                    detection="ooxml-signature",
-                    extension_mismatch=True,
-                    error=f"file extension {suffix or '<none>'} does not match detected {format_name} package",
-                )
-            return 0, report(format_name=format_name, detection="ooxml-signature")
-
-        if leading_bytes[: len(CFB_SIGNATURE)] == CFB_SIGNATURE:
-            format_name = LEGACY_EXTENSIONS.get(suffix)
-            if not format_name:
-                return 2, report(
-                    detection="cfb-signature",
-                    extension_mismatch=True,
-                    error=f"unsupported or missing legacy Office extension: {suffix or '<none>'}",
-                )
-            return 0, report(
-                format_name=format_name,
-                detection="cfb-signature+extension",
-                requires_conversion=True,
-            )
-    except (OSError, zipfile.BadZipFile) as exc:
-        return 2, report(error=f"cannot inspect source: {exc}")
-
-    return 2, report(error="unsupported or corrupt file signature")
+    route_info = EXTENSIONS.get(suffix)
+    if not route_info:
+        return 2, report(error=f"unsupported file extension: {suffix or '<none>'}")
+    format_name, requires_conversion = route_info
+    return 0, report(
+        format_name=format_name,
+        detection="extension",
+        requires_conversion=requires_conversion,
+    )
 
 
 def main() -> int:

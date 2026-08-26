@@ -30,7 +30,7 @@ class OfficeRouterContractTests(unittest.TestCase):
             archive.writestr(entry, "<root/>")
         return source
 
-    def test_routes_ooxml_by_package_signature(self):
+    def test_routes_supported_files_by_extension_only(self):
         cases = (
             ("sample.docx", "word/document.xml", "word"),
             ("sample.xlsx", "xl/workbook.xml", "excel"),
@@ -47,11 +47,11 @@ class OfficeRouterContractTests(unittest.TestCase):
                     self.assertEqual(
                         f"formats/{expected_format}/SKILL.md", report["adapter"]
                     )
-                    self.assertEqual("ooxml-signature", report["detection"])
+                    self.assertEqual("extension", report["detection"])
                     self.assertFalse(report["extension_mismatch"])
                     self.assertFalse(report["requires_conversion"])
 
-    def test_routes_legacy_cfb_after_signature_confirmation(self):
+    def test_routes_legacy_files_by_extension_without_container_inspection(self):
         cases = (("sample.doc", "word"), ("sample.xls", "excel"), ("sample.ppt", "ppt"))
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -63,7 +63,7 @@ class OfficeRouterContractTests(unittest.TestCase):
                     self.assertEqual(0, result.returncode, result.stderr)
                     report = json.loads(result.stdout)
                     self.assertEqual(expected_format, report["format"])
-                    self.assertEqual("cfb-signature+extension", report["detection"])
+                    self.assertEqual("extension", report["detection"])
                     self.assertFalse(report["extension_mismatch"])
                     self.assertTrue(report["requires_conversion"])
 
@@ -87,30 +87,32 @@ class OfficeRouterContractTests(unittest.TestCase):
                     self.assertIsNone(report["adapter"])
                     self.assertIn("unsupported", report["error"])
 
-    def test_rejects_extension_mismatch(self):
+    def test_extension_is_authoritative_even_when_container_looks_like_another_format(self):
         with tempfile.TemporaryDirectory() as directory:
             source = self.make_ooxml(Path(directory), "wrong.xlsx", "word/document.xml")
             result = self.run_router(source)
-            self.assertEqual(2, result.returncode)
+            self.assertEqual(0, result.returncode)
             report = json.loads(result.stdout)
-            self.assertTrue(report["extension_mismatch"])
-            self.assertIn("does not match", report["error"])
+            self.assertEqual("excel", report["format"])
+            self.assertEqual("extension", report["detection"])
+            self.assertFalse(report["extension_mismatch"])
+            self.assertIsNone(report["error"])
 
-    def test_rejects_unknown_or_ambiguous_packages(self):
+    def test_supported_extension_routes_even_for_unknown_or_ambiguous_package(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             unknown = self.make_ooxml(root, "unknown.docx", "custom/data.xml")
             result = self.run_router(unknown)
-            self.assertEqual(2, result.returncode)
-            self.assertIn("unsupported", json.loads(result.stdout)["error"])
+            self.assertEqual(0, result.returncode)
+            self.assertEqual("word", json.loads(result.stdout)["format"])
 
             ambiguous = root / "ambiguous.docx"
             with zipfile.ZipFile(ambiguous, "w") as archive:
                 archive.writestr("word/document.xml", "<root/>")
                 archive.writestr("xl/workbook.xml", "<root/>")
             result = self.run_router(ambiguous)
-            self.assertEqual(2, result.returncode)
-            self.assertIn("ambiguous", json.loads(result.stdout)["error"])
+            self.assertEqual(0, result.returncode)
+            self.assertEqual("word", json.loads(result.stdout)["format"])
 
 
 if __name__ == "__main__":

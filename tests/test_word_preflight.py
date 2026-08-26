@@ -64,6 +64,18 @@ class WordPreflightTests(unittest.TestCase):
         self.assertIn("tracked_changes", report["complex_reasons"])
         self.assertIn("text_boxes", report["complex_reasons"])
 
+    def test_nested_text_box_text_is_not_duplicated_into_its_outer_paragraph(self):
+        with tempfile.TemporaryDirectory() as directory:
+            body = (
+                "<w:p><w:r><w:t>外层</w:t></w:r>"
+                "<w:txbxContent><w:p><w:r><w:t>文本框</w:t></w:r></w:p></w:txbxContent>"
+                "</w:p>"
+            )
+            report = self.run_preflight(self.make_docx(Path(directory), body))
+
+        self.assertEqual(["外层", "文本框"], report["unique_texts"])
+        self.assertEqual(2, report["text_occurrence_count"])
+
     def test_page_number_field_stays_fast_but_toc_field_escalates(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

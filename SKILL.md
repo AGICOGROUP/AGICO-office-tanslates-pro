@@ -10,8 +10,8 @@ Route each uploaded file to exactly one format adapter.
 ## Route the uploaded file
 
 1. Run `python scripts/route_office_file.py <uploaded-file>` from this Skill directory.
-2. Trust the detected container signature before the filename extension.
-3. Stop on corrupt, encrypted, ambiguous, unsupported, or extension-mismatched files.
+2. Route strictly by the filename extension. Do not inspect or override routing from ZIP, CFB, or OOXML signatures.
+3. Stop only when the file is missing or its extension is unsupported.
 4. Read and follow only the adapter returned in `adapter`.
 
 | Detected format | Adapter |

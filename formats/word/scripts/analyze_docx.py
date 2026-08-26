@@ -9,8 +9,9 @@ import json
 from pathlib import Path
 import re
 import sys
-from xml.etree import ElementTree as ET
 from zipfile import BadZipFile, ZipFile
+
+from lxml import etree as ET
 
 
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
@@ -18,8 +19,8 @@ NS = {"w": W_NS}
 W = f"{{{W_NS}}}"
 TEXT_PART = re.compile(r"word/(document|header\d+|footer\d+|footnotes|endnotes|comments)\.xml$")
 PROTECTED_TOKEN = re.compile(
-    r"https?://\S+|www\.\S+|\b\d+(?:[.,]\d+)?\s*(?:%|°C|kW|MW|V|kV|A|mA|Pa|kPa|MPa|"
-    r"mm|cm|m|km|kg|t|t/h|m[³3]/h|Nm[³3]/min|rpm|r/min)\b|\b[A-Z][A-Z0-9._/-]*\d[A-Z0-9._/-]*\b",
+    r"https?://\S+|www\.\S+|\b\d+(?:[.,]\d+)?\s*(?:%|°C|℃|kW|MW|V|kV|A|mA|Pa|kPa|MPa|"
+    r"mm|cm|m|km|kg|t|t/h|m[³3]/h|Nm[³3]/min|rpm|r/min)(?![A-Za-z0-9])|\b[A-Z][A-Z0-9._/-]*\d[A-Z0-9._/-]*\b",
     re.IGNORECASE,
 )
 SAFE_FIELD_COMMANDS = {"PAGE", "NUMPAGES", "DATE", "TIME", "CREATEDATE", "SAVEDATE", "FILENAME", "AUTHOR"}
@@ -28,7 +29,11 @@ SAFE_FIELD_COMMANDS = {"PAGE", "NUMPAGES", "DATE", "TIME", "CREATEDATE", "SAVEDA
 def paragraph_text(paragraph: ET.Element) -> str:
     pieces: list[str] = []
     for node in paragraph.iter():
-        if node.tag in {f"{W}t", f"{W}tab", f"{W}br", f"{W}cr"}:
+        if (
+            node.tag in {f"{W}t", f"{W}tab", f"{W}br", f"{W}cr"}
+            and next((ancestor for ancestor in node.iterancestors() if ancestor.tag == f"{W}p"), None)
+            is paragraph
+        ):
             if node.tag == f"{W}t":
                 pieces.append(node.text or "")
             elif node.tag == f"{W}tab":
@@ -112,7 +117,7 @@ def analyze(path: Path) -> dict:
                     tokens = PROTECTED_TOKEN.findall(text)
                     if tokens:
                         protected_tokens.append({"part": part_name, "paragraph": index, "tokens": tokens})
-    except (BadZipFile, ET.ParseError, OSError, ValueError) as exc:
+    except (BadZipFile, ET.XMLSyntaxError, OSError, ValueError) as exc:
         raise ValueError(f"Cannot analyze DOCX: {exc}") from exc
 
     return {

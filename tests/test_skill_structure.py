@@ -81,7 +81,6 @@ class WordAdapterStructureTests(unittest.TestCase):
             "protected tokens",
             "Never overwrite",
             "Microsoft Word",
-            "Print Layout",
             "without an external PDF conversion or rendering gate",
         )
         for phrase in required_phrases:
@@ -92,9 +91,13 @@ class WordAdapterStructureTests(unittest.TestCase):
             "render every page",
             "complete rendered comparison",
             "ExportAsFixedFormat",
+            "Inspect every final page",
+            "page count",
         ):
             with self.subTest(forbidden=forbidden):
                 self.assertNotIn(forbidden, text)
+        self.assertIn("word_pipeline.py", text)
+        self.assertIn("one Word-native validation", text)
 
     def test_word_ui_metadata_exists(self):
         metadata = ROOT / "formats" / "word" / "agents" / "openai.yaml"
