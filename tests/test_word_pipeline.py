@@ -171,6 +171,93 @@ class WordPipelineContractTests(unittest.TestCase):
             self.assertIn("Equipment", xml)
             self.assertIn(" List", xml)
 
+    def test_apply_does_not_assign_translation_words_to_whitespace_only_runs(self):
+        pipeline = self.load_pipeline()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = self.make_docx(
+                root,
+                '<w:p><w:r><w:rPr><w:b/></w:rPr><w:t>二</w:t></w:r>'
+                '<w:r><w:rPr><w:b/></w:rPr><w:t>、</w:t></w:r>'
+                '<w:r><w:rPr/><w:t xml:space="preserve"> </w:t></w:r>'
+                '<w:r><w:rPr><w:b/></w:rPr><w:t>干燥方案参数及计算</w:t></w:r></w:p>',
+            )
+            job = root / "job"
+            manifest_path = pipeline.prepare(source, job, "English")
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["units"][0]["target"] = "II. Drying Process Parameters and Calculations"
+            manifest_path.write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
+            output = root / "translated.docx"
+
+            pipeline.apply(manifest_path, output)
+
+            with ZipFile(output) as archive:
+                document = pipeline.etree.fromstring(archive.read("word/document.xml"))
+            runs = document.xpath("//w:p/w:r", namespaces={"w": W_NS})
+            translated_runs = [
+                ("".join(run.xpath(".//w:t/text()", namespaces={"w": W_NS})),
+                 bool(run.xpath("./w:rPr/w:b", namespaces={"w": W_NS})))
+                for run in runs
+            ]
+            self.assertEqual("II. Drying Process Parameters and Calculations", "".join(text for text, _ in translated_runs))
+            self.assertTrue(all(is_bold for text, is_bold in translated_runs if text))
+
+    def test_apply_preserves_visible_spaces_and_removes_cjk_width_compression(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = self.make_docx(
+                root,
+                '<w:p><w:r><w:rPr><w:spacing w:val="-84"/><w:w w:val="70"/>'
+                '<w:fitText w:val="900"/></w:rPr><w:t>公司</w:t></w:r>'
+                '<w:r><w:rPr><w:spacing w:val="-44"/></w:rPr><w:t>简介</w:t></w:r></w:p>',
+            )
+            job = root / "job"
+            subprocess.run(
+                [sys.executable, str(PIPELINE), "prepare", str(source), "--job-dir", str(job), "--target-language", "English"],
+                check=True,
+            )
+            manifest_path = job / "translation-manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["units"][0]["target"] = "Company Profile"
+            manifest_path.write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
+            output = root / "translated.docx"
+
+            subprocess.run(
+                [sys.executable, str(PIPELINE), "apply", str(manifest_path), "--output", str(output)],
+                check=True,
+            )
+
+            with ZipFile(output) as archive:
+                xml = archive.read("word/document.xml").decode("utf-8")
+            self.assertIn('xml:space="preserve"> Profile</w:t>', xml)
+            self.assertNotIn("<w:spacing", xml)
+            self.assertNotIn("<w:w ", xml)
+            self.assertNotIn("<w:fitText", xml)
+
+    def test_static_validation_rejects_invisible_spaces_or_compressed_latin_text(self):
+        pipeline = self.load_pipeline()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = self.make_docx(root, '<w:p><w:r><w:t>公司简介</w:t></w:r></w:p>')
+            job = root / "job"
+            manifest_path = pipeline.prepare(source, job, "English")
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["units"][0]["target"] = "Company Profile"
+            manifest_path.write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
+            candidate = root / "bad.docx"
+            bad_body = (
+                '<w:p><w:r><w:rPr><w:spacing w:val="-84"/></w:rPr><w:t>Company</w:t></w:r>'
+                '<w:r><w:t> Profile</w:t></w:r></w:p>'
+            )
+            xml = f'<w:document xmlns:w="{W_NS}"><w:body>{bad_body}</w:body></w:document>'
+            with ZipFile(candidate, "w") as archive:
+                archive.writestr("[Content_Types].xml", "<Types/>")
+                archive.writestr("word/document.xml", xml)
+                archive.writestr("word/media/image1.png", b"keep")
+
+            with self.assertRaisesRegex(ValueError, "unsafe translated text layout"):
+                pipeline.validate(candidate, manifest_path)
+
     def test_failed_apply_does_not_overwrite_existing_output(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

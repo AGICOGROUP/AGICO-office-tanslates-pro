@@ -22,7 +22,9 @@ from analyze_docx import analyze
 
 
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+XML_NS = "http://www.w3.org/XML/1998/namespace"
 W_P = f"{{{W_NS}}}p"
+W_R = f"{{{W_NS}}}r"
 W_T = f"{{{W_NS}}}t"
 W_TAB = f"{{{W_NS}}}tab"
 W_BREAKS = {f"{{{W_NS}}}br", f"{{{W_NS}}}cr"}
@@ -61,6 +63,30 @@ def paragraph_text(paragraph: etree._Element) -> str:
     return "".join(pieces).strip()
 
 
+def set_text_node(node: etree._Element, value: str) -> None:
+    node.text = value
+    space_key = f"{{{XML_NS}}}space"
+    if value[:1].isspace() or value[-1:].isspace():
+        node.set(space_key, "preserve")
+    else:
+        node.attrib.pop(space_key, None)
+
+
+def remove_cjk_width_controls(node: etree._Element, source: str, target: str) -> None:
+    if not re.search(r"[\u3400-\u9fff]", source) or not re.search(r"[A-Za-z]", target):
+        return
+    run = next((ancestor for ancestor in node.iterancestors() if ancestor.tag == W_R), None)
+    if run is None:
+        return
+    properties = run.find(f"{{{W_NS}}}rPr")
+    if properties is None:
+        return
+    for name in ("spacing", "w", "fitText"):
+        child = properties.find(f"{{{W_NS}}}{name}")
+        if child is not None:
+            properties.remove(child)
+
+
 def replace_paragraph_text(paragraph: etree._Element, source: str, target: str) -> None:
     if target == source:
         return
@@ -88,7 +114,7 @@ def replace_paragraph_text(paragraph: etree._Element, source: str, target: str) 
         original = [node.text or "" for node in group]
         if "".join(original) == segment:
             continue
-        writable = [node for node in group if node.text]
+        writable = [node for node in group if (node.text or "").strip()]
         if not writable:
             writable = [group[0]]
         writable = writable[:max(1, min(len(writable), len(segment)))]
@@ -106,9 +132,11 @@ def replace_paragraph_text(paragraph: etree._Element, source: str, target: str) 
             boundaries.append(max(lower, min(upper, boundary)))
         boundaries.append(len(segment))
         for node in group:
-            node.text = ""
+            set_text_node(node, "")
         for index, node in enumerate(writable):
-            node.text = segment[boundaries[index]:boundaries[index + 1]]
+            value = segment[boundaries[index]:boundaries[index + 1]]
+            set_text_node(node, value)
+            remove_cjk_width_controls(node, source, target)
 
 
 def prepare(source: Path, job_dir: Path, target_language: str) -> Path:
@@ -198,6 +226,10 @@ def validate(candidate: Path, manifest_path: Path, word_native: bool = False) ->
     missing_targets = [unit["id"] for unit in manifest["units"] if unit["target"] not in candidate_texts]
     if missing_targets:
         failures.append(f"missing target text for units: {missing_targets}")
+    target_texts = {unit["target"] for unit in manifest["units"]}
+    unsafe_layout = [item for item in report.get("text_layout_risks", []) if item.get("text") in target_texts]
+    if unsafe_layout:
+        failures.append(f"unsafe translated text layout: {unsafe_layout}")
     expected_tokens = normalize_protected_tokens([
         token for occurrence in manifest["protected_tokens"] for token in occurrence["tokens"]
     ])

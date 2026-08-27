@@ -51,6 +51,7 @@ only when an image needs an overlay.
 - Preserve masters, layouts, themes, geometry, z-order, animations, relationships, media, arrows,
   process lines, numbers, units, models, standards, and formulas.
 - Keep native translations and image overlays selectable and editable.
+- Preserve visible boundary spaces and remove inherited negative character spacing from Latin-script native translations during `apply`.
 - Keep default-preserved embedded objects byte-for-byte unchanged and report them as untranslated warnings.
 - PowerPoint embedded images only use `skip_target`, `skip_unclear`, or `overlay`.
 - Never erase, cover, patch, regenerate, redraw, or replace an image.

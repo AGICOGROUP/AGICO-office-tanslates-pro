@@ -132,10 +132,21 @@ def replace_text_nodes(fragment: str, value: str) -> str:
     for index, match in enumerate(matches):
         pieces.append(fragment[cursor : match.start()])
         replacement = escaped_value if index == 0 else ""
-        pieces.append(match.group(1) + replacement + match.group(3))
+        opening = re.sub(r"\s+xml:space=([\"']).*?\1", "", match.group(1))
+        if index == 0 and (value[:1].isspace() or value[-1:].isspace()):
+            opening = opening[:-1] + ' xml:space="preserve">'
+        pieces.append(opening + replacement + match.group(3))
         cursor = match.end()
     pieces.append(fragment[cursor:])
-    return "".join(pieces)
+    updated = "".join(pieces)
+    if re.search(r"[A-Za-z]", value):
+        updated = re.sub(
+            r"(<a:rPr\b[^>]*?)\s+spc=([\"'])-\d+\2",
+            r"\1",
+            updated,
+            count=1,
+        )
+    return updated
 
 
 def replace_raw_paragraph_text(paragraph_xml: str, translation: str) -> str:

@@ -15,6 +15,7 @@ from lxml import etree as ET
 
 
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+XML_NS = "http://www.w3.org/XML/1998/namespace"
 NS = {"w": W_NS}
 W = f"{{{W_NS}}}"
 TEXT_PART = re.compile(r"word/(document|header\d+|footer\d+|footnotes|endnotes|comments)\.xml$")
@@ -50,6 +51,31 @@ def paragraph_text(paragraph: ET.Element) -> str:
     return "".join(pieces).strip()
 
 
+def paragraph_layout_risks(paragraph: ET.Element, text: str) -> list[str]:
+    risks: set[str] = set()
+    for node in paragraph.iter(f"{W}t"):
+        value = node.text or ""
+        if (value[:1].isspace() or value[-1:].isspace()) and node.attrib.get(f"{{{XML_NS}}}space") != "preserve":
+            risks.add("unpreserved-boundary-space")
+        if not re.search(r"[A-Za-z]", value):
+            continue
+        run = next((ancestor for ancestor in node.iterancestors() if ancestor.tag == f"{W}r"), None)
+        if run is None:
+            continue
+        properties = run.find(f"{W}rPr")
+        if properties is None:
+            continue
+        spacing = properties.find(f"{W}spacing")
+        if spacing is not None and int(spacing.attrib.get(f"{W}val", "0")) <= -20:
+            risks.add("negative-character-spacing")
+        width = properties.find(f"{W}w")
+        if width is not None and int(width.attrib.get(f"{W}val", "100")) < 90:
+            risks.add("compressed-character-width")
+        if properties.find(f"{W}fitText") is not None:
+            risks.add("fit-text")
+    return sorted(risks)
+
+
 def xml_contains_human_text(payload: bytes) -> bool:
     root = ET.fromstring(payload)
     return any(
@@ -69,6 +95,7 @@ def analyze(path: Path) -> dict:
     section_count = 0
     table_count = 0
     field_codes: list[dict] = []
+    text_layout_risks: list[dict] = []
 
     try:
         with ZipFile(path) as archive:
@@ -138,6 +165,9 @@ def analyze(path: Path) -> dict:
                     tokens = PROTECTED_TOKEN.findall(text)
                     if tokens:
                         protected_tokens.append({"part": part_name, "paragraph": index, "tokens": tokens})
+                    risks = paragraph_layout_risks(paragraph, text)
+                    if risks:
+                        text_layout_risks.append({"part": part_name, "paragraph": index, "text": text, "risks": risks})
     except (BadZipFile, ET.XMLSyntaxError, OSError, ValueError) as exc:
         raise ValueError(f"Cannot analyze DOCX: {exc}") from exc
 
@@ -156,6 +186,7 @@ def analyze(path: Path) -> dict:
         "occurrences": occurrences,
         "protected_tokens": protected_tokens,
         "field_codes": field_codes,
+        "text_layout_risks": text_layout_risks,
     }
 
 

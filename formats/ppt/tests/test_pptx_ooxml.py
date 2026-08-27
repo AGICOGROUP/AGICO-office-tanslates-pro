@@ -168,6 +168,33 @@ class OoxmlApplyTests(unittest.TestCase):
             "112233",
         )
 
+    def test_apply_removes_negative_character_spacing_and_preserves_boundary_spaces(self):
+        with zipfile.ZipFile(self.source, "r") as archive:
+            entries = [(item, archive.read(item.filename)) for item in archive.infolist()]
+        with zipfile.ZipFile(self.source, "w", zipfile.ZIP_DEFLATED) as archive:
+            for item, payload in entries:
+                if item.filename.startswith("ppt/slides/slide"):
+                    payload = payload.replace(b'lang="zh-CN" sz="2400" b="1"', b'lang="zh-CN" sz="2400" b="1" spc="-800"')
+                archive.writestr(item, payload)
+        manifest = json.loads(self.manifest.read_text(encoding="utf-8"))
+        manifest["translation_units"][0]["translation"] = " Beam Lime Kiln "
+        self.manifest.write_text(json.dumps(manifest), encoding="utf-8")
+
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), "apply", "--input", str(self.source), "--manifest", str(self.manifest), "--output", str(self.output)],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        with zipfile.ZipFile(self.output) as archive:
+            root = ET.fromstring(archive.read("ppt/slides/slide1.xml"))
+        first_run = root.find(f".//{{{A_NS}}}r")
+        first_text = first_run.find(f"{{{A_NS}}}t")
+        self.assertNotIn("spc", first_run.find(f"{{{A_NS}}}rPr").attrib)
+        self.assertEqual(first_text.attrib["{http://www.w3.org/XML/1998/namespace}space"], "preserve")
+        self.assertEqual(first_text.text, " Beam Lime Kiln ")
+
 
 if __name__ == "__main__":
     unittest.main()
