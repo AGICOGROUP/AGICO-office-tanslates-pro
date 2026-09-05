@@ -24,8 +24,14 @@ UNSUPPORTED_TEXT_PARTS = (
     "ppt/notesSlides/",
     "ppt/slideMasters/",
 )
+# ASCII-only lookarounds and an ASCII token body instead of "\b"/"\w": CJK chars count as
+# regex word chars, so "\b" missed codes glued to Chinese ("帆布带B650") while [\w./-]
+# swallowed trailing CJK into the token ("B650档") — either way the source and translated
+# sides then disagreed and protected-token checks false-failed. Borders must only exclude
+# ASCII alphanumerics, and the trailing (?<![-./]) keeps codes from ending in punctuation.
 PROTECTED_RE = re.compile(
-    r"(?:https?://\S+|\b[A-Z]{1,8}[-/]?\d[\w./-]*\b|\b\d+(?:[.,]\d+)?\s*(?:%|mm|cm|m|km|kg|t|kW|MW|V|kV|Hz|°C)\b)",
+    r"(?:https?://\S+|(?<![A-Za-z0-9])[A-Z]{1,8}[-/]?\d[A-Za-z0-9./-]*(?![A-Za-z0-9])(?<![-./])"
+    r"|(?<![A-Za-z0-9])\d+(?:[.,]\d+)?\s*(?:%|mm|cm|m|km|kg|t|kW|MW|V|kV|Hz|°C)(?![A-Za-z0-9]))",
     re.IGNORECASE,
 )
 

@@ -8,7 +8,7 @@ Use the automatic blue-row rebuild only for a verified plain cell grid. Styles, 
 horizontal merges, row/column dimensions, and sheet order are supported. Before rebuilding,
 classify the original OOXML package. Route the job to the existing strict workflow without
 creating a partial output when it contains VBA, Excel table objects, charts, comments,
-external links, unsupported drawings, vertical merges, or any image whose preservation and
+external links, unsupported drawings, or any image whose preservation and
 text-localization status is uncertain.
 
 The fast path is deliberately narrow: failing the safety check is not a translation failure.
@@ -22,7 +22,11 @@ It means the workbook needs feature-aware processing and full verification.
 - Leave non-language cells blank in the translation row. Translate labels, descriptions, units, notes, headers, and metadata.
 - Keep model codes, URLs, tags, and other protected identifiers in the source row. Store identifiers with leading zeros as text.
 - Recreate each horizontal merged range in both the source row and the translation row.
-- Route vertical or cross-row merges to strict processing.
+- Rebuild each vertical or cross-row merge as one horizontal merged strip on every paired row
+  of the span. The source strip keeps the original text on the anchor source row, the
+  translation strip keeps the translation on the anchor translation row, and the remaining
+  strips stay merged and empty. A single-column span keeps unmerged single cells because each
+  doubled row is already one cell. Record the rebuilt count in job counts and report it.
 
 ## Blue translation row
 

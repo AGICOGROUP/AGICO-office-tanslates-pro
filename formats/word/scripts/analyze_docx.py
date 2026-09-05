@@ -6,7 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 import sys
 from zipfile import BadZipFile, ZipFile
@@ -18,10 +18,19 @@ W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 XML_NS = "http://www.w3.org/XML/1998/namespace"
 NS = {"w": W_NS}
 W = f"{{{W_NS}}}"
+R_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+PKG_REL_NS = "http://schemas.openxmlformats.org/package/2006/relationships"
 TEXT_PART = re.compile(r"word/(document|header\d+|footer\d+|footnotes|endnotes|comments)\.xml$")
+# ASCII-only lookarounds instead of "\b": CJK chars count as word chars, so "\b" never fires
+# where a code/value is glued to Chinese ("尼龙帆布带B650"), while the spaced translation
+# ("... Belt B650") is recognized — the source/target token sets then diverge and validation
+# false-fails. Borders must only exclude ASCII alphanumerics on both sides; the trailing
+# (?<![-._/]) keeps the pre-fix backtracking shape (codes never end in dangling punctuation),
+# so manifests extracted before this fix stay valid.
 PROTECTED_TOKEN = re.compile(
-    r"https?://\S+|www\.\S+|\b\d+(?:[.,]\d+)?\s*(?:%|°C|℃|kW|MW|V|kV|A|mA|Pa|kPa|MPa|"
-    r"mm|cm|m|km|kg|t|t/h|m[³3]/h|Nm[³3]/min|rpm|r/min)(?![A-Za-z0-9])|\b[A-Z][A-Z0-9._/-]*\d[A-Z0-9._/-]*\b",
+    r"https?://\S+|www\.\S+|(?<![A-Za-z0-9])\d+(?:[.,]\d+)?\s*(?:%|°C|℃|kW|MW|V|kV|A|mA|Pa|kPa|MPa|"
+    r"mm|cm|m|km|kg|t|t/h|m[³3]/h|Nm[³3]/min|rpm|r/min)(?![A-Za-z0-9])|"
+    r"(?<![A-Za-z0-9])[A-Z][A-Z0-9._/-]*\d[A-Z0-9._/-]*(?![A-Za-z0-9])(?<![-._/])",
     re.IGNORECASE,
 )
 SAFE_FIELD_COMMANDS = {"PAGE", "NUMPAGES", "DATE", "TIME", "CREATEDATE", "SAVEDATE", "FILENAME", "AUTHOR"}
@@ -96,6 +105,9 @@ def analyze(path: Path) -> dict:
     table_count = 0
     field_codes: list[dict] = []
     text_layout_risks: list[dict] = []
+    layout: dict = {}
+    referenced_media: set[str] = set()
+    media_reference_count = 0
 
     try:
         with ZipFile(path) as archive:
@@ -107,6 +119,18 @@ def analyze(path: Path) -> dict:
 
             media = sorted(name for name in names if name.startswith("word/media/") and not name.endswith("/"))
             chart_parts = sorted(name for name in names if name.startswith("word/charts/") and name.endswith(".xml"))
+            doc_xml = archive.read("word/document.xml").decode("utf-8", errors="replace") if "word/document.xml" in names else ""
+            layout = {
+                "textboxes": doc_xml.count("<w:txbxContent>"),
+                "floating_anchors": doc_xml.count("<wp:anchor"),
+                "vertical_textboxes": len(re.findall(r"<wps:bodyPr[^>]*\bvert=", doc_xml)) + doc_xml.count("layout-flow:vertical"),
+                "exact_line_spacing": len(re.findall(r'w:lineRule="exact"', doc_xml)),
+                "section_break_types": {t: doc_xml.count(f'<w:type w:val="{t}"/>') for t in set(re.findall(r'<w:type w:val="([^"]+)"', doc_xml))},
+                "next_page_sections": doc_xml.count("<w:sectPr") - doc_xml.count("<w:type"),
+            }
+            if "word/numbering.xml" in names:
+                numbering_xml = archive.read("word/numbering.xml").decode("utf-8", errors="replace")
+                layout["cjk_numbering_lvltext"] = re.findall(r'<w:lvlText w:val="([^"]*[\u4e00-\u9fff][^"]*)"', numbering_xml)
             if chart_parts:
                 reasons.add("charts")
                 if any(xml_contains_human_text(archive.read(name)) for name in chart_parts):
@@ -114,6 +138,29 @@ def analyze(path: Path) -> dict:
 
             for part_name in sorted(name for name in names if TEXT_PART.fullmatch(name)):
                 root = ET.fromstring(archive.read(part_name))
+                part_path = PurePosixPath(part_name)
+                rels_name = str(part_path.parent / "_rels" / f"{part_path.name}.rels")
+                image_relationships: dict[str, str] = {}
+                if rels_name in names:
+                    rels_root = ET.fromstring(archive.read(rels_name))
+                    for relationship in rels_root.iter(f"{{{PKG_REL_NS}}}Relationship"):
+                        if relationship.attrib.get("Type", "").endswith("/image") and relationship.attrib.get("TargetMode") != "External":
+                            target = relationship.attrib.get("Target", "")
+                            resolved = str((part_path.parent / target)).replace("\\", "/")
+                            while "/../" in f"/{resolved}":
+                                bits = []
+                                for bit in PurePosixPath(resolved).parts:
+                                    if bit == ".." and bits:
+                                        bits.pop()
+                                    elif bit != ".":
+                                        bits.append(bit)
+                                resolved = "/".join(bits)
+                            image_relationships[relationship.attrib.get("Id", "")] = resolved
+                for node in root.iter():
+                    for attribute, rel_id in node.attrib.items():
+                        if attribute in {f"{{{R_NS}}}embed", f"{{{R_NS}}}link", f"{{{R_NS}}}id"} and rel_id in image_relationships:
+                            media_reference_count += 1
+                            referenced_media.add(image_relationships[rel_id])
                 if part_name == "word/comments.xml" and next(root.iter(f"{W}comment"), None) is not None:
                     reasons.add("comments")
                 if part_name in {"word/footnotes.xml", "word/endnotes.xml"}:
@@ -179,6 +226,9 @@ def analyze(path: Path) -> dict:
         "section_count": section_count,
         "table_count": table_count,
         "media_count": len(media),
+        "media_reference_count": media_reference_count,
+        "referenced_media": sorted(referenced_media),
+        "layout": layout,
         "needs_image_triage": bool(media),
         "text_occurrence_count": len(occurrences),
         "unique_text_count": len(unique_texts),

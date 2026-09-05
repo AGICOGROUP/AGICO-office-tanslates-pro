@@ -13,6 +13,10 @@ import sys
 import time
 from typing import Any
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / 'scripts'))
+from translation_batches import add_commands, export_batches, run_command
+sys.path.pop(0)
+
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
@@ -66,6 +70,8 @@ def build_worklist(manifest: dict[str, Any]) -> dict[str, Any]:
             })
     return {
         "schema_version": 1,
+        "source_sha256": manifest.get('source_sha256'),
+        "output_mode": manifest.get('output_mode'),
         "target_language": manifest.get("target_language"),
         "pending_count": len(units),
         "translation_units": units,
@@ -198,6 +204,8 @@ def node_environment(node_modules: str | None) -> dict[str, str]:
 def prepare_job(args: argparse.Namespace) -> dict[str, Any]:
     source = Path(args.source).resolve()
     job_dir = Path(args.job_dir).resolve()
+    if (job_dir / 'translation-manifest.json').exists():
+        raise ValueError('job already prepared; use batches to resume or choose a new job directory')
     job_dir.mkdir(parents=True, exist_ok=True)
     node = resolve_executable(args.node_path, "CODEX_NODE", "node")
     env = node_environment(args.node_modules)
@@ -230,6 +238,7 @@ def prepare_job(args: argparse.Namespace) -> dict[str, Any]:
     worklist_path = job_dir / "translation-worklist.json"
     worklist = build_worklist(read_json(manifest_path))
     write_json(worklist_path, worklist)
+    export_batches(worklist_path, kind='excel')
     timing_path = job_dir / "stage-timings.json"
     write_json(timing_path, merge_timing_report({}, stages))
     return {
@@ -297,6 +306,7 @@ def finalize_job(args: argparse.Namespace) -> dict[str, Any]:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Fast deterministic Excel translation orchestration")
     subparsers = parser.add_subparsers(dest="command", required=True)
+    add_commands(subparsers)
     prepare = subparsers.add_parser("prepare")
     prepare.add_argument("--source", required=True)
     prepare.add_argument("--job-dir", required=True)
@@ -321,6 +331,23 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
+        if args.command in ('batches', 'merge'):
+            def invalidate(accepted):
+                state_path = args.job_dir / 'job-state.json'
+                state = read_json(state_path)
+                keep = {'preflight', 'inspect', 'prepare'}
+                state['completedStages'] = [s for s in state['completedStages'] if s in keep]
+                state['stageArtifacts'] = {k: v for k, v in state.get('stageArtifacts', {}).items() if k in keep}
+                write_json(state_path, state)
+                # finalize may already have merged an earlier worklist. Reset only
+                # the accepted units so its conflict guard permits this correction.
+                manifest_path = args.job_dir / 'translation-manifest.json'
+                manifest = read_json(manifest_path)
+                for unit in manifest['translation_units']:
+                    if unit['id'] in accepted:
+                        unit.update(status='pending', translation='')
+                write_json(manifest_path, manifest)
+            return run_command(args, kind='excel', filename='translation-worklist.json', before_save=invalidate)
         result = args.handler(args)
     except Exception as exc:
         print(json.dumps({"passed": False, "error": str(exc)}, ensure_ascii=False))

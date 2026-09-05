@@ -5,6 +5,10 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+# Emit UTF-8 regardless of the console codepage: the pipeline captures this output and
+# decodes it as UTF-8; on CJK Windows installs the default GBK console encoding would
+# otherwise raise UnicodeDecodeError in the Python reader thread.
+[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
 $word = $null
 $document = $null
 try {
@@ -32,6 +36,12 @@ try {
         } | ConvertTo-Json -Compress
     }
 } finally {
-    if ($document) { $document.Close($false) }
-    if ($word) { $word.Quit() }
+    # COM cleanup can fail spuriously (e.g. "RPC server unavailable" while Quit is still
+    # draining) after the measurement has already succeeded — never fail the script for it.
+    if ($document) { try { $document.Close($false) } catch {} }
+    if ($word) {
+        try { $word.Quit() } catch {}
+        try { [System.Runtime.InteropServices.Marshal]::ReleaseComObject($word) | Out-Null } catch {}
+    }
+    try { [GC]::Collect(); [GC]::WaitForPendingFinalizers() } catch {}
 }

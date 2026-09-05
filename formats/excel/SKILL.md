@@ -24,6 +24,10 @@ and final-render requirements. Do not render a source baseline or add a visual d
 3. Fill every pending worklist record with glossary-first professional terminology. Preserve every
    protected token. Use `translated` for translated text; use justified `retain` only when output
    equals source. Safe deduplication reuses exact text only when context and protected tokens match.
+   For long worklists, read `translation-batches.json` and its listed files instead of repeating the
+   complete worklist. Submit compact ID/translation JSON using `merge --job-dir <job> --responses
+   <responses.json>` through `excel_fast_pipeline.py`. Resume with `batches`; use `--ids` for local
+   corrections. Keep the same relevant glossary and image review. See `references/pipeline-cli.md`.
 4. Run `python scripts/excel_fast_pipeline.py finalize ...` once. It merges the worklist, runs
    `validate_manifest.py`, then executes `apply`, `verify`, and `office-validate`. Deliver after it
    returns `next_stage: deliver`.

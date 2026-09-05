@@ -34,6 +34,7 @@ import {
   translationReuseKey,
   verifyTranslations,
 } from "../scripts/excel_pipeline.mjs";
+import { protectedTokens } from "../scripts/excel_pipeline.mjs";
 
 
 function occurrence(overrides = {}) {
@@ -680,4 +681,85 @@ test("bilingual apply creates paired blue rows and keeps data only on source row
   } finally {
     await fs.rm(directory, { recursive: true, force: true });
   }
+});
+
+
+test("bilingual apply rebuilds vertical merges as paired-row strips", async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "excel-vertical-"));
+  try {
+    const source = path.join(directory, "source.xlsx");
+    const output = path.join(directory, "bilingual.xlsx");
+    const jobDir = path.join(directory, "job");
+    const workbook = Workbook.create();
+    const sheet = workbook.worksheets.add("Form");
+    sheet.getRange("A1:C1").values = [["设备表", null, null]];
+    sheet.getRange("A1:C1").merge();
+    sheet.getRange("B3:C5").values = [["修订记录", null, null]];
+    sheet.getRange("B3:C5").merge();
+    sheet.getRange("E3:E4").values = [["合格", null]];
+    sheet.getRange("E3:E4").merge();
+    await (await SpreadsheetFile.exportXlsx(workbook)).save(source);
+
+    await inspectWorkbook({
+      input: source,
+      "job-dir": jobDir,
+      "target-language": "en",
+      "output-mode": "bilingual",
+    });
+    await prepareManifest({ "job-dir": jobDir });
+    const manifestPath = path.join(jobDir, "translation-manifest.json");
+    const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
+    for (const unit of manifest.translation_units) {
+      unit.translation = `EN:${unit.source}`;
+      unit.status = "translated";
+    }
+    await fs.writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+    const applied = await applyTranslations({ input: source, "job-dir": jobDir, output });
+    assert.equal(applied.next_stage, "verify");
+
+    const result = await SpreadsheetFile.importXlsx(await FileBlob.load(output));
+    const resultSheet = result.worksheets.items.find((item) => item.name === "Form");
+    assert.equal(resultSheet.getRange("A1").values[0][0], "设备表");
+    assert.equal(resultSheet.getRange("B5").values[0][0], "修订记录");
+    assert.equal(resultSheet.getRange("B6").values[0][0], "EN:修订记录");
+    assert.equal(resultSheet.getRange("E5").values[0][0], "合格");
+    assert.equal(resultSheet.getRange("E6").values[0][0], "EN:合格");
+    assert.deepEqual(
+      resultSheet.__getMergedCells()
+        .map((merge) => `${merge.startAddress}:${merge.endAddress}`)
+        .sort(),
+      [
+        "A1:C1", "A2:C2",
+        "B10:C10", "B5:C5", "B6:C6", "B7:C7", "B8:C8", "B9:C9",
+      ],
+    );
+
+    const report = await verifyTranslations({ source, "job-dir": jobDir, output });
+    assert.equal(report.passed, true, report.errors.join(", "));
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("protected token extraction stays symmetric for CJK-glued and spaced codes", () => {
+  // JavaScript "\b" is ASCII-only (unlike Python's Unicode-aware "\b"), so codes glued to
+  // Chinese text are recognized on the source side exactly like the spaced translation
+  // side. The containment gate (verifyTranslations: translation.includes(token)) depends
+  // on that source-side extraction — this test pins it so a regex edit cannot silently
+  // reintroduce the word-boundary false-positive/gap pair fixed in the Word adapter.
+  const pairs = [
+    ["尼龙帆布带B650，规格见附页。", "Nylon Canvas Conveyor Belt B650, see appendix."],
+    ['温度变送器G1/2"，量程0-100。', 'Temperature Transmitter G1/2", range 0-100.'],
+    ["电机功率75kW", "Motor power rating 75kW"],
+    ["口径DN50mm", "Nominal diameter DN50mm"],
+  ];
+  for (const [source, translation] of pairs) {
+    const tokens = protectedTokens(source);
+    assert.ok(tokens.length > 0, `${source} should yield protected tokens`);
+    for (const token of tokens) {
+      assert.ok(translation.includes(token), `${translation} should contain ${token}`);
+    }
+  }
+  assert.deepEqual(protectedTokens("尼龙帆布带B650"), ["B650"]);
+  assert.deepEqual(protectedTokens("尼龙帆布带"), []);
 });

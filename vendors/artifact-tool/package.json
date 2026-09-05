@@ -1,0 +1,7 @@
+{
+  "name": "@oai/artifact-tool",
+  "version": "1.0.1-local",
+  "description": "exceljs compatibility shim (FileBlob/SpreadsheetFile/Workbook) for excel_pipeline.mjs; vendored in the skill repo at vendors/artifact-tool",
+  "type": "module",
+  "main": "index.js"
+}

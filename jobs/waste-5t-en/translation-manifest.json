@@ -1,0 +1,2868 @@
+{
+  "schema": 1,
+  "source": "C:\\Users\\AGICO\\Desktop\\测试文件\\5T 高热值废物垃圾处理项目初步方案docx - 副本.docx",
+  "source_sha256": "4FC24FB044F52E6F5884DE9103310CAFC258F9E4EE07D3998B37B816FBF84610",
+  "working_docx": "E:\\office-translate-pro\\jobs\\waste-5t-en\\source-working.docx",
+  "target_language": "en",
+  "baseline": {
+    "section_count": 28,
+    "table_count": 11,
+    "media_count": 19
+  },
+  "protected_tokens": [
+    {
+      "part": "word/document.xml",
+      "paragraph": 69,
+      "tokens": [
+        "60%"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 77,
+      "tokens": [
+        "GB18485-2014"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 83,
+      "tokens": [
+        "5.7%",
+        "29%",
+        "51%"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 84,
+      "tokens": [
+        "15%",
+        "5%"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 144,
+      "tokens": [
+        "H2S",
+        "NH3",
+        "SO2",
+        "CH4"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 209,
+      "tokens": [
+        "H2S",
+        "NH3",
+        "SO2",
+        "CH4"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 280,
+      "tokens": [
+        "CH4",
+        "850℃"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 284,
+      "tokens": [
+        "11m",
+        "0.8m"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 285,
+      "tokens": [
+        "850℃"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 286,
+      "tokens": [
+        "1.1kw",
+        "850℃"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 290,
+      "tokens": [
+        "25%"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 292,
+      "tokens": [
+        "60℃"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 305,
+      "tokens": [
+        "SO2"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 313,
+      "tokens": [
+        "NH2",
+        "O2",
+        "NH2",
+        "NH2",
+        "40%"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 320,
+      "tokens": [
+        "1m"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 321,
+      "tokens": [
+        "20kg",
+        "0.4m3/h",
+        "60m"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 326,
+      "tokens": [
+        "400℃",
+        "200℃"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 334,
+      "tokens": [
+        "90%"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 338,
+      "tokens": [
+        "200℃"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 339,
+      "tokens": [
+        "6000mm"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 340,
+      "tokens": [
+        "Q235B",
+        "120mm"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 341,
+      "tokens": [
+        "300Kg"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 354,
+      "tokens": [
+        "1500Pa"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 377,
+      "tokens": [
+        "GB18485-2014",
+        "GB/T16157-1996",
+        "150℃"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 401,
+      "tokens": [
+        "5T"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 412,
+      "tokens": [
+        "ZT-1-1"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 417,
+      "tokens": [
+        "ZT-1-2"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 422,
+      "tokens": [
+        "ZT-1-3"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 430,
+      "tokens": [
+        "ZT-2-1"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 433,
+      "tokens": [
+        "900℃"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 437,
+      "tokens": [
+        "ZT-2-2"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 442,
+      "tokens": [
+        "ZT-2-3"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 444,
+      "tokens": [
+        "4500pa"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 445,
+      "tokens": [
+        "5.5KW"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 448,
+      "tokens": [
+        "ZT-2-4"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 451,
+      "tokens": [
+        "0.75kw"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 455,
+      "tokens": [
+        "ZT-2-5"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 457,
+      "tokens": [
+        "7.5Kw"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 465,
+      "tokens": [
+        "ZT-3-1"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 468,
+      "tokens": [
+        "50%",
+        "5%",
+        "10%"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 469,
+      "tokens": [
+        "Nm3"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 473,
+      "tokens": [
+        "ZT-3-2"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 475,
+      "tokens": [
+        "900℃"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 476,
+      "tokens": [
+        "750℃"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 479,
+      "tokens": [
+        "ZT-3-3"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 481,
+      "tokens": [
+        "400℃"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 484,
+      "tokens": [
+        "ZT-3-4"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 486,
+      "tokens": [
+        "30T"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 491,
+      "tokens": [
+        "ZT-3-5"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 494,
+      "tokens": [
+        "1.5KW",
+        "0.55KW",
+        "1.5KW"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 499,
+      "tokens": [
+        "ZT-3-6"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 507,
+      "tokens": [
+        "ZT-3-7"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 510,
+      "tokens": [
+        "0.55kw"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 511,
+      "tokens": [
+        "1.5KW",
+        "99.90%"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 512,
+      "tokens": [
+        "Nm3"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 516,
+      "tokens": [
+        "ZT-3-8"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 518,
+      "tokens": [
+        "10KW"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 523,
+      "tokens": [
+        "ZT-3-9"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 526,
+      "tokens": [
+        "SUS304",
+        "200℃",
+        "5000PA"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 527,
+      "tokens": [
+        "22KW"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 531,
+      "tokens": [
+        "ZT-3-10"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 533,
+      "tokens": [
+        "45m"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 539,
+      "tokens": [
+        "ZT-4-1"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 545,
+      "tokens": [
+        "ZT-4-2"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 550,
+      "tokens": [
+        "ZT-4-3"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 552,
+      "tokens": [
+        "11kw"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 555,
+      "tokens": [
+        "ZT-4-4"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 561,
+      "tokens": [
+        "ZT-4-5"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 566,
+      "tokens": [
+        "ZT-4-6"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 571,
+      "tokens": [
+        "ZT-4-7"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 576,
+      "tokens": [
+        "ZT-4-8"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 581,
+      "tokens": [
+        "5T"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 588,
+      "tokens": [
+        "mg/m3"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 658,
+      "tokens": [
+        "TEQ/m3"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 671,
+      "tokens": [
+        "600℃",
+        "800℃",
+        "CuCl2",
+        "CuCl2",
+        "CuCl2"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 672,
+      "tokens": [
+        "3T"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 673,
+      "tokens": [
+        "200℃"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 679,
+      "tokens": [
+        "NH2CONH2",
+        "CO2"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 681,
+      "tokens": [
+        "O2"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 688,
+      "tokens": [
+        "SO3",
+        "CaSO4",
+        "H2O",
+        "SO2",
+        "CaSO3",
+        "H2O",
+        "CaCl2"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 689,
+      "tokens": [
+        "CaF2"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 715,
+      "tokens": [
+        "5T"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 734,
+      "tokens": [
+        "12m",
+        "10m",
+        "3m"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 823,
+      "tokens": [
+        "5t"
+      ]
+    },
+    {
+      "part": "word/document.xml",
+      "paragraph": 824,
+      "tokens": [
+        "1080kw"
+      ]
+    }
+  ],
+  "units": [
+    {
+      "id": 1,
+      "source": "2026",
+      "target": "2026"
+    },
+    {
+      "id": 2,
+      "source": "5 吨高值废物垃圾热解气化处理",
+      "target": "Pyrolysis Gasification Treatment of 5 Tons of High-Calorific-Value Waste"
+    },
+    {
+      "id": 3,
+      "source": "项目方案",
+      "target": "Project Proposal"
+    },
+    {
+      "id": 4,
+      "source": "孟加拉高值垃圾无害化技术处理",
+      "target": "Harmless Technical Treatment of High-Calorific-Value Waste in Bangladesh"
+    },
+    {
+      "id": 5,
+      "source": "（5 吨/日）",
+      "target": "(5 tons/day)"
+    },
+    {
+      "id": 6,
+      "source": "设计方案",
+      "target": "Design Proposal"
+    },
+    {
+      "id": 7,
+      "source": "目 录",
+      "target": "Table of Contents"
+    },
+    {
+      "id": 8,
+      "source": "第一章 项目概述\t1",
+      "target": "Chapter 1 Project Overview\t1"
+    },
+    {
+      "id": 9,
+      "source": "第二章 工艺技术方案\t1",
+      "target": "Chapter 2 Process and Technical Scheme\t1"
+    },
+    {
+      "id": 10,
+      "source": "垃圾处理技术的确定\t1",
+      "target": "Determination of the Waste Treatment Technology\t1"
+    },
+    {
+      "id": 11,
+      "source": "工艺方案及流程\t2",
+      "target": "Process Scheme and Flow\t2"
+    },
+    {
+      "id": 12,
+      "source": "垃圾接收系统\t2",
+      "target": "Waste Receiving System\t2"
+    },
+    {
+      "id": 13,
+      "source": "厂区除臭系统\t2",
+      "target": "Plant Deodorization System\t2"
+    },
+    {
+      "id": 14,
+      "source": "上料输送系统\t3",
+      "target": "Feeding and Conveying System\t3"
+    },
+    {
+      "id": 15,
+      "source": "高温热解气化处理系统\t4",
+      "target": "High-Temperature Pyrolysis Gasification System\t4"
+    },
+    {
+      "id": 16,
+      "source": "余热回收系统\t6",
+      "target": "Waste Heat Recovery System\t6"
+    },
+    {
+      "id": 17,
+      "source": "尾气净化系统\t7",
+      "target": "Flue Gas Purification System\t7"
+    },
+    {
+      "id": 18,
+      "source": "三废（灰渣、飞灰、滤液）处理系统\t14",
+      "target": "Three-Waste (Bottom Ash, Fly Ash, Leachate) Treatment System\t14"
+    },
+    {
+      "id": 19,
+      "source": "中央控制系统\t15",
+      "target": "Central Control System\t15"
+    },
+    {
+      "id": 20,
+      "source": "设备清单\t15",
+      "target": "Equipment List\t15"
+    },
+    {
+      "id": 21,
+      "source": "处理效果\t17",
+      "target": "Treatment Performance\t17"
+    },
+    {
+      "id": 22,
+      "source": "主要污染防治措施及机理\t18",
+      "target": "Main Pollution Prevention and Control Measures and Mechanisms\t18"
+    },
+    {
+      "id": 23,
+      "source": "二噁英去除工艺\t18",
+      "target": "Dioxin Removal Process\t18"
+    },
+    {
+      "id": 24,
+      "source": "NOX 的去除工艺\t18",
+      "target": "NOX Removal Process\t18"
+    },
+    {
+      "id": 25,
+      "source": "除酸工艺\t19",
+      "target": "Deacidification Process\t19"
+    },
+    {
+      "id": 26,
+      "source": "第三章 工程方案设计\t19",
+      "target": "Chapter 3 Engineering Design\t19"
+    },
+    {
+      "id": 27,
+      "source": "总体方案设计的原则\t19",
+      "target": "Principles of Overall Scheme Design\t19"
+    },
+    {
+      "id": 28,
+      "source": "总平面布置\t20",
+      "target": "General Layout\t20"
+    },
+    {
+      "id": 29,
+      "source": "根据布点、选址原则，提出项目点规划方案设想\t20",
+      "target": "Project Site Planning Concepts Based on Layout and Site Selection Principles\t20"
+    },
+    {
+      "id": 30,
+      "source": "第四章 工程实施与进度安排\t23",
+      "target": "Chapter 4 Project Implementation and Schedule\t23"
+    },
+    {
+      "id": 31,
+      "source": "第五章 运行成本测算\t24",
+      "target": "Chapter 5 Operating Cost Estimation\t24"
+    },
+    {
+      "id": 32,
+      "source": "第六章 技术特点\t25",
+      "target": "Chapter 6 Technical Features\t25"
+    },
+    {
+      "id": 33,
+      "source": "关键技术\t25",
+      "target": "Key Technologies\t25"
+    },
+    {
+      "id": 34,
+      "source": "系统优势\t26",
+      "target": "System Advantages\t26"
+    },
+    {
+      "id": 35,
+      "source": "占地省\t26",
+      "target": "Small Footprint\t26"
+    },
+    {
+      "id": 36,
+      "source": "投资运行成本低\t27",
+      "target": "Low Investment and Operating Cost\t27"
+    },
+    {
+      "id": 37,
+      "source": "污染产生少、排放达标无二次污染\t27",
+      "target": "Low Pollution Generation, Compliant Emissions without Secondary Pollution\t27"
+    },
+    {
+      "id": 38,
+      "source": "全封闭运行，自动化控制\t27",
+      "target": "Fully Enclosed Operation with Automatic Control\t27"
+    },
+    {
+      "id": 39,
+      "source": "可就近、就地无害化处理\t27",
+      "target": "On-Site and Nearby Harmless Treatment\t27"
+    },
+    {
+      "id": 40,
+      "source": "第七章 可供参观考察案例\t28",
+      "target": "Chapter 7 Reference Cases for Visits\t28"
+    },
+    {
+      "id": 41,
+      "source": "案例图片\t34",
+      "target": "Case Photos\t34"
+    },
+    {
+      "id": 42,
+      "source": "第一章 项目概述",
+      "target": "Chapter 1 Project Overview"
+    },
+    {
+      "id": 43,
+      "source": "(1)",
+      "target": "(1)"
+    },
+    {
+      "id": 44,
+      "source": "项目名称：孟加拉高值废物垃圾无害化处理项目；",
+      "target": "Project name: Bangladesh High-Calorific-Value Waste Harmless Treatment Project;"
+    },
+    {
+      "id": 45,
+      "source": "(2)",
+      "target": "(2)"
+    },
+    {
+      "id": 46,
+      "source": "设计日处理能力：5 吨/日台，共设立 1 个项目点：",
+      "target": "Designed daily processing capacity: 5 tons/day per set, with 1 project site to be established:"
+    },
+    {
+      "id": 47,
+      "source": "(3)",
+      "target": "(3)"
+    },
+    {
+      "id": 48,
+      "source": "设备投资： 860 万元（出厂价）",
+      "target": "Equipment investment: RMB 8.6 million (ex-works price)"
+    },
+    {
+      "id": 49,
+      "source": "(4)",
+      "target": "(4)"
+    },
+    {
+      "id": 50,
+      "source": "项目用地： 800m2",
+      "target": "Project land area: 800m2"
+    },
+    {
+      "id": 51,
+      "source": "(5)",
+      "target": "(5)"
+    },
+    {
+      "id": 52,
+      "source": "垃圾条件：热值≥900 大卡\t，含水率≤60%的垃圾；",
+      "target": "Waste conditions: waste with calorific value ≥900 kcal\tand moisture content ≤60%;"
+    },
+    {
+      "id": 53,
+      "source": "(6)",
+      "target": "(6)"
+    },
+    {
+      "id": 54,
+      "source": "所需能源：（0#柴油或木柴）点火烘炉使用，正常运行无需添加任何燃料；",
+      "target": "Energy required: (0# diesel or firewood) only for ignition and furnace curing; no additional fuel is required during normal operation;"
+    },
+    {
+      "id": 55,
+      "source": "(7)",
+      "target": "(7)"
+    },
+    {
+      "id": 56,
+      "source": "灰渣处理：灰渣已达排放标准，可填埋、铺路或制砖厂制砖；",
+      "target": "Slag treatment: the bottom ash has met discharge standards and can be landfilled, used for road paving, or made into bricks at brick plants;"
+    },
+    {
+      "id": 57,
+      "source": "(8)",
+      "target": "(8)"
+    },
+    {
+      "id": 58,
+      "source": "使用年限：15-20 年；",
+      "target": "Service life: 15-20 years;"
+    },
+    {
+      "id": 59,
+      "source": "(9)",
+      "target": "(9)"
+    },
+    {
+      "id": 60,
+      "source": "项目烟气排放指标：达到《生活垃圾焚烧污染控制标准》（GB18485-2014）的要求。",
+      "target": "Flue gas emission targets: complying with the requirements of the Standard for Pollution Control on Municipal Solid Waste Incineration (GB18485-2014)."
+    },
+    {
+      "id": 61,
+      "source": "工艺技术方案",
+      "target": "Process and Technical Scheme"
+    },
+    {
+      "id": 62,
+      "source": "垃圾处理技术的确定",
+      "target": "Determination of the Waste Treatment Technology"
+    },
+    {
+      "id": 63,
+      "source": "本项目废弃物主要为工业垃圾，如包装材料，含水率 5.7%，塑料 29%，纸张 51%，箔片/",
+      "target": "The waste of this project is mainly industrial waste, such as packaging materials, with a moisture content of 5.7%, plastics 29%, paper 51%, foil/"
+    },
+    {
+      "id": 64,
+      "source": "复合材料 15%，其他 5%，热值达到 5400kcal/kg。",
+      "target": "composite materials 15%, others 5%, with a calorific value reaching 5400kcal/kg."
+    },
+    {
+      "id": 65,
+      "source": "该类工业固废单位热值较高，但受限于废弃物产生总量规模小。燃烧释放的总化学热功率相对有限，经过余热锅炉换热、热损失、热力循环转换之后，系统净输出最大发电功率仅约300 W，一天总发电量为7.2度。虽然燃料本身热值优异，但可用于做功发电的有效能量基数很低；若配套余热锅炉、汽轮机、发电机、循环水等完整发电成套装置，设备投资、辅机能耗及运维成本将远高于微薄的发电收益，整体能量转化效率低下，投入大于产出，因此本项目不建议设置发电系统。",
+      "target": "This type of industrial solid waste has a high unit calorific value, but the total amount of waste generated is small. The total chemical thermal power released by combustion is relatively limited. After heat exchange in the waste heat boiler, heat losses and thermodynamic cycle conversion, the maximum net output power of the system is only about 300 W, with a total daily power generation of 7.2kWh. Although the fuel itself has an excellent calorific value, the effective energy base available for power generation is very low. If a complete power generation set including waste heat boiler, steam turbine, generator and circulating water is equipped, the equipment investment, auxiliary energy consumption and O&M costs would far exceed the meager power generation revenue, and the overall energy conversion efficiency is low, with input exceeding output. Therefore, it is not recommended to install a power generation system in this project."
+    },
+    {
+      "id": 66,
+      "source": "考虑孟加拉所在地域为热带季风气候区，冬季不需要供暖，因此若厂区无垃圾热值无其他利用价值，则直接换热排放。",
+      "target": "Considering that Bangladesh is located in a tropical monsoon climate zone where no heating is required in winter, if the waste heat of the plant has no other utilization value, it is discharged directly after heat exchange."
+    },
+    {
+      "id": 67,
+      "source": "建议采用高温热解气化与焚烧相结合的新型处理工艺，选用链式炉排作为焚烧的核心部件，加大二燃室炉腔，满足烟气停留时间。",
+      "target": "It is recommended to adopt a new treatment process combining high-temperature pyrolysis gasification with incineration, using a chain grate as the core component of incineration and enlarging the furnace cavity of the secondary combustion chamber to satisfy the flue gas residence time."
+    },
+    {
+      "id": 68,
+      "source": "工艺方案及流程",
+      "target": "Process Scheme and Flow"
+    },
+    {
+      "id": 69,
+      "source": "项目工艺流程包括：",
+      "target": "The project process flow includes:"
+    },
+    {
+      "id": 70,
+      "source": "垃圾接收输送上料系统高温热解气化处理系统余热回收系统尾气净化系统三废（灰渣、飞灰、滤液）处理系统中央控制系统",
+      "target": "Waste Receiving → Conveying and Feeding System → High-Temperature Pyrolysis Gasification System → Waste Heat Recovery System → Flue Gas Purification System → Three-Waste (Bottom Ash, Fly Ash, Leachate) Treatment System → Central Control System"
+    },
+    {
+      "id": 71,
+      "source": "垃圾接收系统",
+      "target": "Waste Receiving System"
+    },
+    {
+      "id": 72,
+      "source": "垃圾由垃圾运输车运送至焚烧厂，经电子汽车衡称量后进入卸料大厅并卸入垃圾收集坑。垃圾贮坑足够有效的容积可以确保垃圾供给量出现严重波动时热解炉的原料供应，使炉内反应更加稳定。",
+      "target": "Waste is transported to the incineration plant by waste trucks, weighed by the electronic truck scale, and then enters the tipping hall and is unloaded into the waste collection pit. The sufficient effective volume of the waste storage pit ensures the raw material supply of the pyrolysis furnace when the waste supply fluctuates severely, making the reaction in the furnace more stable."
+    },
+    {
+      "id": 73,
+      "source": "厂区除臭系统",
+      "target": "Plant Deodorization System"
+    },
+    {
+      "id": 74,
+      "source": "由吸风风机、喷淋除臭系统等组成，通过除臭剂吸附空气中的臭气分子，除臭剂通过离心雾化的方式快速吸附空气中的臭气分子，它所含微生物及酶类物质能及时分解吸附臭气物质，",
+      "target": "It is composed of suction fans, spray deodorization system, etc., and adsorbs odor molecules in the air through deodorizer. The deodorizer quickly adsorbs odor molecules in the air through centrifugal atomization, and the microorganisms and enzymes it contains can decompose the adsorbed odorous substances in time."
+    },
+    {
+      "id": 75,
+      "source": "同时除臭剂所含的高活性的有益微生物菌群能抑制腐败微生物的增殖，达到减缓恶臭气体的产生。垃圾热解气化炉运行时，供氧风机从垃圾贮坑取风，以保证垃圾贮坑的负压状态，依靠垃圾卸料门开启补风。并定期自动打开生物质喷淋除臭系统，去除房内臭气分子，两方案同时实施，能够很好地去除臭气并防止臭味外逸。",
+      "target": "Meanwhile, the highly active beneficial microbial flora contained in the deodorizer can inhibit the proliferation of spoilage microorganisms, thereby slowing down the generation of odorous gases. When the waste pyrolysis gasifier is in operation, the oxygen supply fan draws air from the waste storage pit to maintain the negative pressure state of the pit, with makeup air coming through the opening of the waste discharge doors. The biomass spray deodorization system is automatically started periodically to remove odor molecules in the room. With both schemes implemented simultaneously, odors can be well removed and odor escape prevented."
+    },
+    {
+      "id": 76,
+      "source": "恶臭点",
+      "target": "Odor Point"
+    },
+    {
+      "id": 77,
+      "source": "场所",
+      "target": "Location"
+    },
+    {
+      "id": 78,
+      "source": "特点",
+      "target": "Characteristics"
+    },
+    {
+      "id": 79,
+      "source": "除臭措施",
+      "target": "Deodorization Measures"
+    },
+    {
+      "id": 80,
+      "source": "1",
+      "target": "1"
+    },
+    {
+      "id": 81,
+      "source": "厂区道路",
+      "target": "Plant roads"
+    },
+    {
+      "id": 82,
+      "source": "垃圾车滴液，污染路面，存在沉积性恶臭气体",
+      "target": "Dripping from waste trucks pollutes the road surface; deposited odorous gases exist"
+    },
+    {
+      "id": 83,
+      "source": "（轻微）",
+      "target": "(Slight)"
+    },
+    {
+      "id": 84,
+      "source": "喷水冲洗；",
+      "target": "Water flushing;"
+    },
+    {
+      "id": 85,
+      "source": "植物除臭剂喷洒。",
+      "target": "Plant deodorizer spraying."
+    },
+    {
+      "id": 86,
+      "source": "2",
+      "target": "2"
+    },
+    {
+      "id": 87,
+      "source": "垃圾卸料大厅",
+      "target": "Waste tipping hall"
+    },
+    {
+      "id": 88,
+      "source": "（严重）",
+      "target": "(Severe)"
+    },
+    {
+      "id": 89,
+      "source": "垃圾仓恶臭通过卸料门外逸",
+      "target": "Odor from the waste bunker escapes through the discharge doors"
+    },
+    {
+      "id": 90,
+      "source": "封闭结构，微负压环境；",
+      "target": "Enclosed structure with slightly negative pressure;"
+    },
+    {
+      "id": 91,
+      "source": "大门空气幕防止恶臭气体外逸；",
+      "target": "Air curtains at the gates prevent odorous gas from escaping;"
+    },
+    {
+      "id": 92,
+      "source": "垃圾卸料门由中央控制室引导开启；",
+      "target": "Waste discharge doors are opened under the guidance of the central control room;"
+    },
+    {
+      "id": 93,
+      "source": "喷水冲洗，植物除臭剂喷洒。",
+      "target": "Water flushing and plant deodorizer spraying."
+    },
+    {
+      "id": 94,
+      "source": "3",
+      "target": "3"
+    },
+    {
+      "id": 95,
+      "source": "垃圾坑",
+      "target": "Waste pit"
+    },
+    {
+      "id": 96,
+      "source": "垃圾发酵产生恶臭，主要成分：H2S、NH3、SO2、 CH4 和甲硫醇",
+      "target": "Odor from waste fermentation; main components: H2S, NH3, SO2, CH4 and mercaptan"
+    },
+    {
+      "id": 97,
+      "source": "正常运行时，一次风从垃圾坑上部吸入，恶臭气体入焚烧炉燃烧，分解；",
+      "target": "During normal operation, primary air is drawn from the upper part of the waste pit, and the odorous gas is burned and decomposed in the incinerator;"
+    },
+    {
+      "id": 98,
+      "source": "焚烧炉停机时，恶臭气体经除臭机吸",
+      "target": "When the incinerator is shut down, the odorous gas is drawn by the deodorizer"
+    },
+    {
+      "id": 99,
+      "source": "入排至活性炭装置吸附后达标排放。",
+      "target": "and discharged in compliance with standards after adsorption by the activated carbon device."
+    },
+    {
+      "id": 100,
+      "source": "4",
+      "target": "4"
+    },
+    {
+      "id": 101,
+      "source": "滤液池，",
+      "target": "Leachate tank,"
+    },
+    {
+      "id": 102,
+      "source": "冲洗通廊",
+      "target": "flushing corridor"
+    },
+    {
+      "id": 103,
+      "source": "滤液疏排汇聚区域，",
+      "target": "Area where leachate drainage converges,"
+    },
+    {
+      "id": 104,
+      "source": "恶臭气味强烈",
+      "target": "strong odor"
+    },
+    {
+      "id": 105,
+      "source": "机械通风，新风引自室外",
+      "target": "Mechanical ventilation with fresh air drawn from outdoors"
+    },
+    {
+      "id": 106,
+      "source": "机械排风，排风送至垃圾坑",
+      "target": "Mechanical exhaust, with exhaust air sent to the waste pit"
+    },
+    {
+      "id": 107,
+      "source": "5",
+      "target": "5"
+    },
+    {
+      "id": 108,
+      "source": "炉后区域",
+      "target": "Rear furnace area"
+    },
+    {
+      "id": 109,
+      "source": "（渣池）",
+      "target": "(slag pit)"
+    },
+    {
+      "id": 110,
+      "source": "焚烧后残余有机物异味",
+      "target": "Odor of residual organic matter after incineration"
+    },
+    {
+      "id": 111,
+      "source": "高位排放",
+      "target": "High-level discharge"
+    },
+    {
+      "id": 112,
+      "source": "抽风进二次风机",
+      "target": "Exhaust drawn into the secondary air fan"
+    },
+    {
+      "id": 113,
+      "source": "6",
+      "target": "6"
+    },
+    {
+      "id": 114,
+      "source": "中央控制室及参观走道",
+      "target": "Central control room and visitor corridor"
+    },
+    {
+      "id": 115,
+      "source": "垃圾存储恶臭的逸散，",
+      "target": "Escape of odor from waste storage,"
+    },
+    {
+      "id": 116,
+      "source": "焚烧恶臭气体污染（轻微）",
+      "target": "odorous gas pollution from incineration (Slight)"
+    },
+    {
+      "id": 117,
+      "source": "1. 与恶臭元有效分隔，送入室外新鲜空气，保持该区域正压，防止臭气侵入",
+      "target": "1. Effectively separated from odor sources, supplied with outdoor fresh air, and kept at positive pressure to prevent odor intrusion"
+    },
+    {
+      "id": 118,
+      "source": "上料输送系统",
+      "target": "Feeding and Conveying System"
+    },
+    {
+      "id": 119,
+      "source": "垃圾起重机",
+      "target": "Waste Crane"
+    },
+    {
+      "id": 120,
+      "source": "垃圾抓斗起重机为热解气化厂的关键工艺设备之一，直接影响到热解气化厂的运行可靠性，其主要组件采用进口产品。",
+      "target": "The waste grab crane is one of the key process equipment of the pyrolysis gasification plant, directly affecting the operational reliability of the plant. Its main components are imported products."
+    },
+    {
+      "id": 121,
+      "source": "垃圾抓斗起重机位于垃圾坑的上方，主要承担进场垃圾和中转垃圾的投料、搬运、",
+      "target": "The waste grab crane is located above the waste pit and is mainly responsible for feeding, handling,"
+    },
+    {
+      "id": 122,
+      "source": "搅拌、整理和堆积工作。本工程设置 1 台单梁式抓斗起重机。",
+      "target": "turning over, sorting and stacking of incoming waste and transferred waste. This project is equipped with 1 single-girder grab crane."
+    },
+    {
+      "id": 123,
+      "source": "垃圾抓斗起重机主要由单梁、大车运行机构、起升机构、小车运行机构、电气设备、抓斗六大部分组成六大部分中除电气设备外，另外的五大部分都有各自的电机，进行单独驱动，满足生产所需的倒垛投料要求。",
+      "target": "The waste grab crane mainly consists of six major parts: single girder, crane travel mechanism, hoisting mechanism, trolley travel mechanism, electrical equipment and grab. Except for the electrical equipment, the other five parts have their own motors for separate driving, meeting the pile-turning and feeding requirements of production."
+    },
+    {
+      "id": 124,
+      "source": "抓斗采用液压多瓣型。",
+      "target": "The grab is of the hydraulic multi-clamshell type."
+    },
+    {
+      "id": 125,
+      "source": "行车抓斗将垃圾抓送至双螺旋输送设备的受料斗，并将储存池内的垃圾抓送至高温热解气化炉的受料斗并经过液压推料装置推送至炉内。",
+      "target": "The traveling grab crane grabs the waste into the receiving hopper of the double screw conveyor, and grabs the waste in the storage pit into the receiving hopper of the high-temperature pyrolysis gasifier, where it is pushed into the furnace by the hydraulic pusher device."
+    },
+    {
+      "id": 126,
+      "source": "2.2.4 高温热解气化处理系统",
+      "target": "2.2.4 High-Temperature Pyrolysis Gasification System"
+    },
+    {
+      "id": 127,
+      "source": "本技术根据垃圾中不同成分的化学特性，通过炉内分级燃烧的方式，将垃圾热解气化与富氧燃烧高效结合，研发出的一种适用于综合垃圾的处理技术。",
+      "target": "Based on the chemical characteristics of different components in the waste, this technology efficiently combines waste pyrolysis gasification with oxygen-enriched combustion through staged combustion in the furnace, and is a treatment technology developed for mixed waste."
+    },
+    {
+      "id": 128,
+      "source": "主体部分设计为高温热解气化区和气固分离燃烧燃烧区两个相对独立的单元：高温热解气化区实现垃圾中有机物的充分分解和碳化，气固分离燃烧区实现可燃气体及固定碳的充分燃烧和无害化，整个过程把热解气化和高温燃烧有机的结合起来。",
+      "target": "The main body is designed as two relatively independent units: a high-temperature pyrolysis gasification zone and a gas-solid separation combustion zone. The high-temperature pyrolysis gasification zone achieves full decomposition and carbonization of the organic matter in the waste, and the gas-solid separation combustion zone achieves full combustion and rendering harmless of the combustible gas and fixed carbon, organically combining pyrolysis gasification with high-temperature combustion throughout the process."
+    },
+    {
+      "id": 129,
+      "source": "一燃室炉排分为干燥区，热解区、主燃区和燃尽区。干燥热解区位于前拱下方，由第一个风室供少量高温风，垃圾在这一区域干燥后，在还原性气氛中热解为可燃烧性气体（CH4、CO等），气相产物进入二燃室，在二次高温风的作用下进行富氧燃烧，温度控制在 850℃以上，彻底分解有害气体及二噁英。固相产物在燃烧区充分燃烧，燃尽区中残碳已基本燃烬，剩余的少量未燃尽在此段再燃烧。燃尽的炉渣落入集渣斗后经出渣机排入炉渣房。",
+      "target": "The grate of the primary combustion chamber is divided into a drying zone, a pyrolysis zone, a main combustion zone and a burnout zone. The drying and pyrolysis zone is located under the front arch, supplied with a small amount of high-temperature air by the first air chamber. After being dried in this zone, the waste is pyrolyzed into combustible gas (CH4, CO, etc.) in a reducing atmosphere; the gas-phase products enter the secondary combustion chamber and undergo oxygen-enriched combustion under the action of the secondary high-temperature air, with the temperature controlled above 850℃ to thoroughly decompose harmful gases and dioxins. The solid-phase products are fully burned in the combustion zone; in the burnout zone the residual carbon is basically burnt out, and the small remaining amount is re-burned in this section. The burnt slag falls into the slag collection hopper and is discharged into the slag room by the slag discharger."
+    },
+    {
+      "id": 130,
+      "source": "该技术通过调控一次、二次风的，风速、风量、温度以及给料速度等参数，分级燃烧，控制炉膛燃烧工况，合理分配化学能的释放，以达到垃圾燃烬效果。",
+      "target": "By regulating parameters such as the primary and secondary air velocity, air volume, temperature and feeding speed, staged combustion is performed to control the combustion conditions in the furnace and rationally distribute the release of chemical energy, so as to achieve complete burnout of the waste."
+    },
+    {
+      "id": 131,
+      "source": "工作原理示意图.",
+      "target": "Schematic diagram of the working principle."
+    },
+    {
+      "id": 132,
+      "source": "炉排设计长度 11m,宽 0.8m二燃室空间 21m3",
+      "target": "Grate design length 11m, width 0.8m; secondary combustion chamber space 21m3"
+    },
+    {
+      "id": 133,
+      "source": "二燃室出口风量为 5400Nm3/h，设计温度 850℃。",
+      "target": "Secondary combustion chamber outlet air volume: 5400Nm3/h; design temperature 850℃."
+    },
+    {
+      "id": 134,
+      "source": "燃烧器选用天然气或柴油燃料，功率 1.1kw，热值大于 30wkcal/h。当炉内温度低于 850℃时，燃烧器自动开启，温度上升后自动关闭停止。",
+      "target": "The burner uses natural gas or diesel fuel, with power of 1.1kw and calorific value greater than 30wkcal/h. When the furnace temperature is below 850℃, the burner starts automatically, and stops automatically after the temperature rises."
+    },
+    {
+      "id": 135,
+      "source": "出渣机：螺旋+刮板联合水封。其特点如下：",
+      "target": "Slag discharger: combined screw + scraper with water seal. Its features are as follows:"
+    },
+    {
+      "id": 136,
+      "source": "螺旋出灰机将炉体下方的灰渣排至炉体尾部与刮板机紧密结合。刮板机由于采用水封结构具有完好的气密性，可保持炉膛负压。",
+      "target": "The screw ash discharger discharges the ash and slag below the furnace body to the rear of the furnace body, closely connected with the scraper conveyor. Thanks to the water-seal structure, the scraper conveyor has perfect air tightness and can maintain the negative pressure of the furnace."
+    },
+    {
+      "id": 137,
+      "source": "由于水封，出渣过程不产生扬尘。",
+      "target": "Thanks to the water seal, no dust is generated during slag discharge."
+    },
+    {
+      "id": 138,
+      "source": "可有效除去残留的污水，使得灰渣含水量仅 15～25%。因此，渣池内的灰渣几乎没有",
+      "target": "It can effectively remove the residual sewage, so that the moisture content of the slag is only 15～25%. Therefore, there is almost no"
+    },
+    {
+      "id": 139,
+      "source": "漏的水分。",
+      "target": "water leakage in the slag pit."
+    },
+    {
+      "id": 140,
+      "source": "出渣机内水温将保持在 60℃以下。",
+      "target": "The water temperature in the slag discharger will be kept below 60℃."
+    },
+    {
+      "id": 141,
+      "source": "2.2.5 余热回收系统",
+      "target": "2.2.5 Waste Heat Recovery System"
+    },
+    {
+      "id": 142,
+      "source": "余热利用系统设备主要包括：集成换热器。",
+      "target": "The equipment of the waste heat utilization system mainly includes: integrated heat exchanger."
+    },
+    {
+      "id": 143,
+      "source": "水冷段利用垃圾燃烧产生的余热，输出热水（如场内生活无热水需求，则直接冷却循环） ，对高温烟气降温冷却的同时实现热能最大化利用，风冷段主要利用尾气余热加热一、二次风的温度，实现垃圾处理的资源回用。",
+      "target": "The water-cooled section uses the waste heat from waste combustion to output hot water (if there is no domestic hot water demand in the plant, it is directly cooled in circulation); while cooling the high-temperature flue gas, it maximizes the utilization of heat energy. The air-cooled section mainly uses the waste heat of the exhaust gas to heat the primary and secondary air, realizing resource recycling of waste treatment."
+    },
+    {
+      "id": 144,
+      "source": "结构及工作原理：设备组成有盖板、外壳、换热片、检修口、烟气入口、烟气出口、进水口、出水口排气口等部分组成，在主风机的作用下设备烟气侧保持一定负压。高温烟气由烟气入口进入，流经数百个隔板间隔区由烟气出口流出，冷却水泵将冷水从进水口打入，流经密布的点阵空腔并由出水口流出。由于烟气温度高于冷水温度，则将其热量通过管壁传递给冷水，从而降低自身烟气温度将水加热。烟气的温度高于空气的温度，从而降低自身温度而加热供氧空气。",
+      "target": "Structure and working principle: the equipment consists of cover plates, shell, heat exchange plates, manhole, flue gas inlet, flue gas outlet, water inlet, water outlet, exhaust port, etc. Under the action of the main fan, the flue gas side of the equipment maintains a certain negative pressure. The high-temperature flue gas enters from the flue gas inlet, flows through hundreds of partition intervals and flows out from the flue gas outlet. The cooling water pump pumps cold water in from the water inlet, which flows through the densely distributed lattice cavities and flows out from the water outlet. Since the flue gas temperature is higher than the cold water temperature, its heat is transferred to the cold water through the pipe wall, thereby lowering its own flue gas temperature and heating the water. The flue gas temperature is higher than the air temperature, so its own temperature is reduced while heating the oxygen supply air."
+    },
+    {
+      "id": 145,
+      "source": "新型宽流道板式换热器，湍流流速低；换热系数高，是管式的 2 倍，换热系数高，换热面积是管式的 1/2 左右；结构紧凑，单位体积内的换热面积是管式的 3 倍以上，占地小，重量轻。",
+      "target": "The new wide-channel plate heat exchanger has low turbulent flow velocity and a high heat transfer coefficient, which is 2 times that of the tubular type; the heat transfer coefficient is high, and the heat exchange area is about 1/2 of the tubular type; the structure is compact, with the heat exchange area per unit volume more than 3 times that of the tubular type, small footprint and light weight."
+    },
+    {
+      "id": 146,
+      "source": "流体剧烈湍流，附着物少，清洗方便，污垢系数很低；流道光滑，不存在死角，不易积灰。",
+      "target": "The intense turbulence of the fluid results in few deposits, easy cleaning and a very low fouling factor; the flow channels are smooth, with no dead corners, so dust accumulation is not easy."
+    },
+    {
+      "id": 147,
+      "source": "2.2.6 尾气净化系统",
+      "target": "2.2.6 Flue Gas Purification System"
+    },
+    {
+      "id": 148,
+      "source": "尾气净化系统包括采用“SNCR+半干急冷脱酸塔+干式反应装置+活性炭吸附+布袋除尘技术”，可对烟气中的 NOx、粉尘、SO2、HCL 和重金属等污染物成分进行有效脱除，使尾气达标排放。",
+      "target": "The flue gas purification system adopts the combination of \"SNCR + semi-dry quenching deacidification tower + dry reaction device + activated carbon adsorption + bag filter technology\", which can effectively remove NOx, dust, SO2, HCL, heavy metals and other pollutant components in the flue gas, so that the exhaust gas is discharged in compliance with standards."
+    },
+    {
+      "id": 149,
+      "source": "尾气处理设备包括：SNCR 脱硝系统、半干急冷脱酸塔、干式反应装置、布袋除尘器、引风机、烟囱等设备组成。",
+      "target": "The flue gas treatment equipment includes: SNCR denitration system, semi-dry quenching deacidification tower, dry reaction device, bag filter, induced draft fan, chimney and other equipment."
+    },
+    {
+      "id": 150,
+      "source": "SNCR 脱硝系统",
+      "target": "SNCR Denitration System"
+    },
+    {
+      "id": 151,
+      "source": "SNCR 脱硝系统在炉内高温段对烟气中的 NOx 进行高温脱硝。",
+      "target": "The SNCR denitration system performs high-temperature denitration of NOx in the flue gas at the high-temperature section in the furnace."
+    },
+    {
+      "id": 152,
+      "source": "在选择性非催化还原（SNCR）的氮氧化物去除的过程中，还原剂是以水溶液状态（尿素）或气态的形式（氨气）喷射到热的烟气中。",
+      "target": "In the selective non-catalytic reduction (SNCR) nitrogen oxide removal process, the reducing agent is injected into the hot flue gas in the form of an aqueous solution (urea) or gas (ammonia)."
+    },
+    {
+      "id": 153,
+      "source": "通常用水作为尿素溶液喷射的驱动载体，通过控制喷水量，可以在很少消耗能量的条件下，有效的增加尿素溶液的喷射距离，同时也可以在必要的时候用于降低烟气温度，使尿素在适当的温度区间与烟气中的氮氧化物反应。",
+      "target": "Usually water is used as the driving carrier for urea solution injection. By controlling the amount of sprayed water, the injection distance of the urea solution can be effectively increased with little energy consumption, and it can also be used when necessary to lower the flue gas temperature, so that the urea reacts with the nitrogen oxides in the flue gas within the appropriate temperature range."
+    },
+    {
+      "id": 154,
+      "source": "浓度为~10％的 CO(NH2)2 尿素溶液在配制槽中被均匀搅拌后送至尿素储罐储存，再通过雾化泵提升进入喷嘴，喷嘴靠压力雾化喷入炉膛内，烟气在喷嘴下方区域与雾化的尿素溶液充分混合，烟气中 NOx 组分在 O2 的存在下与 CO(NH2)2 发生还原反应，与此同时尿素溶液水分全部被烟气汽化被烟气带走温。在 CO(NH2)2 与 NOx 的比例在 2:1 时，NOx 的还原效率在 40%左右。",
+      "target": "A CO(NH2)2 urea solution with a concentration of ~10％ is evenly stirred in the preparation tank and then sent to the urea storage tank for storage, and then boosted by the atomization pump into the nozzle. The nozzle is atomized by pressure and sprayed into the furnace. The flue gas is fully mixed with the atomized urea solution in the area below the nozzle, and the NOx components in the flue gas undergo a reduction reaction with CO(NH2)2 in the presence of O2, while the moisture of the urea solution is completely vaporized by the flue gas and carried away by it. When the ratio of CO(NH2)2 to NOx is 2:1, the NOx reduction efficiency is about 40%."
+    },
+    {
+      "id": 155,
+      "source": "配液装置如图",
+      "target": "The solution preparation device is shown in the figure"
+    },
+    {
+      "id": 156,
+      "source": "脱氮系统采用自动调节控制，排放烟气中氮氧化物含量与脱氮剂形成控制回路，根据氮氧化物含量的变化实现脱氮剂的自动调节。",
+      "target": "The denitration system adopts automatic adjustment control. The nitrogen oxide content in the discharged flue gas and the denitration agent form a control loop, and the denitration agent is automatically adjusted according to changes in the nitrogen oxide content."
+    },
+    {
+      "id": 157,
+      "source": "配置槽材质 304，容积 1m³",
+      "target": "Preparation tank material 304, volume 1m³"
+    },
+    {
+      "id": 158,
+      "source": "雾化喷枪 Q=20kg/h，喷枪 316L，喷头 316L泵 Q=0.4m3/h，H=60m",
+      "target": "Atomizing spray gun Q=20kg/h, gun body 316L, nozzle 316L, pump Q=0.4m3/h, H=60m"
+    },
+    {
+      "id": 159,
+      "source": "半干急冷脱酸塔",
+      "target": "Semi-Dry Quenching Deacidification Tower"
+    },
+    {
+      "id": 160,
+      "source": "系统采用逆流式急冷塔，高温烟气从急冷塔底部部进入。急冷塔内喷入急冷碱液，通过压缩空气将急冷水快速雾化，喷头采用双层多孔式，增加水气接触面，加快反应速率。",
+      "target": "The system adopts a counter-current quench tower, and the high-temperature flue gas enters from the bottom of the quench tower. Quenching lye is sprayed into the quench tower, and the quench water is quickly atomized by compressed air. The nozzle is of the double-layer multi-orifice type, increasing the water-gas contact area and accelerating the reaction rate."
+    },
+    {
+      "id": 161,
+      "source": "雾化后的急冷水烟气直接与烟气接触，使烟气温度急速下降。从 400℃骤冷至 200℃， 此温度段的设置可以避开二噁英再合成的温度段，从而达到抑制二噁英再生成的目的。烟气在急冷的过程中，除了降温，还有洗涤、除尘、脱酸的作用。",
+      "target": "The atomized quench water directly contacts the flue gas, causing the flue gas temperature to drop rapidly. Quenching from 400℃ to 200℃ — the setting of this temperature range avoids the dioxin re-synthesis temperature range, thereby achieving the purpose of suppressing the re-generation of dioxins. During the quenching process, in addition to cooling, it also has the functions of washing, dust removal and deacidification."
+    },
+    {
+      "id": 162,
+      "source": "急冷水的雾化通过急冷泵站实现，急冷泵站系统由雾化泵、喷枪、管路系统、气路系统、温度检测系统等组成。",
+      "target": "The atomization of the quench water is realized by the quench pump station, which consists of an atomization pump, spray guns, piping system, air path system, temperature detection system, etc."
+    },
+    {
+      "id": 163,
+      "source": "急冷喷枪采用气液两相喷嘴，喷出细小的雾化水到烟气中。喷枪有两路输入：一路为水、另一路为压缩空气。为了有效的保护后续设备，急冷泵为一备一用。",
+      "target": "The quench spray gun adopts a gas-liquid two-phase nozzle, spraying fine atomized water into the flue gas. The spray gun has two inputs: one for water and the other for compressed air. To effectively protect the downstream equipment, one quench pump is in use and one on standby."
+    },
+    {
+      "id": 164,
+      "source": "急冷塔由急冷塔筒体、防腐浇注料、双流体喷雾系统组成。",
+      "target": "The quench tower consists of the tower shell, anti-corrosion castable and dual-fluid spray system."
+    },
+    {
+      "id": 165,
+      "source": "急冷塔立式布置，内衬防腐隔热层。采用喷水降温，急冷水采用压缩空气雾化。",
+      "target": "The quench tower is arranged vertically, lined with an anti-corrosion and heat insulation layer. Water spraying is used for cooling, and the quench water is atomized by compressed air."
+    },
+    {
+      "id": 166,
+      "source": "双流体雾化喷嘴喷雾直径大，覆盖面积广，与烟气混合更充分，有利于烟气的降温、调质。双流体喷雾系统的核心是喷嘴。正常工作时，需要同时供给喷嘴一定压力的压缩空气和一定压力的水，在喷嘴的内部，压缩空气与水经过若干次的打击，产生非常小的颗 粒，当被雾化后的颗粒与高温烟气混合后，在短时间内迅速蒸发，带走热量。选用喷枪在适宜的压缩空气压力下，90%颗粒小于 150μm，确保急冷水 100％蒸发，保证不湿底(“过喷”)。",
+      "target": "The dual-fluid atomizing nozzle has a large spray diameter and wide coverage, mixing more fully with the flue gas, which is conducive to cooling and conditioning of the flue gas. The core of the dual-fluid spray system is the nozzle. In normal operation, compressed air and water at certain pressures need to be supplied to the nozzle simultaneously. Inside the nozzle, the compressed air and water strike each other several times to produce very fine particles. When the atomized particles mix with the high-temperature flue gas, they evaporate rapidly in a short time and carry away heat. With the selected spray gun at an appropriate compressed air pressure, 90% of the particles are smaller than 150μm, ensuring 100％ evaporation of the quench water and no wet bottom (\"over-spray\")."
+    },
+    {
+      "id": 167,
+      "source": "急冷喷水量通过调节阀调节，调节阀与急冷塔出口温度联锁并进行自动调节，保证急冷塔出口温度不超过 200℃，保护后续设备。碱液加入量通过烟气排放中酸性污染物浓度控制，正常控制急冷水箱内水 PH 值在 9- 10。",
+      "target": "The quench water spray volume is regulated by the regulating valve, which is interlocked with the quench tower outlet temperature and automatically adjusted to ensure that the quench tower outlet temperature does not exceed 200℃, protecting the downstream equipment. The amount of lye added is controlled by the concentration of acidic pollutants in the flue gas discharge; under normal conditions the pH value of the water in the quench water tank is controlled at 9- 10."
+    },
+    {
+      "id": 168,
+      "source": "规格：Φ1500*6000mm",
+      "target": "Specification: Φ1500*6000mm"
+    },
+    {
+      "id": 169,
+      "source": "材质：Q235B+120mm 耐酸碱浇注料",
+      "target": "Material: Q235B + 120mm acid and alkali resistant castable"
+    },
+    {
+      "id": 170,
+      "source": "雾化喷量：300Kg/h 枪体 316L 枪头 316L",
+      "target": "Atomization spray volume: 300Kg/h; gun body 316L, nozzle 316L"
+    },
+    {
+      "id": 171,
+      "source": "干法烟气治理装置",
+      "target": "Dry Flue Gas Treatment Device"
+    },
+    {
+      "id": 172,
+      "source": "主要利用活性炭表面吸附特性和消石灰中和反应能力，在布袋除尘器之前设置的干式反应装置，活性炭和消石灰粉末通过定量给料装置由小型螺旋输送机送入文丘里管道，对烟气中的有害物质进行吸附和反应。",
+      "target": "It mainly utilizes the surface adsorption characteristics of activated carbon and the neutralization reaction capacity of hydrated lime. A dry reaction device is arranged before the bag filter; the activated carbon and hydrated lime powder are fed into the Venturi duct by a small screw conveyor through a quantitative feeding device, where the harmful substances in the flue gas are adsorbed and reacted."
+    },
+    {
+      "id": 173,
+      "source": "当烟气进入布袋除尘器后，未反应完全的活性炭和消石灰粉末被吸附在布袋表面，继续吸附有害物质和烟气中残留的酸性气体进行反应。",
+      "target": "When the flue gas enters the bag filter, the unreacted activated carbon and hydrated lime powder are adsorbed on the surface of the filter bags, continuing to adsorb harmful substances and react with the residual acidic gases in the flue gas."
+    },
+    {
+      "id": 174,
+      "source": "布袋除尘器",
+      "target": "Bag Filter"
+    },
+    {
+      "id": 175,
+      "source": "本布袋除尘器由壳体、滤袋、灰斗、排灰装置、支架和脉冲清灰系统等部分组成。当含尘气体从进风口进入除尘器后，首先碰到进风口中间的斜隔板，气流便转向流入灰斗，同时气流速度变慢，由于重力沉降作用，使气体中粗颗粒粉尘直接落入灰斗，起到预收尘的作用。进入灰斗的气流随后折而向上，经过内部装有金属骨架的滤袋，粉尘被捕集在滤袋的外表面，净化后的气体进入 滤袋室上部的清洁室，汇集到出风管排出。",
+      "target": "This bag filter consists of a shell, filter bags, ash hopper, ash discharge device, support and pulse cleaning system, etc. When the dust-containing gas enters the filter from the air inlet, it first hits the inclined baffle in the middle of the air inlet, and the airflow turns and flows into the ash hopper. At the same time, the airflow speed slows down, and due to gravity settling, the coarse dust particles in the gas directly fall into the ash hopper, playing a pre-dusting role. The airflow entering the ash hopper then turns upward and passes through the filter bags with internal metal frames, where the dust is captured on the outer surface of the filter bags. The purified gas enters the clean chamber at the upper part of the filter bag room and is collected into the air outlet pipe for discharge."
+    },
+    {
+      "id": 176,
+      "source": "袋式除尘器关键设备为滤袋材质，八十年代后各国致力于滤料技术的开发，现代技术常以 PTFE 表面过滤材料在袋式除尘器上应用。使之对烟气治理，化学腐蚀、堵塞及破裂等弊病大有改善。薄膜式滤袋利用薄膜表面，以均匀微细的孔径取代一次尘饼功能，使烟尘穿透率近乎为零，由于薄膜材料表面摩擦系数低，疏水性、耐温性及抗老化特性，使之有极佳效果，工作时滤材内部不易造成阻塞，能保持较低的压力损失，提高滤材使用寿命，减少运行费用。PTFE复膜滤材应用于焚烧厂已有近十年，其成效不但能将微尘排放量捕集到最高效率，而且也确保系统运行可靠。PTFE 覆膜布袋过滤粉尘粒径可达 0.3 微米清灰采用脉冲高压空气喷吹，合理的脉冲间隔和脉冲宽度，以及滤袋良好的清灰性能，极大的保证了设备的运行阻力维持在一个稳定的水平，不会超过 1500Pa，同时使烟气的处理量始终保持在一个稳定的状态，从而使整个系统保持工作在一个高效稳定的环境。",
+      "target": "The key equipment of the bag filter is the filter bag material. Since the 1980s, countries have been committed to the development of filter media technology, and modern technology often uses PTFE surface filter materials in bag filters, which has greatly improved the treatment of flue gas, chemical corrosion, clogging and rupture. The membrane filter bag uses the membrane surface with a uniform fine pore size to replace the function of the primary dust cake, making the dust penetration rate nearly zero. Due to the low friction coefficient, hydrophobicity, temperature resistance and anti-aging characteristics of the membrane material, it has excellent effects; during operation, the inside of the filter material is not easily blocked, can maintain a low pressure loss, improves the service life of the filter material and reduces operating costs. PTFE membrane-coated filter material has been used in incineration plants for nearly ten years, and its effectiveness not only captures fine dust emissions at the highest efficiency, but also ensures reliable system operation. PTFE membrane-coated filter bags can filter dust particles down to 0.3 microns. Dust cleaning adopts pulse high-pressure air jetting; reasonable pulse intervals and pulse widths, as well as the good cleaning performance of the filter bags, greatly ensure that the operating resistance of the equipment remains at a stable level, not exceeding 1500Pa, and keep the flue gas treatment volume always in a stable state, so that the whole system works in a highly efficient and stable environment."
+    },
+    {
+      "id": 177,
+      "source": "除尘器的控制对象包括：清灰控制、卸灰阀控制等。",
+      "target": "The control objects of the filter include: cleaning control, ash discharge valve control, etc."
+    },
+    {
+      "id": 178,
+      "source": "除尘器具手动和自动转换功能，并要求控制室（全厂集中或中央控制室）和就地均能操作。除尘器的具体控制要求为：①清灰的控制，当进出口压差超过设定压力时，定压差控制启动，自动动作脉冲阀进行清灰操作，通过 PLC 编程，可实现不同间隔时间、不同周期的间断脉冲清灰动作，当全部滤袋清灰结束时，清灰动作自动完成。②卸灰阀手动启闭。",
+      "target": "The filter has manual and automatic conversion functions, and requires operation both from the control room (plant-wide centralized or central control room) and locally. The specific control requirements of the filter are: ① cleaning control — when the pressure difference between the inlet and outlet exceeds the set pressure, the fixed differential pressure control starts and the pulse valves are automatically actuated for cleaning; through PLC programming, intermittent pulse cleaning actions with different intervals and different cycles can be realized, and when the cleaning of all filter bags is completed, the cleaning action is automatically completed. ② Manual opening and closing of the ash discharge valve."
+    },
+    {
+      "id": 179,
+      "source": "静电除尘器",
+      "target": "Electrostatic Precipitator"
+    },
+    {
+      "id": 180,
+      "source": "烟气进入高压除尘单元后，在高压脉冲静电场作用下，剩余的油雾和水一起被高密度的电子或正离子附着，实现荷电后沿管内壁作向下迁移，并被收集捕获后产生电离、吸附、分解、碳化等现象。",
+      "target": "After the flue gas enters the high-voltage dust removal unit, under the action of the high-voltage pulse electrostatic field, the remaining oil mist and water are attached by high-density electrons or positive ions; after being charged, they migrate downward along the inner wall of the tube, and are collected and captured, producing ionization, adsorption, decomposition, carbonization and other phenomena."
+    },
+    {
+      "id": 181,
+      "source": "在作为收尘电极的管内壁上，冷凝水形成液膜不断沉积，并受重力作用向下 流动，实现电极表面更新和自动清洁。处理后洁净的气体经净化装置后端的排风 机排入大气。",
+      "target": "On the inner wall of the tube acting as the dust collection electrode, the condensed water forms a liquid film that continuously deposits and flows downward under gravity, realizing the renewal and automatic cleaning of the electrode surface. The cleaned gas is discharged into the atmosphere by the exhaust fan at the rear of the purification device."
+    },
+    {
+      "id": 182,
+      "source": "净化器塔底收集到的废水中，包括冷凝水、碳化后的油烟颗粒物和喷淋排出的油水混合物。",
+      "target": "The wastewater collected at the bottom of the purifier tower includes condensed water, carbonized oil fume particles, and the oil-water mixture discharged by spraying."
+    },
+    {
+      "id": 183,
+      "source": "烟囱",
+      "target": "Chimney"
+    },
+    {
+      "id": 184,
+      "source": "采用碳钢+纳米涂料防腐，高度 45 米，确保其使用寿命。烟囱的设计根据《生活垃圾焚烧污染控制标准》（GB18485-2014）严格执行。烟囱的设计符合整套设备使用工况。按《固体污染源排气中颗粒物测定与气态污染物采样方法》（GB/T16157-1996）的要求，设置永久采样孔，并安装用于采样和测量的设施，使用温度~150℃。",
+      "target": "Carbon steel + nano coating is used for anti-corrosion, with a height of 45 meters to ensure its service life. The chimney design is strictly implemented in accordance with the Standard for Pollution Control on Municipal Solid Waste Incineration (GB18485-2014), and conforms to the operating conditions of the complete equipment. In accordance with the Determination of Particulates and Sampling Methods for Gaseous Pollutants Emitted from Stationary Pollution Sources (GB/T16157-1996), permanent sampling holes are provided, and facilities for sampling and measurement are installed, for use at ~150℃."
+    },
+    {
+      "id": 185,
+      "source": "附：测试平台、烟气分析仪口、排水口、避雷接地等。",
+      "target": "Attached: test platform, flue gas analyzer port, drainage port, lightning protection grounding, etc."
+    },
+    {
+      "id": 186,
+      "source": "2.2.7 三废（灰渣、飞灰、滤液）处理系统",
+      "target": "2.2.7 Three-Waste (Bottom Ash, Fly Ash, Leachate) Treatment System"
+    },
+    {
+      "id": 187,
+      "source": "灰渣收集处置：炉排下面的灰渣定期自动掉落，经由螺旋排入集渣斗，燃尽的垃圾的灰渣直接从炉排尾部落入集灰斗，由水封刮板出渣机直接排至渣房，根据检测结果判定不含有毒有害物质，属于非危废，可送至制砖厂作为原料加以综合利用或者安全填埋；",
+      "target": "Bottom ash collection and disposal: the ash and slag under the grate fall periodically and automatically, and are discharged into the slag collection hopper via the screw conveyor; the burnt slag falls directly from the tail of the grate into the ash collection hopper, and is discharged directly to the slag room by the water-seal scraper slag discharger. According to test results it is determined to contain no toxic or harmful substances, belonging to non-hazardous waste, and can be sent to brick plants as raw material for comprehensive utilization or safely landfilled;"
+    },
+    {
+      "id": 188,
+      "source": "飞灰收集处置：飞灰属危险废弃物，应进行永久固化处理，处理方法有水泥固化法、熔融固化法、化学药剂法等。目前较常用的“水泥+螯合剂”的稳定化处理工艺。将飞灰、水泥、水及螯合剂按一定的比例混合而成。此方法工艺简单、可靠，又节省投资。",
+      "target": "Fly ash collection and disposal: fly ash is hazardous waste and should undergo permanent solidification treatment. Treatment methods include the cement solidification method, melting solidification method, chemical agent method, etc. Currently the more commonly used is the \"cement + chelating agent\" stabilization treatment process, in which fly ash, cement, water and chelating agent are mixed in certain proportions. This method is simple and reliable in process and saves investment."
+    },
+    {
+      "id": 189,
+      "source": "可场内增设配置半自动固化装置，也可直接送往有资质的单位处置。",
+      "target": "A semi-automatic solidification device can be added on site, or the fly ash can be sent directly to a qualified unit for disposal."
+    },
+    {
+      "id": 190,
+      "source": "滤液回收处理系统：垃圾池在靠近卸料门侧布置整条相通的沥液收集槽，收集槽上部盖以预制板，隔离垃圾。通过沟槽汇集于沥液集水井。",
+      "target": "Leachate recovery and treatment system: on the side of the waste pit near the discharge doors, a continuous leachate collection trough is arranged along the entire length, covered with precast slabs on the upper part to isolate the waste. The leachate is collected through the trench into the leachate collection well."
+    },
+    {
+      "id": 191,
+      "source": "本项目垃圾含水量极低，少量滤液可直接回喷炉内进行高温无害化处置。",
+      "target": "The moisture content of the waste in this project is extremely low; the small amount of leachate can be directly re-sprayed into the furnace for high-temperature harmless disposal."
+    },
+    {
+      "id": 192,
+      "source": "2.2.8 中央控制系统",
+      "target": "2.2.8 Central Control System"
+    },
+    {
+      "id": 193,
+      "source": "本项目控制系统设计范围主要包括：垃圾运输接收系统、输送系统、热解气化系统、尾气净化系统、烟风系统、汽水系统、热力系统、燃油系统、厂用电系统、压缩空气系统、灰渣系统等。",
+      "target": "The design scope of the control system of this project mainly includes: the waste transport and receiving system, conveying system, pyrolysis gasification system, flue gas purification system, flue air system, steam-water system, thermal system, fuel oil system, plant power system, compressed air system, ash and slag system, etc."
+    },
+    {
+      "id": 194,
+      "source": "除上述系统外，还包括工业电视监视系统。",
+      "target": "In addition to the above systems, it also includes the industrial television monitoring system."
+    },
+    {
+      "id": 195,
+      "source": "本工程采用 PLC 控制系统包括电控柜及工控器等装置。经 PLC 程序自动调整电机的启停及变频调速，使燃烧温度，给氧量、进料重量和时间的稳定控制。整个系统的运行工况及相关工艺参数可在电脑屏上显示，及时控制。控制柜设有联动、单动两种控制方式。对设备的故障、供气气压等设有报警，并将故障信号送至中控室。“联动”运行：通过 PLC 可对各电动执行器进行联动控制或手动单独控制；“单动”运行：PLC 柜可独立“手动”或“自动”运行。",
+      "target": "This project uses a PLC control system including electrical control cabinets, industrial controllers and other devices. The PLC program automatically adjusts the start/stop and variable-frequency speed regulation of motors to achieve stable control of the combustion temperature, oxygen supply, feed weight and time. The operating conditions and related process parameters of the whole system can be displayed on the computer screen for timely control. The control cabinet has two control modes: interlocked and individual. Alarms are provided for equipment faults, air supply pressure, etc., and fault signals are sent to the central control room. \"Interlocked\" operation: through the PLC, each electric actuator can be interlock-controlled or manually controlled individually; \"individual\" operation: the PLC cabinet can operate independently in \"manual\" or \"automatic\" mode."
+    },
+    {
+      "id": 196,
+      "source": "2.3 设备清单",
+      "target": "2.3 Equipment List"
+    },
+    {
+      "id": 197,
+      "source": "5T/D 垃圾热解气化处理成套装置",
+      "target": "5T/D Complete Waste Pyrolysis Gasification Treatment Plant"
+    },
+    {
+      "id": 198,
+      "source": "序号",
+      "target": "No."
+    },
+    {
+      "id": 199,
+      "source": "设备编号",
+      "target": "Equipment No."
+    },
+    {
+      "id": 200,
+      "source": "名",
+      "target": "Item"
+    },
+    {
+      "id": 201,
+      "source": "称",
+      "target": "Name"
+    },
+    {
+      "id": 202,
+      "source": "规\t格\t及\t技\t术\t数",
+      "target": "Specifications\t&\tTechnical\tData\t-\t-"
+    },
+    {
+      "id": 203,
+      "source": "据",
+      "target": "Data"
+    },
+    {
+      "id": 204,
+      "source": "数 量",
+      "target": "Qty"
+    },
+    {
+      "id": 205,
+      "source": "一",
+      "target": "I"
+    },
+    {
+      "id": 206,
+      "source": "上料系统",
+      "target": "Feeding System"
+    },
+    {
+      "id": 207,
+      "source": "ZT-1-1",
+      "target": "ZT-1-1"
+    },
+    {
+      "id": 208,
+      "source": "上料斗",
+      "target": "Feed hopper"
+    },
+    {
+      "id": 209,
+      "source": "ZT-1-2",
+      "target": "ZT-1-2"
+    },
+    {
+      "id": 210,
+      "source": "行车抓斗",
+      "target": "Traveling grab crane"
+    },
+    {
+      "id": 211,
+      "source": "ZT-1-3",
+      "target": "ZT-1-3"
+    },
+    {
+      "id": 212,
+      "source": "液压推料系统",
+      "target": "Hydraulic pusher system"
+    },
+    {
+      "id": 213,
+      "source": "二",
+      "target": "II"
+    },
+    {
+      "id": 214,
+      "source": "热解气化系统",
+      "target": "Pyrolysis Gasification System"
+    },
+    {
+      "id": 215,
+      "source": "ZT-2-1",
+      "target": "ZT-2-1"
+    },
+    {
+      "id": 216,
+      "source": "链条式热解气化炉（含",
+      "target": "Chain grate pyrolysis gasifier (including"
+    },
+    {
+      "id": 217,
+      "source": "二燃室）",
+      "target": "secondary combustion chamber)"
+    },
+    {
+      "id": 218,
+      "source": "处理量 5 吨/日，出烟温度高于 900℃",
+      "target": "Processing capacity 5 tons/day, flue gas outlet temperature above 900℃"
+    },
+    {
+      "id": 219,
+      "source": "ZT-2-2",
+      "target": "ZT-2-2"
+    },
+    {
+      "id": 220,
+      "source": "保温",
+      "target": "Thermal insulation"
+    },
+    {
+      "id": 221,
+      "source": "ZT-2-3",
+      "target": "ZT-2-3"
+    },
+    {
+      "id": 222,
+      "source": "鼓风机",
+      "target": "Blower"
+    },
+    {
+      "id": 223,
+      "source": "风量：3000Nm3/h\t风压：4500pa",
+      "target": "Air volume: 3000Nm3/h\tAir pressure: 4500pa"
+    },
+    {
+      "id": 224,
+      "source": "5.5KW",
+      "target": "5.5KW"
+    },
+    {
+      "id": 225,
+      "source": "ZT-2-4",
+      "target": "ZT-2-4"
+    },
+    {
+      "id": 226,
+      "source": "助燃系统（含燃烧机、",
+      "target": "Combustion-support system (including burner,"
+    },
+    {
+      "id": 227,
+      "source": "油罐）",
+      "target": "oil tank)"
+    },
+    {
+      "id": 228,
+      "source": "点火燃烧器 0.75kw，辅助燃烧器 2.6",
+      "target": "Ignition burner 0.75kw, auxiliary burner 2.6"
+    },
+    {
+      "id": 229,
+      "source": "泵 0.37，配储罐",
+      "target": "pump 0.37, with storage tank"
+    },
+    {
+      "id": 230,
+      "source": "ZT-2-5",
+      "target": "ZT-2-5"
+    },
+    {
+      "id": 231,
+      "source": "除渣系统",
+      "target": "Slag removal system"
+    },
+    {
+      "id": 232,
+      "source": "7.5Kw",
+      "target": "7.5Kw"
+    },
+    {
+      "id": 233,
+      "source": "三",
+      "target": "III"
+    },
+    {
+      "id": 234,
+      "source": "尾气处理系统",
+      "target": "Flue Gas Treatment System"
+    },
+    {
+      "id": 235,
+      "source": "ZT-3-1",
+      "target": "ZT-3-1"
+    },
+    {
+      "id": 236,
+      "source": "SNCR 脱硝装置",
+      "target": "SNCR denitration unit"
+    },
+    {
+      "id": 237,
+      "source": "含喷射泵、储液罐 效率 20-50%，含喷射泵、配液 储液罐 2m3 5%-10%的浓度， 预设烟气量为 3000Nm3/h 以",
+      "target": "Including injection pump and storage tank; efficiency 20-50%; including injection pump, solution preparation and storage tank 2m3, concentration 5%-10%; designed flue gas volume 3000Nm3/h, calculated"
+    },
+    {
+      "id": 238,
+      "source": "NO 400mg/Nm3 计",
+      "target": "as NO 400mg/Nm3"
+    },
+    {
+      "id": 239,
+      "source": "ZT-3-2",
+      "target": "ZT-3-2"
+    },
+    {
+      "id": 240,
+      "source": "风冷换热器",
+      "target": "Air-cooled heat exchanger"
+    },
+    {
+      "id": 241,
+      "source": "入口烟气温度 900℃，烟气量",
+      "target": "Inlet flue gas temperature 900℃, flue gas volume"
+    },
+    {
+      "id": 242,
+      "source": "3000Nm3/h，出口烟气温度 750℃",
+      "target": "3000Nm3/h, outlet flue gas temperature 750℃"
+    },
+    {
+      "id": 243,
+      "source": "ZT-3-3",
+      "target": "ZT-3-3"
+    },
+    {
+      "id": 244,
+      "source": "水冷换热器",
+      "target": "Water-cooled heat exchanger"
+    },
+    {
+      "id": 245,
+      "source": "入口烟温 750,℃，出口烟温 400℃",
+      "target": "Inlet flue gas temperature 750,℃, outlet flue gas temperature 400℃"
+    },
+    {
+      "id": 246,
+      "source": "ZT-3-4",
+      "target": "ZT-3-4"
+    },
+    {
+      "id": 247,
+      "source": "冷却塔",
+      "target": "Cooling tower"
+    },
+    {
+      "id": 248,
+      "source": "带水泵 循环水 30T/h",
+      "target": "With water pump, circulating water 30T/h"
+    },
+    {
+      "id": 249,
+      "source": "ZT-3-5",
+      "target": "ZT-3-5"
+    },
+    {
+      "id": 250,
+      "source": "半干急冷塔",
+      "target": "Semi-dry quench tower"
+    },
+    {
+      "id": 251,
+      "source": "搅拌机 1.5KW，急冷泵 0.55KW，急冷卸灰阀 1.5KW，包含配套石灰浆液制",
+      "target": "Agitator 1.5KW, quench pump 0.55KW, quench ash discharge valve 1.5KW, including one complete supporting lime slurry"
+    },
+    {
+      "id": 252,
+      "source": "备系统一套",
+      "target": "preparation system"
+    },
+    {
+      "id": 253,
+      "source": "ZT-3-6",
+      "target": "ZT-3-6"
+    },
+    {
+      "id": 254,
+      "source": "活性炭与生石灰混合调制并均匀喷入",
+      "target": "Activated carbon and quicklime are mixed, proportioned and sprayed evenly into the"
+    },
+    {
+      "id": 255,
+      "source": "烟道，星型调节阀",
+      "target": "flue duct, star-type regulating valve"
+    },
+    {
+      "id": 256,
+      "source": "7",
+      "target": "7"
+    },
+    {
+      "id": 257,
+      "source": "ZT-3-7",
+      "target": "ZT-3-7"
+    },
+    {
+      "id": 258,
+      "source": "星型卸料阀 0.55kw * 2，脉冲考虑",
+      "target": "Star-type discharge valve 0.55kw * 2, considering pulse"
+    },
+    {
+      "id": 259,
+      "source": "1.5KW 除尘器除尘效率 99.90% 设计风量 3500Nm3/h 过滤面积约 144m3",
+      "target": "1.5KW; filter dust removal efficiency 99.90%, design air volume 3500Nm3/h, filtration area approx. 144m3"
+    },
+    {
+      "id": 260,
+      "source": "出口烟尘浓度 30mg/Nm3",
+      "target": "Outlet dust concentration 30mg/Nm3"
+    },
+    {
+      "id": 261,
+      "source": "8",
+      "target": "8"
+    },
+    {
+      "id": 262,
+      "source": "ZT-3-8",
+      "target": "ZT-3-8"
+    },
+    {
+      "id": 263,
+      "source": "10KW",
+      "target": "10KW"
+    },
+    {
+      "id": 264,
+      "source": "9",
+      "target": "9"
+    },
+    {
+      "id": 265,
+      "source": "ZT-3-9",
+      "target": "ZT-3-9"
+    },
+    {
+      "id": 266,
+      "source": "引风机",
+      "target": "Induced draft fan"
+    },
+    {
+      "id": 267,
+      "source": "叶轮材质：SUS304（防腐）耐温：200℃,设计风量 4000Nm3/h, 压力 5000PA",
+      "target": "Impeller material: SUS304 (anti-corrosion); temperature resistance: 200℃, design air volume 4000Nm3/h, pressure 5000PA"
+    },
+    {
+      "id": 268,
+      "source": "22KW 变频",
+      "target": "22KW with frequency converter"
+    },
+    {
+      "id": 269,
+      "source": "10",
+      "target": "10"
+    },
+    {
+      "id": 270,
+      "source": "ZT-3-10",
+      "target": "ZT-3-10"
+    },
+    {
+      "id": 271,
+      "source": "45m",
+      "target": "45m"
+    },
+    {
+      "id": 272,
+      "source": "四",
+      "target": "IV"
+    },
+    {
+      "id": 273,
+      "source": "电控、仪表及其他配件及备件",
+      "target": "Electrical control, instruments and other accessories and spare parts"
+    },
+    {
+      "id": 274,
+      "source": "ZT-4-1",
+      "target": "ZT-4-1"
+    },
+    {
+      "id": 275,
+      "source": "PLC 电控系统",
+      "target": "PLC electrical control system"
+    },
+    {
+      "id": 276,
+      "source": "全自动控制系统",
+      "target": "Fully automatic control system"
+    },
+    {
+      "id": 277,
+      "source": "ZT-4-2",
+      "target": "ZT-4-2"
+    },
+    {
+      "id": 278,
+      "source": "电线电路",
+      "target": "Wiring and circuits"
+    },
+    {
+      "id": 279,
+      "source": "含配件",
+      "target": "Including accessories"
+    },
+    {
+      "id": 280,
+      "source": "ZT-4-3",
+      "target": "ZT-4-3"
+    },
+    {
+      "id": 281,
+      "source": "空压机",
+      "target": "Air compressor"
+    },
+    {
+      "id": 282,
+      "source": "11kw",
+      "target": "11kw"
+    },
+    {
+      "id": 283,
+      "source": "ZT-4-4",
+      "target": "ZT-4-4"
+    },
+    {
+      "id": 284,
+      "source": "烟管道、水管道",
+      "target": "Flue ducts and water pipes"
+    },
+    {
+      "id": 285,
+      "source": "烟管、阀门、弯头，含保温和耐火材",
+      "target": "Flue pipes, valves, elbows, including insulation and refractory"
+    },
+    {
+      "id": 286,
+      "source": "料等",
+      "target": "materials, etc."
+    },
+    {
+      "id": 287,
+      "source": "ZT-4-5",
+      "target": "ZT-4-5"
+    },
+    {
+      "id": 288,
+      "source": "阀门、配件",
+      "target": "Valves and fittings"
+    },
+    {
+      "id": 289,
+      "source": "风机进口接头、入口变径等",
+      "target": "Fan inlet joints, inlet reducers, etc."
+    },
+    {
+      "id": 290,
+      "source": "ZT-4-6",
+      "target": "ZT-4-6"
+    },
+    {
+      "id": 291,
+      "source": "平台、楼梯、扶手",
+      "target": "Platforms, stairs and handrails"
+    },
+    {
+      "id": 292,
+      "source": "ZT-4-7",
+      "target": "ZT-4-7"
+    },
+    {
+      "id": 293,
+      "source": "管道保温",
+      "target": "Pipeline insulation"
+    },
+    {
+      "id": 294,
+      "source": "ZT-4-8",
+      "target": "ZT-4-8"
+    },
+    {
+      "id": 295,
+      "source": "面漆",
+      "target": "Topcoat"
+    },
+    {
+      "id": 296,
+      "source": "5T/D 设备全套标准配置含税市场报价￥860.00 万元，不含运输、安装、调试。",
+      "target": "The complete standard configuration of the 5T/D equipment is quoted at RMB 8.60 million (tax-inclusive market price), excluding transportation, installation and commissioning."
+    },
+    {
+      "id": 297,
+      "source": "2.4 处理效果",
+      "target": "2.4 Treatment Performance"
+    },
+    {
+      "id": 298,
+      "source": "本技术的烟气处理：半干法+干法脱酸，烟气经过高温分解以及三级冷却后进入布袋除尘器除尘，除酸装置去除酸性气体，以及活性炭吸附后达标排放。炉渣经炉排的机械挤压，以及磁选机磁选后，定期排出炉外。本技术应用中的二次污染物主要为烟气中的二噁英、氮氧化物、一氧化碳、二氧化硫、氯化氢、汞及其化合物等，其主要控制措施、危害性、处理效果见下表。",
+      "target": "Flue gas treatment of this technology: semi-dry + dry deacidification. After high-temperature decomposition and three-stage cooling, the flue gas enters the bag filter for dust removal, the deacidification device removes acidic gases, and after activated carbon adsorption it is discharged in compliance with standards. The slag is mechanically squeezed by the grate and magnetically separated by the magnetic separator, and discharged out of the furnace periodically. The secondary pollutants in the application of this technology are mainly dioxins, nitrogen oxides, carbon monoxide, sulfur dioxide, hydrogen chloride, mercury and its compounds in the flue gas. Their main control measures, hazards and treatment effects are shown in the table below."
+    },
+    {
+      "id": 299,
+      "source": "二次污染及其控制表（mg/m3）",
+      "target": "Secondary Pollution and Control Table (mg/m3)"
+    },
+    {
+      "id": 300,
+      "source": "二次污染物",
+      "target": "Secondary Pollutant"
+    },
+    {
+      "id": 301,
+      "source": "检测结果",
+      "target": "Test Result"
+    },
+    {
+      "id": 302,
+      "source": "危害性",
+      "target": "Hazard"
+    },
+    {
+      "id": 303,
+      "source": "控制措施",
+      "target": "Control Measures"
+    },
+    {
+      "id": 304,
+      "source": "处理效果",
+      "target": "Treatment Effect"
+    },
+    {
+      "id": 305,
+      "source": "采用活性炭吸附、布袋除尘等组合",
+      "target": "Combined use of activated carbon adsorption, bag filter, etc."
+    },
+    {
+      "id": 306,
+      "source": "稳定达标排放",
+      "target": "Stable compliant discharge"
+    },
+    {
+      "id": 307,
+      "source": "颗粒物",
+      "target": "Particulate matter"
+    },
+    {
+      "id": 308,
+      "source": "8.93",
+      "target": "8.93"
+    },
+    {
+      "id": 309,
+      "source": "工艺拦截颗粒物。拦截后的飞灰经",
+      "target": "Process interception of particulate matter. The intercepted fly ash is"
+    },
+    {
+      "id": 310,
+      "source": "固化稳定化处理后按照危险废物",
+      "target": "solidified and stabilized and disposed of as hazardous waste in accordance"
+    },
+    {
+      "id": 311,
+      "source": "直接污",
+      "target": "direct"
+    },
+    {
+      "id": 312,
+      "source": "管理要求处置。",
+      "target": "with hazardous waste management requirements."
+    },
+    {
+      "id": 313,
+      "source": "一氧化碳",
+      "target": "Carbon monoxide"
+    },
+    {
+      "id": 314,
+      "source": "50",
+      "target": "50"
+    },
+    {
+      "id": 315,
+      "source": "染大气，间接影",
+      "target": "pollutes the atmosphere and indirectly affects"
+    },
+    {
+      "id": 316,
+      "source": "控制二燃室温度及烟气停留时间，",
+      "target": "Control the secondary combustion chamber temperature and flue gas residence time to"
+    },
+    {
+      "id": 317,
+      "source": "彻底控制其产生。",
+      "target": "thoroughly control its generation."
+    },
+    {
+      "id": 318,
+      "source": "氮氧化物",
+      "target": "Nitrogen oxides"
+    },
+    {
+      "id": 319,
+      "source": "92",
+      "target": "92"
+    },
+    {
+      "id": 320,
+      "source": "响水、土",
+      "target": "water and soil"
+    },
+    {
+      "id": 321,
+      "source": "二氧化硫",
+      "target": "Sulfur dioxide"
+    },
+    {
+      "id": 322,
+      "source": "ND",
+      "target": "ND"
+    },
+    {
+      "id": 323,
+      "source": "壤环境。",
+      "target": "environments."
+    },
+    {
+      "id": 324,
+      "source": "半干法脱酸",
+      "target": "Semi-dry deacidification"
+    },
+    {
+      "id": 325,
+      "source": "氯化氢",
+      "target": "Hydrogen chloride"
+    },
+    {
+      "id": 326,
+      "source": "1.22",
+      "target": "1.22"
+    },
+    {
+      "id": 327,
+      "source": "汞及其化合物",
+      "target": "Mercury and its compounds"
+    },
+    {
+      "id": 328,
+      "source": "活性炭吸附+布袋除尘",
+      "target": "Activated carbon adsorption + bag filter"
+    },
+    {
+      "id": 329,
+      "source": "镉、铊及其化合物",
+      "target": "Cadmium, thallium and their compounds"
+    },
+    {
+      "id": 330,
+      "source": "锑、砷、铅、铬、钴、铜、锰、镍及",
+      "target": "Antimony, arsenic, lead, chromium, cobalt, copper, manganese, nickel and"
+    },
+    {
+      "id": 331,
+      "source": "其化合物",
+      "target": "their compounds"
+    },
+    {
+      "id": 332,
+      "source": "0.05",
+      "target": "0.05"
+    },
+    {
+      "id": 333,
+      "source": "二噁英类（ng",
+      "target": "Dioxins (ng"
+    },
+    {
+      "id": 334,
+      "source": "TEQ/m3）",
+      "target": "TEQ/m3)"
+    },
+    {
+      "id": 335,
+      "source": "0.0063",
+      "target": "0.0063"
+    },
+    {
+      "id": 336,
+      "source": "致癌",
+      "target": "Carcinogenic"
+    },
+    {
+      "id": 337,
+      "source": "彻底将其分解；采用烟气急冷措施，防止二噁英的二次合成。",
+      "target": "Thoroughly decompose it; flue gas quenching measures are adopted to prevent the secondary synthesis of dioxins."
+    },
+    {
+      "id": 338,
+      "source": "远低于国家标准",
+      "target": "Far below the national standard"
+    },
+    {
+      "id": 339,
+      "source": "2.5 主要污染防治措施及机理",
+      "target": "2.5 Main Pollution Prevention and Control Measures and Mechanisms"
+    },
+    {
+      "id": 340,
+      "source": "2.5.1 二噁英去除工艺",
+      "target": "2.5.1 Dioxin Removal Process"
+    },
+    {
+      "id": 341,
+      "source": "首先，一燃室内温度控制在 600℃至 800℃，控制给氧量呈还原气氛，铜、铝、铁不会氧化，没有 CuO 等产生也不会有 CuCl2 的产生和存在，也就没有了二噁英再合成的催化剂（CuO、 CuCl2 等化合物），没有了 CuCl2 和碳原子的催化，二噁英的合成就没有了可能。",
+      "target": "First, the temperature in the primary combustion chamber is controlled at 600℃ to 800℃, and the oxygen supply is controlled to maintain a reducing atmosphere, so that copper, aluminum and iron will not be oxidized, no CuO is produced, and no CuCl2 is generated or present — thus there is no catalyst for dioxin re-synthesis (CuO, CuCl2 and other compounds). Without the catalysis of CuCl2 and carbon atoms, the synthesis of dioxins becomes impossible."
+    },
+    {
+      "id": 342,
+      "source": "其次，通过 3T+E 燃烧控制，使含二噁英类的未燃气体完全燃烧， 从而把二噁英的生成抑制到最低水平。",
+      "target": "Second, through 3T+E combustion control, the unburned gas containing dioxins is completely burned, suppressing dioxin generation to the lowest level."
+    },
+    {
+      "id": 343,
+      "source": "再次，利用换热器以及半干急冷塔对烟气进行急冷，烟气急速降温至 200℃，避开二噁英重生成温度范围。",
+      "target": "Third, the heat exchanger and the semi-dry quench tower are used to quench the flue gas, rapidly cooling it to 200℃, avoiding the dioxin re-formation temperature range."
+    },
+    {
+      "id": 344,
+      "source": "最后，通过干式反应装置喷入活性炭粉末，可起到吸附二噁英的作用，烟气进入布袋除尘器后，未完全反应的活性炭继续吸附有害物质，通过袋式除尘器高效拦截固体颗粒物及固相二噁英。",
+      "target": "Finally, activated carbon powder is sprayed through the dry reaction device to adsorb dioxins. After the flue gas enters the bag filter, the unreacted activated carbon continues to adsorb harmful substances, and solid particulates and solid-phase dioxins are efficiently intercepted by the bag filter."
+    },
+    {
+      "id": 345,
+      "source": "2.5.2 NOX 的去除工艺",
+      "target": "2.5.2 NOX Removal Process"
+    },
+    {
+      "id": 346,
+      "source": "以下为化学反应式：",
+      "target": "The chemical reaction equations are as follows:"
+    },
+    {
+      "id": 347,
+      "source": "尿素  NH2CONH2+2NO+1/2O2=2N2+CO2+2H2O",
+      "target": "Urea  NH2CONH2+2NO+1/2O2=2N2+CO2+2H2O"
+    },
+    {
+      "id": 348,
+      "source": "或氨水 4NH3+4NO+O2=4N2+6H2O",
+      "target": "Or ammonia water  4NH3+4NO+O2=4N2+6H2O"
+    },
+    {
+      "id": 349,
+      "source": "通过上述反应，最终形成氮气，水和二氧化碳。",
+      "target": "Through the above reactions, nitrogen, water and carbon dioxide are finally formed."
+    },
+    {
+      "id": 350,
+      "source": "2.5.3 除酸工艺",
+      "target": "2.5.3 Deacidification Process"
+    },
+    {
+      "id": 351,
+      "source": "通过干式反应装置在文丘里管道内喷入消石灰粉末与烟气进行化学反应，达到进一步脱酸的目的基本化学反应式如下：",
+      "target": "Through the dry reaction device, hydrated lime powder is sprayed into the Venturi duct to react chemically with the flue gas, achieving further deacidification. The basic chemical reaction equations are as follows:"
+    },
+    {
+      "id": 352,
+      "source": "SO3+Ca(OH)2=CaSO4+H2O SO2+Ca(OH)2=CaSO3+H2O 2HCl+Ca(OH)2= CaCl2+2H2O",
+      "target": "SO3+Ca(OH)2=CaSO4+H2O SO2+Ca(OH)2=CaSO3+H2O 2HCl+Ca(OH)2= CaCl2+2H2O"
+    },
+    {
+      "id": 353,
+      "source": "2HF+Ca(OH)2=CaF2+2H2O",
+      "target": "2HF+Ca(OH)2=CaF2+2H2O"
+    },
+    {
+      "id": 354,
+      "source": "烟气净化处理系统中采用消石灰喷入的供料装置，吸收剂装置设置在急冷塔与布袋除尘器之间，通过烟道上的吸收剂混合器，使吸收剂均匀地混合于烟气中，并在布袋除尘器袋壁上沉积，形成滤饼，使沉积的吸收剂继续吸收烟气中气态污染物。",
+      "target": "The hydrated lime spraying feeding device is used in the flue gas purification treatment system. The absorbent device is arranged between the quench tower and the bag filter. Through the absorbent mixer on the flue, the absorbent is evenly mixed into the flue gas and deposited on the bag walls of the bag filter, forming a filter cake, so that the deposited absorbent continues to absorb the gaseous pollutants in the flue gas."
+    },
+    {
+      "id": 355,
+      "source": "第三章 工程方案设计",
+      "target": "Chapter 3 Engineering Design"
+    },
+    {
+      "id": 356,
+      "source": "总体方案设计的原则",
+      "target": "Principles of Overall Scheme Design"
+    },
+    {
+      "id": 357,
+      "source": "总图分区明确，管理方便；人员路线和运输车辆路线分流，运输出入通畅，厂区内道路畅通，形成环形通道，符合消防要求；主厂房之烟气排放处于下风向，办公等生活区处于上风向；充分绿化美化环境，尽可能不留裸地。",
+      "target": "The general layout has clear zoning and convenient management; pedestrian routes and vehicle routes are separated, transport access and exit are smooth, roads within the plant are unobstructed forming a ring route, meeting fire protection requirements; the flue gas emission of the main plant building is downwind, and offices and other living areas are upwind; full greening beautifies the environment, leaving no bare ground as far as possible."
+    },
+    {
+      "id": 358,
+      "source": "总平面布置",
+      "target": "General Layout"
+    },
+    {
+      "id": 359,
+      "source": "根据布点、选址原则，提出项目点规划方案设想",
+      "target": "Project Site Planning Concepts Based on Layout and Site Selection Principles"
+    },
+    {
+      "id": 360,
+      "source": "功能分区",
+      "target": "Functional Zoning"
+    },
+    {
+      "id": 361,
+      "source": "根据工艺流程、功能、风向，将厂区内的建、构筑物分为三个功能分区：",
+      "target": "According to the process flow, functions and wind direction, the buildings and structures in the plant are divided into three functional zones:"
+    },
+    {
+      "id": 362,
+      "source": "办公区：包括办公室、停车场，该区是厂区内比较洁净的分区，对环境的要求较高，布置时应远离各种污染源，并且位于盛行风向的上风侧。",
+      "target": "Office zone: including offices and parking lot. This is a relatively clean zone in the plant with high environmental requirements; it should be arranged away from various pollution sources and located on the upwind side of the prevailing wind direction."
+    },
+    {
+      "id": 363,
+      "source": "主要生产区：包括垃圾贮坑、灰渣收集区和资源回收区，主厂房是厂区的主体建筑，在满足各种防护间距的前提下可以靠近各辅助生产区及办公楼。",
+      "target": "Main production zone: including the waste storage pit, ash and slag collection area and resource recovery area. The main plant building is the main building of the plant; on the premise of meeting various protection distances, it can be close to the auxiliary production zones and the office building."
+    },
+    {
+      "id": 364,
+      "source": "热供应站：包括水泵房、冷却塔、水处理装置、清水池。",
+      "target": "Heat supply station: including water pump house, cooling tower, water treatment device and clear water pool."
+    },
+    {
+      "id": 365,
+      "source": "为便于管理人员工作及外来联系业务的便利，将综合办公楼布置在靠近厂区大门一侧，而且位于盛行风向的上风侧。",
+      "target": "To facilitate the work of management personnel and external business contacts, the comprehensive office building is arranged near the plant gate and on the upwind side of the prevailing wind direction."
+    },
+    {
+      "id": 366,
+      "source": "办公楼与主厂房之间的空地集中布置绿化，作为防护隔离带。",
+      "target": "The open space between the office building and the main plant building is centrally arranged with greening as a protective isolation belt."
+    },
+    {
+      "id": 367,
+      "source": "主要项目",
+      "target": "Main Items"
+    },
+    {
+      "id": 368,
+      "source": "垃圾热解气化处理站主厂房，包括下列内容：",
+      "target": "Main plant building of the waste pyrolysis gasification treatment station, including the following:"
+    },
+    {
+      "id": 369,
+      "source": "1 台 5T/D 热解气化炉及与其配套设备的；",
+      "target": "1 set of 5T/D pyrolysis gasifier and its supporting equipment;"
+    },
+    {
+      "id": 370,
+      "source": "垃圾运输卸料大厅及预处理垃圾贮坑；",
+      "target": "Waste transport tipping hall and pretreatment waste storage pit;"
+    },
+    {
+      "id": 371,
+      "source": "滤液收集区；",
+      "target": "Leachate collection area;"
+    },
+    {
+      "id": 372,
+      "source": "除渣、除灰收集区；",
+      "target": "Slag removal and ash collection area;"
+    },
+    {
+      "id": 373,
+      "source": "控制和监测室；",
+      "target": "Control and monitoring room;"
+    },
+    {
+      "id": 374,
+      "source": "辅助用房",
+      "target": "Auxiliary rooms"
+    },
+    {
+      "id": 375,
+      "source": "办公区，主要用于办公、技术、展览中心、接待室、会议和倒班宿舍等。",
+      "target": "Office area, mainly used for office, technology, exhibition center, reception room, meetings and shift dormitories, etc."
+    },
+    {
+      "id": 376,
+      "source": "热供应站，集水池等，用于给周边居民，企事业单位供热，同时，贮存全厂生产、消防用水量。",
+      "target": "Heat supply station, collecting pool, etc., used for heat supply to surrounding residents and enterprises/institutions, and for storing the plant-wide production and fire-fighting water."
+    },
+    {
+      "id": 377,
+      "source": "初步设计图",
+      "target": "Preliminary Design Drawings"
+    },
+    {
+      "id": 378,
+      "source": "5 吨/日处理量成套设备，普通布局，主厂房占地面积约 800m2。高度设计：垃圾房 12m，设备主厂房 10m，辅房 3m;",
+      "target": "Complete equipment with a processing capacity of 5 tons/day, ordinary layout, main plant building area approx. 800m2. Height design: waste room 12m, main equipment plant 10m, auxiliary building 3m;"
+    },
+    {
+      "id": 379,
+      "source": "第四章 工程实施与进度安排",
+      "target": "Chapter 4 Project Implementation and Schedule"
+    },
+    {
+      "id": 380,
+      "source": "工程实行业主负责制。由业主委托设计，筹措建设资金，组织项目的招、投标工作，执行国内合同法有关要求，并组织施工及生产。本工程工期预计 120 天。",
+      "target": "The project implements the owner responsibility system. The owner entrusts the design, raises construction funds, organizes the bidding and tendering of the project, complies with the relevant requirements of the contract law, and organizes construction and production. The project duration is expected to be 120 days."
+    },
+    {
+      "id": 381,
+      "source": "4-1 安装调试进度表",
+      "target": "4-1 Installation and Commissioning Schedule"
+    },
+    {
+      "id": 382,
+      "source": "时间线（第**天）",
+      "target": "Timeline (Day **)"
+    },
+    {
+      "id": 383,
+      "source": "设备设计加工",
+      "target": "Equipment design and fabrication"
+    },
+    {
+      "id": 384,
+      "source": "1—60",
+      "target": "1—60"
+    },
+    {
+      "id": 385,
+      "source": "设备发运",
+      "target": "Equipment shipment"
+    },
+    {
+      "id": 386,
+      "source": "61-67",
+      "target": "61-67"
+    },
+    {
+      "id": 387,
+      "source": "设备安装",
+      "target": "Equipment installation"
+    },
+    {
+      "id": 388,
+      "source": "3.1",
+      "target": "3.1"
+    },
+    {
+      "id": 389,
+      "source": "设备一次安装",
+      "target": "First installation of equipment"
+    },
+    {
+      "id": 390,
+      "source": "68-88",
+      "target": "68-88"
+    },
+    {
+      "id": 391,
+      "source": "3.2",
+      "target": "3.2"
+    },
+    {
+      "id": 392,
+      "source": "设备二次安装",
+      "target": "Second installation of equipment"
+    },
+    {
+      "id": 393,
+      "source": "89-96",
+      "target": "89-96"
+    },
+    {
+      "id": 394,
+      "source": "调试（培训）",
+      "target": "Commissioning (training)"
+    },
+    {
+      "id": 395,
+      "source": "97-104",
+      "target": "97-104"
+    },
+    {
+      "id": 396,
+      "source": "烘炉（培训）",
+      "target": "Furnace curing (training)"
+    },
+    {
+      "id": 397,
+      "source": "105-113",
+      "target": "105-113"
+    },
+    {
+      "id": 398,
+      "source": "试运行（培训）",
+      "target": "Trial operation (training)"
+    },
+    {
+      "id": 399,
+      "source": "113-120",
+      "target": "113-120"
+    },
+    {
+      "id": 400,
+      "source": "第五章  运行成本测算",
+      "target": "Chapter 5  Operating Cost Estimation"
+    },
+    {
+      "id": 401,
+      "source": "本工程设计规模为 5t/d，工程单位运行成本包括电费、药剂费用、人员工资、维修管理费用，以及核算出单位垃圾处理运行成本情况见下表，具体核算过程如下：",
+      "target": "The design scale of this project is 5t/d. The unit operating cost of the project includes electricity fees, chemical fees, staff wages and maintenance management costs, as well as the calculated operating cost per ton of waste. See the table below; the specific calculation process is as follows:"
+    },
+    {
+      "id": 402,
+      "source": "电费：装机功率大约 100kwh，部分长期运行，部分间歇性运行，折算每日耗 1080kw，孟加拉工业用电均价约 0.56 元/度，电约电费为 605 元/天。",
+      "target": "Electricity cost: the installed power is about 100kwh; some equipment runs continuously and some intermittently, converted into a daily consumption of 1080kw. The average industrial electricity price in Bangladesh is about 0.56 RMB/kWh, so the electricity cost is about 605 RMB/day."
+    },
+    {
+      "id": 403,
+      "source": "药剂费用：包括片碱、尿素、活性炭、生石灰、除臭液、水等，考虑物价低于中国，日耗共计预测约 100 元。",
+      "target": "Chemical fees: including caustic soda, urea, activated carbon, quicklime, deodorizing liquid, water, etc. Considering that prices are lower than in China, the total daily consumption is estimated at about 100 RMB."
+    },
+    {
+      "id": 404,
+      "source": "厂内整体用工人数：7 人（按孟加拉平均工价 800 元/月计）",
+      "target": "Total plant workforce: 7 persons (calculated at the Bangladesh average wage of 800 RMB/month)"
+    },
+    {
+      "id": 405,
+      "source": "岗位",
+      "target": "Position"
+    },
+    {
+      "id": 406,
+      "source": "配置",
+      "target": "Configuration"
+    },
+    {
+      "id": 407,
+      "source": "班制",
+      "target": "Shift system"
+    },
+    {
+      "id": 408,
+      "source": "人数",
+      "target": "Headcount"
+    },
+    {
+      "id": 409,
+      "source": "机电维修工",
+      "target": "Mechanical and electrical maintenance worker"
+    },
+    {
+      "id": 410,
+      "source": "中控室操作监控",
+      "target": "Central control room operation and monitoring"
+    },
+    {
+      "id": 411,
+      "source": "药剂配置、出渣及巡检",
+      "target": "Chemical preparation, slag discharge and patrol inspection"
+    },
+    {
+      "id": 412,
+      "source": "合计",
+      "target": "Total"
+    },
+    {
+      "id": 413,
+      "source": "③ 人员工资：7 人按（800 元/（人·月）计）*12/365 =184 元/天。",
+      "target": "③ Staff wages: 7 persons at (800 RMB/(person·month)) *12/365 = 184 RMB/day."
+    },
+    {
+      "id": 414,
+      "source": "设备维修费用：年维修费用 1 万元，日支出 27 元。",
+      "target": "Equipment maintenance cost: annual maintenance cost is 10,000 RMB, daily expenditure 27 RMB."
+    },
+    {
+      "id": 415,
+      "source": "固体废物处理费用：本项目的灰渣可以回收利用制砖，产出额外价值，此处不做计算。",
+      "target": "Solid waste treatment cost: the bottom ash of this project can be recycled for brick making, generating additional value, which is not calculated here."
+    },
+    {
+      "id": 416,
+      "source": "内容",
+      "target": "Item"
+    },
+    {
+      "id": 417,
+      "source": "运行费用（元/天）",
+      "target": "Operating cost (RMB/day)"
+    },
+    {
+      "id": 418,
+      "source": "运行费用（元/吨）",
+      "target": "Operating cost (RMB/ton)"
+    },
+    {
+      "id": 419,
+      "source": "电费",
+      "target": "Electricity fee"
+    },
+    {
+      "id": 420,
+      "source": "605",
+      "target": "605"
+    },
+    {
+      "id": 421,
+      "source": "121",
+      "target": "121"
+    },
+    {
+      "id": 422,
+      "source": "药剂费用",
+      "target": "Chemical fees"
+    },
+    {
+      "id": 423,
+      "source": "100",
+      "target": "100"
+    },
+    {
+      "id": 424,
+      "source": "20",
+      "target": "20"
+    },
+    {
+      "id": 425,
+      "source": "工人工资",
+      "target": "Worker wages"
+    },
+    {
+      "id": 426,
+      "source": "184",
+      "target": "184"
+    },
+    {
+      "id": 427,
+      "source": "36.8",
+      "target": "36.8"
+    },
+    {
+      "id": 428,
+      "source": "设备维修费用",
+      "target": "Equipment maintenance cost"
+    },
+    {
+      "id": 429,
+      "source": "27",
+      "target": "27"
+    },
+    {
+      "id": 430,
+      "source": "5.4",
+      "target": "5.4"
+    },
+    {
+      "id": 431,
+      "source": "总计",
+      "target": "Total"
+    },
+    {
+      "id": 432,
+      "source": "916",
+      "target": "916"
+    },
+    {
+      "id": 433,
+      "source": "181.2",
+      "target": "181.2"
+    },
+    {
+      "id": 434,
+      "source": "工程运行费用情况表",
+      "target": "Project Operating Cost Table"
+    },
+    {
+      "id": 435,
+      "source": "以上仅为估算的运行费用，（实际运行成本根据当地人工和电费以及环保要求情况等据实调整）。",
+      "target": "The above is only the estimated operating cost (the actual operating cost shall be adjusted according to the local labor, electricity price and environmental protection requirements, etc.)."
+    },
+    {
+      "id": 436,
+      "source": "第六章 技术特点",
+      "target": "Chapter 6 Technical Features"
+    },
+    {
+      "id": 437,
+      "source": "关键技术",
+      "target": "Key Technologies"
+    },
+    {
+      "id": 438,
+      "source": "依靠炉排的机械移动实现垃圾在各个阶段物理、化学变化，促进垃圾燃烧",
+      "target": "The mechanical movement of the grate realizes the physical and chemical changes of the waste at each stage, promoting waste combustion"
+    },
+    {
+      "id": 439,
+      "source": "炉内垃圾为稳定燃烧，燃烧较为完全，飞灰量少，灼减率低",
+      "target": "The waste in the furnace burns stably and relatively completely, with little fly ash and low loss on ignition"
+    },
+    {
+      "id": 440,
+      "source": "炉排上物料燃烧时分层分区进行",
+      "target": "Material on the grate burns in layers and zones"
+    },
+    {
+      "id": 441,
+      "source": "进入炉膛后的物料，随炉排逐渐向后移动，在炉排前部，是新物料的预热和干燥区，紧接着物料开始热解气化（即垃圾挥发分的析出），然后着火并进入燃烧区，在其中后部是焦炭燃烧区，此区域同时进行着氧化和还原反应过程，释放大量的热量。到炉排尾部是灰渣燃烬区，对灰渣中剩余的残余焦炭继续燃烧并彻底烧尽。",
+      "target": "After entering the furnace, the material gradually moves backward with the grate. In the front part of the grate is the preheating and drying zone of the new material; then the material begins to pyrolyze and gasify (i.e. the release of waste volatiles), then ignites and enters the combustion zone; in the middle and rear part is the coke combustion zone, where oxidation and reduction reactions proceed simultaneously, releasing a large amount of heat. At the tail of the grate is the ash burnout zone, where the remaining residual coke in the ash is continuously burned and completely burnt out."
+    },
+    {
+      "id": 442,
+      "source": "炉排分段送风可控",
+      "target": "Staged and controllable air supply on the grate"
+    },
+    {
+      "id": 443,
+      "source": "在预热和干燥区、热解气化区（即垃圾挥发分的析出）不需要太多空气，而在焦炭燃烧区则必须保证有足够的空气，满足燃烧需要的氧气量。为适应炉排燃烧各区段不同风量的特点，在炉排下隔成若干个风室进行分段送风（一次风）。每个风室之间严密不漏，以防短路而失去调节作用。为使整个炉排宽度的风量分布均匀，采用双侧进风。每个风室的风量，均用单独的挡风板分别调节。各挡风板的开度，要根据不同燃料特性，经过反复运行试验，找出使物料燃烧最佳的开度位置。当物料特性变化时，可重新调整，本技术采用分段送风，送风可调，避免出现空气在炉膛前后两端过剩，中部不足的弊病，从而达到最佳运行效果。",
+      "target": "In the preheating and drying zone and the pyrolysis gasification zone (i.e. the release of waste volatiles), not much air is needed, while in the coke combustion zone sufficient air must be guaranteed to meet the oxygen required for combustion. To adapt to the different air volume requirements of each section of the grate combustion, the area under the grate is divided into several air chambers for staged air supply (primary air). Each air chamber is tightly sealed to prevent short circuits that would lose the regulating function. To make the air volume distribution uniform across the entire grate width, air is supplied from both sides. The air volume of each air chamber is regulated separately by an individual damper. The opening of each damper shall be determined through repeated operating tests according to the characteristics of different fuels to find the optimal opening position for material combustion. When the material characteristics change, it can be readjusted. This technology adopts staged air supply with adjustable air supply, avoiding the drawback of excess air at both the front and rear ends of the furnace and insufficient air in the middle, thereby achieving the best operating effect."
+    }
+  ]
+}

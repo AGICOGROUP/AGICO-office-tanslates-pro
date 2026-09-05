@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import importlib.util
 import json
 from pathlib import Path
+import re
 import subprocess
 import sys
 import tempfile
@@ -144,6 +146,51 @@ class WordPreflightTests(unittest.TestCase):
             )
 
         self.assertIn("unsupported_chart_text", report["complex_reasons"])
+
+    def load_analyzer(self):
+        spec = importlib.util.spec_from_file_location("analyze_docx_test_module", SCRIPT)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def test_protected_tokens_are_recognized_when_glued_to_cjk_text(self):
+        with tempfile.TemporaryDirectory() as directory:
+            body = (
+                '<w:p><w:r><w:t>尼龙帆布带B650</w:t></w:r></w:p>'
+                '<w:p><w:r><w:t>温度变送器G1/2"</w:t></w:r></w:p>'
+                '<w:p><w:r><w:t>介质温度80℃</w:t></w:r></w:p>'
+            )
+            report = self.run_preflight(self.make_docx(Path(directory), body))
+
+        tokens = {token for occurrence in report["protected_tokens"] for token in occurrence["tokens"]}
+        self.assertIn("B650", tokens)
+        self.assertIn("G1/2", tokens)
+        self.assertIn("80℃", tokens)
+
+    def test_token_sets_are_symmetric_between_cjk_glued_source_and_spaced_translation(self):
+        module = self.load_analyzer()
+
+        def normalized_tokens(text: str) -> set[str]:
+            return {re.sub(r"\s+", "", token).casefold() for token in module.PROTECTED_TOKEN.findall(text)}
+
+        pairs = [
+            ("尼龙帆布带B650", "Nylon Canvas Conveyor Belt B650"),
+            ('温度变送器G1/2"', 'Temperature Transmitter G1/2"'),
+            ("介质温度80℃", "Medium temperature 80 ℃"),
+            ("流量50t/h", "Flow rate 50 t/h"),
+            ("功率75kW", "Power 75 kW"),
+            ("防护等级IP55", "Protection class IP55"),
+        ]
+        for source_text, translated_text in pairs:
+            self.assertEqual(normalized_tokens(source_text), normalized_tokens(translated_text), source_text)
+
+    def test_non_token_text_stays_unrecognized_and_ascii_runs_stay_single_tokens(self):
+        module = self.load_analyzer()
+
+        self.assertEqual([], module.PROTECTED_TOKEN.findall("尼龙帆布带"))
+        self.assertEqual({"PT100"}, {token for token in module.PROTECTED_TOKEN.findall("温度传感器PT100")})
+        self.assertEqual([], module.PROTECTED_TOKEN.findall("防护等级IP 41"))
+        self.assertEqual({"E6-2U-Z"}, {token for token in module.PROTECTED_TOKEN.findall("限位开关E6-2U-Z")})
 
 
 if __name__ == "__main__":

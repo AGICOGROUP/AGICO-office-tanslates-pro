@@ -10,8 +10,12 @@ Read the OOXML package once. Record native text with stable slide, shape, paragr
 context, and protected-token locations. Group identical media bytes by SHA-256. Reuse a translation
 only when source text, target language, context, role, and protected tokens match.
 
-Retrieve only glossary terms matched to the extracted source text. Translate all remaining units
-in one batch and write them once.
+Retrieve only glossary terms matched to the extracted source text. Read the compact worklist index
+and translate remaining units in ordered bounded batches, maintaining terminology across them.
+Submit compact JSON decisions through `merge`, which persists accepted items and isolates rejected
+IDs. Resume with `batches` without rebuilding the manifest. Write the presentation once after all
+translation and image decisions are complete. Local corrections invalidate downstream stage evidence
+and require apply, verify, render and final visual review again.
 
 Preserve OLE/Visio/PDF embedded objects and their preview images unchanged by default, report them
 as untranslated warnings, and continue. Require a native handler only when the user explicitly asks

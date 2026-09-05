@@ -33,7 +33,7 @@ only when an image needs an overlay.
 
 1. `inspect`: hash the source once, inventory editable text and tables, and group identical images.
 2. `prepare`: create location-safe, deduplicated translation units and pause for batch translation.
-3. Fill native translations using the matched glossary subset. Screen every unique image once.
+3. Read `translation-worklist.json` and its listed pending batch files. Fill native translations using the matched glossary subset; return only `job_id` plus ID/translation results through `merge --job-dir <job> --responses <responses.json>`. Do not rewrite full manifests or create task-specific batch/merge scripts. Resume with `batches`, not `prepare`; use `--ids` for local corrections. See `references/pipeline-cli.md`. Screen every unique image once.
 4. Apply exactly one image decision:
    - `skip_target`: every readable source label already has its target-language equivalent; partial target text never skips the whole image.
    - `skip_unclear`: no source label is readable with confidence; small but readable labels must not be skipped.

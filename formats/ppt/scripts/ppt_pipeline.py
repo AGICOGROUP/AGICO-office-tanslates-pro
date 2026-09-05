@@ -16,6 +16,22 @@ from inspect_pptx_package import InspectionError, inspect_package, sha256_file
 from pptx_ooxml import OoxmlError, apply_manifest
 from validate_manifest import ManifestError, validate_manifest
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / 'scripts'))
+from translation_batches import add_commands, export_batches, run_command
+sys.path.pop(0)
+
+
+def command_translation_work(args):
+    def invalidate(accepted):
+        state_path = args.job_dir / 'job-state.json'
+        state = read_json(state_path)
+        for stage in STAGES[STAGES.index('translate'):]:
+            state['stages'][stage] = {'completed': False, 'artifact': None}
+        write_json(state_path, state)
+        # Existing command_render/deliver also read these reports directly.
+        write_json(args.job_dir / 'verification.json', {'passed': False, 'reason': 'translations changed'})
+    return run_command(args, kind='ppt', before_save=invalidate)
+
 
 STAGES = (
     "preflight",
@@ -246,6 +262,8 @@ def command_inspect(args: argparse.Namespace) -> int:
 
 
 def command_prepare(args: argparse.Namespace) -> int:
+    if (args.job_dir / 'translation-manifest.json').exists():
+        raise PipelineError('job already prepared; use batches to resume or choose a new job directory')
     inventory = read_json(args.job_dir / "inventory.json")
     state = read_json(args.job_dir / "job-state.json")
     manifest = build_translation_manifest(
@@ -255,6 +273,7 @@ def command_prepare(args: argparse.Namespace) -> int:
     )
     manifest_path = args.job_dir / "translation-manifest.json"
     write_json(manifest_path, manifest)
+    export_batches(manifest_path, kind='ppt')
     mark_stage(state, "prepare", str(manifest_path))
     write_json(args.job_dir / "job-state.json", state)
     print(
@@ -476,6 +495,7 @@ def command_deliver(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
+    add_commands(subparsers)
     inspect_parser = subparsers.add_parser("inspect")
     inspect_parser.add_argument("--input", required=True, type=Path)
     inspect_parser.add_argument("--job-dir", required=True, type=Path)
@@ -511,8 +531,9 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     args = build_parser().parse_args()
     try:
+        if args.command in ('batches', 'merge'): return command_translation_work(args)
         return int(args.handler(args))
-    except (PipelineError, InspectionError, ManifestError, OoxmlError) as exc:
+    except (PipelineError, InspectionError, ManifestError, OoxmlError, ValueError, OSError) as exc:
         print(f"pipeline error: {exc}", file=sys.stderr)
         return 2
 

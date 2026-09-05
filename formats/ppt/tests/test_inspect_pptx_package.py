@@ -9,7 +9,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
-from inspect_pptx_package import InspectionError, inspect_package  # noqa: E402
+from inspect_pptx_package import InspectionError, PROTECTED_RE, inspect_package  # noqa: E402
 
 
 def slide_xml(text: str, shape_id: int = 2) -> str:
@@ -91,6 +91,37 @@ class PowerPointPackageInspectorTests(unittest.TestCase):
         self.assertEqual(1, len(report["image_groups"]))
         self.assertEqual(2, len(report["image_groups"][0]["occurrences"]))
         self.assertEqual(1, report["metrics"]["package_passes"])
+
+    def test_protected_tokens_are_recognized_when_glued_to_cjk_text(self):
+        with tempfile.TemporaryDirectory() as directory:
+            report = inspect_package(self.make_deck(directory, texts=("尼龙帆布带B650", '温度变送器G1/2"')))
+
+        tokens = [token for item in report["occurrences"] for token in item["protected_tokens"]]
+        self.assertIn("B650", tokens)
+        self.assertIn("G1/2", tokens)
+
+    def test_trailing_cjk_is_not_absorbed_into_protected_tokens(self):
+        with tempfile.TemporaryDirectory() as directory:
+            report = inspect_package(self.make_deck(directory, texts=("规格B650档，详见附页",)))
+
+        tokens = report["occurrences"][0]["protected_tokens"]
+        self.assertIn("B650", tokens)
+        self.assertNotIn("B650档", tokens)
+
+    def test_cjk_glued_source_tokens_survive_into_spaced_translations(self):
+        # Mirrors the verify-stage containment check: every token extracted from the
+        # CJK-glued source text must appear in the spaced English translation.
+        pairs = [
+            ("尼龙帆布带B650", "Nylon Canvas Conveyor Belt B650"),
+            ('温度变送器G1/2"', 'Temperature Transmitter G1/2"'),
+            ("功率75kW", "Power rating 75kW"),
+            ("温度80°C", "Temperature 80°C"),
+            ("流量50t/h", "Flow rate 50t/h"),
+        ]
+        for source_text, translated_text in pairs:
+            for token in PROTECTED_RE.findall(source_text):
+                with self.subTest(source=source_text, token=token):
+                    self.assertIn(token, translated_text)
 
     def test_inventory_has_no_route_tier(self):
         with tempfile.TemporaryDirectory() as directory:

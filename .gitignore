@@ -3,6 +3,10 @@ __pycache__/
 .pytest_cache/
 work/
 renders/
+node_modules/
+
+# Stray debug log from a broken PowerShell redirect
+/$out
 
 # Customer Office artifacts belong outside the source repository.
 /*.doc

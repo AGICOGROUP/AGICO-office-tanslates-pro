@@ -473,7 +473,7 @@ export function mapFormulaToSourceRows(formula) {
 }
 
 
-function protectedTokens(text) {
+export function protectedTokens(text) {
   const matches = String(text).match(/(?:https?:\/\/\S+|\b[A-Z]{1,8}[-/]?\d[A-Z0-9./-]*\b|\b\d+(?:\.\d+)?\s*(?:kW|MW|V|kV|A|Hz|mm|cm|m|kg|t\/h|m³\/h)\b)/giu);
   return [...new Set(matches ?? [])];
 }
@@ -707,6 +707,7 @@ function validateTranslatedManifest(manifest, state) {
 
 async function buildBilingualWorkbook(sourceWorkbook, manifest, units) {
   const outputWorkbook = Workbook.create();
+  let verticalMergeRebuilds = 0;
   const occurrencesBySheet = new Map();
   for (const occurrence of manifest.occurrences) {
     if (occurrence.kind !== "cell") continue;
@@ -760,13 +761,24 @@ async function buildBilingualWorkbook(sourceWorkbook, manifest, units) {
     for (const merge of merges) {
       const start = splitCellAddress(merge.startAddress);
       const end = splitCellAddress(merge.endAddress);
-      if (start.row !== end.row) {
-        throw new Error(`bilingual fast path does not support vertical merge ${merge.startAddress}:${merge.endAddress}`);
+      if (start.row === end.row) {
+        const sourceRow = start.row * 2 - 1;
+        const translationRow = start.row * 2;
+        target.getRange(`${start.column}${sourceRow}:${end.column}${sourceRow}`).merge();
+        target.getRange(`${start.column}${translationRow}:${end.column}${translationRow}`).merge();
+        continue;
       }
-      const sourceRow = start.row * 2 - 1;
-      const translationRow = start.row * 2;
-      target.getRange(`${start.column}${sourceRow}:${end.column}${sourceRow}`).merge();
-      target.getRange(`${start.column}${translationRow}:${end.column}${translationRow}`).merge();
+      // Row doubling interleaves source and translation rows, so a vertical
+      // span cannot be rebuilt as two vertical ranges (they would overlap).
+      // Use one horizontal strip per paired row instead; a single-column span
+      // needs no strips because each doubled row is already a single cell.
+      for (let row = start.row; row <= end.row; row += 1) {
+        if (start.column !== end.column) {
+          target.getRange(`${start.column}${row * 2 - 1}:${end.column}${row * 2 - 1}`).merge();
+          target.getRange(`${start.column}${row * 2}:${end.column}${row * 2}`).merge();
+        }
+      }
+      verticalMergeRebuilds += 1;
     }
 
     for (const occurrence of occurrencesBySheet.get(source.name) ?? []) {
@@ -777,7 +789,7 @@ async function buildBilingualWorkbook(sourceWorkbook, manifest, units) {
       target.getRange(`${cell.column}${cell.row * 2}`).values = [[translation]];
     }
   }
-  return outputWorkbook;
+  return { workbook: outputWorkbook, verticalMergeRebuilds };
 }
 
 
@@ -888,17 +900,16 @@ function blank(value) {
 }
 
 
-function expectedBilingualMerges(sourceSheet, errors) {
+function expectedBilingualMerges(sourceSheet) {
   const expected = [];
   for (const merge of sourceSheet.__getMergedCells?.() ?? []) {
     const start = splitCellAddress(merge.startAddress);
     const end = splitCellAddress(merge.endAddress);
-    if (start.row !== end.row) {
-      errors.push(`unsupported-vertical-merge:${sourceSheet.name}!${merge.startAddress}:${merge.endAddress}`);
-      continue;
+    if (start.column === end.column && start.row !== end.row) continue;
+    for (let row = start.row; row <= end.row; row += 1) {
+      expected.push(`${start.column}${row * 2 - 1}:${end.column}${row * 2 - 1}`);
+      expected.push(`${start.column}${row * 2}:${end.column}${row * 2}`);
     }
-    expected.push(`${start.column}${start.row * 2 - 1}:${end.column}${end.row * 2 - 1}`);
-    expected.push(`${start.column}${start.row * 2}:${end.column}${end.row * 2}`);
   }
   return expected.sort();
 }
@@ -936,7 +947,7 @@ export async function verifyTranslations(options) {
         continue;
       }
       const expectedMerges = state.outputMode === "bilingual"
-        ? expectedBilingualMerges(sourceSheet, errors)
+        ? expectedBilingualMerges(sourceSheet)
         : normalizedMerges(sourceSheet);
       if (JSON.stringify(expectedMerges) !== JSON.stringify(normalizedMerges(outputSheet))) {
         errors.push(`merge-change:${sourceSheet.name}`);
@@ -1064,11 +1075,14 @@ export async function applyTranslations(options) {
   const sheets = new Map(workbook.worksheets.items.map((sheet) => [sheet.name, sheet]));
   const changedSheets = new Set();
   let layoutRepairs = { expandedRows: 0, compressedRows: 0 };
+  let verticalMergeRebuilds = 0;
   let outputWorkbook = workbook;
   if (state.outputMode === "bilingual") {
     const safety = classifyBilingualGrid(inventory);
     if (!safety.safe) throw new Error(`bilingual strict fallback required: ${safety.reasons.join(", ")}`);
-    outputWorkbook = await buildBilingualWorkbook(workbook, manifest, units);
+    const built = await buildBilingualWorkbook(workbook, manifest, units);
+    outputWorkbook = built.workbook;
+    verticalMergeRebuilds = built.verticalMergeRebuilds;
     for (const occurrence of manifest.occurrences) changedSheets.add(occurrence.sheet);
   } else {
     for (const occurrence of manifest.occurrences) {
@@ -1092,6 +1106,7 @@ export async function applyTranslations(options) {
     changedSheets: changedSheets.size,
     expandedRows: layoutRepairs.expandedRows,
     compressedRows: layoutRepairs.compressedRows,
+    verticalMergeRebuilds,
   };
   await saveJobState(path.join(jobDir, "job-state.json"), state);
   return { next_stage: nextStage(state), output, changed_sheets: [...changedSheets] };

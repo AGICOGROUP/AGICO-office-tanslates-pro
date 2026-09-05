@@ -71,3 +71,30 @@ Charts, comments, external links, unsupported drawings, uncertain images, macro/
 legacy conversion, and repair requirements fail before mutation. Empty tiny legacy shape fragments
 remain decorative. Formula, merge, protected-token, and state-hash mismatches fail closed without
 starting a second translation or full-workbook rendering pass.
+# Compact batches and local retry
+
+The fast runner's `prepare` also emits `translation-batches.json`. Its listed files contain pending
+units with source context and protected tokens; completed/autofilled records are not retranslated.
+Read the same relevant glossary. Default bounds are 80 units / 12,000 source characters, without
+splitting a cell. Preserve terminology across ordered batches; inspect neighboring batches when needed.
+
+```text
+python scripts/excel_fast_pipeline.py batches --job-dir <job>
+python scripts/excel_fast_pipeline.py merge --job-dir <job> --responses <responses.json>
+python scripts/excel_fast_pipeline.py batches --job-dir <job> --ids <unit-id>
+```
+
+Response: `{"job_id":"<from batch>","translations":[{"id":"<unit-id>","translation":"..."}]}`.
+For unchanged source text include `reason` explaining retention. Return only decisions, not source,
+context or full manifests. Merge updates the existing worklist; finalize still owns manifest merging,
+apply, verify and real Excel validation. Image decisions stay in the existing worklist's images array;
+`image-worklist.json` is a read-only snapshot and text merges never approve images.
+
+Valid items persist atomically; rejected items appear in `translation-merge-report.json` (exit 2).
+Foreign job_id, unknown or duplicate IDs reject the complete response. Follow `translation-retry.json`
+only when linked by the latest merge report; it contains failed IDs including completed-item corrections.
+After interruption run batches, not prepare (which refuses to overwrite an existing manifest).
+Export `--ids` to repair selected items; for completed items return the exported
+`previous_translation` with the new translation, preventing accidental overwrites. Corrections reset
+downstream state and require finalize again, including both verify and office-validate. Existing full
+worklist submissions remain compatible. Never replace this flow with task-specific merge scripts.
