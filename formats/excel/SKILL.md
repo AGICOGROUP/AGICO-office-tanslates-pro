@@ -68,7 +68,9 @@ Use `references/pipeline-cli.md` only for troubleshooting. Read
   alternate or strict reconstruction path.
 - Empty rectangles explicitly marked with no fill and no line, with no text or visible effects,
   are legacy placeholders regardless of size. Preserve these objects during translation; do not
-  delete them or let their dimensions alone trigger `unsupported-drawing`. Missing or inherited
+  delete them or let their dimensions alone trigger `unsupported-drawing`. Office `creationId`
+  metadata and inactive `hiddenFill`/`hiddenLine` paint caches do not make an object visible.
+  Inspect their namespace and extension identity; unknown extensions remain subject to checks. Missing or inherited
   paint properties, visible effects, text and connectors remain subject to drawing checks.
   This exemption supports monolingual translation. Paired-row bilingual reconstruction still
   rejects decorative drawings with `drawing-anchor-rebuild` until their anchors can be retained;

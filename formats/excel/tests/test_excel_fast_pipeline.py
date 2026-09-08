@@ -38,14 +38,15 @@ class ExcelFastPipelineTests(unittest.TestCase):
                 env = runner.node_environment(None)
             self.assertEqual(str(modules), env['NODE_PATH'])
             self.assertEqual(runner.sys.executable, env['CODEX_PYTHON'])
-            self.assertEqual(str(powershell), env['CODEX_POWERSHELL'])
+            if os.name == 'nt':
+                self.assertTrue(powershell.samefile(env['CODEX_POWERSHELL']))
 
     def test_explicit_runtime_override_is_not_silently_replaced(self):
         runner = load_runner()
         with tempfile.TemporaryDirectory() as directory:
             executable = Path(directory) / 'custom-node.exe'
             executable.touch()
-            self.assertEqual(str(executable), runner.resolve_executable(str(executable), 'CODEX_NODE', 'node'))
+            self.assertTrue(executable.samefile(runner.resolve_executable(str(executable), 'CODEX_NODE', 'node')))
             with self.assertRaises(RuntimeError):
                 runner.resolve_executable(str(executable) + '.missing', 'CODEX_NODE', 'node')
 

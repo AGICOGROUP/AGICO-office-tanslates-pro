@@ -23,8 +23,8 @@ SHEET_DRAWING_NS = "http://schemas.openxmlformats.org/drawingml/2006/spreadsheet
 def _is_invisible_rectangle(shape: ET.Element) -> bool:
     """Recognize explicit legacy placeholders, never infer invisibility from size.
 
-    Missing paint properties may inherit a theme. Effects, linked text and
-    extensions are kept conservative; inspection must never delete the object.
+    Missing paint properties may inherit a theme. Hidden Office paint caches and
+    creation IDs do not render; unknown extensions still require normal inspection.
     """
     if shape.get("textlink") or any(
         (node.text or "").strip() for node in shape.findall(f".//{{{DRAWING_NS}}}t")
@@ -41,7 +41,25 @@ def _is_invisible_rectangle(shape: ET.Element) -> bool:
     line = props.find(f"{{{DRAWING_NS}}}ln")
     if line is None or line.find(f"{{{DRAWING_NS}}}noFill") is None:
         return False
-    for node in shape.iter():
+    metadata_extensions = {
+        ('{FF2B5EF4-FFF2-40B4-BE49-F238E27FC236}',
+         '{http://schemas.microsoft.com/office/drawing/2014/main}creationId'),
+        ('{909E8E84-426E-40DD-AFC4-6F175D3DCCD1}',
+         '{http://schemas.microsoft.com/office/drawing/2010/main}hiddenFill'),
+        ('{91240B29-F687-4F45-9708-019B960494DF}',
+         '{http://schemas.microsoft.com/office/drawing/2010/main}hiddenLine'),
+    }
+    pending = [shape]
+    while pending:
+        node = pending.pop()
+        if node.tag == f'{{{DRAWING_NS}}}extLst':
+            for extension in node:
+                if (extension.tag != f'{{{DRAWING_NS}}}ext' or not len(extension)
+                        or any((extension.get('uri', '').upper(), child.tag)
+                               not in metadata_extensions for child in extension)):
+                    return False
+            # These subtrees store inactive paint or identity, not visible content.
+            continue
         local = node.tag.rsplit("}", 1)[-1]
         if local in {"solidFill", "gradFill", "blipFill", "pattFill", "grpFill",
                      "effectDag", "scene3d", "sp3d", "extLst"}:
@@ -50,6 +68,7 @@ def _is_invisible_rectangle(shape: ET.Element) -> bool:
             return False
         if local == "effectRef" and node.get("idx") != "0":
             return False
+        pending.extend(node)
     return True
 
 

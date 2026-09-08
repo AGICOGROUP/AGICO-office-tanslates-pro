@@ -5,12 +5,13 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+import xml.etree.ElementTree as ET
 from zipfile import ZipFile
 
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
-from inspect_excel_package import inspect_package  # noqa: E402
+from inspect_excel_package import inspect_package, _is_invisible_rectangle  # noqa: E402
 
 
 WORKBOOK_XML = """<?xml version="1.0" encoding="UTF-8"?>
@@ -32,6 +33,25 @@ SHEET_XML = """<?xml version="1.0" encoding="UTF-8"?>
 
 
 class ExcelPackageInspectorTests(unittest.TestCase):
+    def test_hidden_paint_cache_is_inactive_but_live_paint_and_unknown_extensions_are_not(self):
+        xml = '''<xdr:sp xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing"
+          xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+          xmlns:a14="http://schemas.microsoft.com/office/drawing/2010/main">
+          <xdr:spPr><a:prstGeom prst="rect"/><a:noFill/><a:ln><a:noFill/></a:ln>
+          <a:extLst><a:ext uri="{909E8E84-426E-40DD-AFC4-6F175D3DCCD1}">
+          <a14:hiddenFill><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill></a14:hiddenFill>
+          </a:ext></a:extLst></xdr:spPr></xdr:sp>'''
+        self.assertTrue(_is_invisible_rectangle(ET.fromstring(xml)))
+        for changed in [
+            xml.replace('<a:noFill/>', '<a:solidFill/>', 1),
+            xml.replace('909E8E84-426E-40DD-AFC4-6F175D3DCCD1', 'UNKNOWN'),
+            xml.replace('drawing/2010/main', 'unrecognized-namespace'),
+            xml.replace('</xdr:sp>', '<xdr:txBody><a:p><a:r><a:t>Label</a:t></a:r></a:p></xdr:txBody></xdr:sp>'),
+            xml.replace('</xdr:spPr>', '<a:effectLst><a:outerShdw/></a:effectLst></xdr:spPr>'),
+        ]:
+            with self.subTest(changed=changed):
+                self.assertFalse(_is_invisible_rectangle(ET.fromstring(changed)))
+
     def make_package(self, directory, media=None, include_features=(), drawing_xml=None):
         media = media or {}
         path = Path(directory) / "sample.xlsx"

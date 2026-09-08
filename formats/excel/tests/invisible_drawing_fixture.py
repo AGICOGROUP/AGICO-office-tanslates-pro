@@ -46,6 +46,19 @@ def inject(path):
         ET.SubElement(ET.SubElement(props, f'{{{A}}}prstGeom', {'prst': 'rect'}), f'{{{A}}}avLst')
         ET.SubElement(props, f'{{{A}}}noFill')
         ET.SubElement(ET.SubElement(props, f'{{{A}}}ln'), f'{{{A}}}noFill')
+        # Excel's real XLS conversion retains inactive paint in Office extensions.
+        extensions = ET.SubElement(props, f'{{{A}}}extLst')
+        for uri, tag, color in [
+            ('{909E8E84-426E-40DD-AFC4-6F175D3DCCD1}', 'hiddenFill', 'FFFFFF'),
+            ('{91240B29-F687-4F45-9708-019B960494DF}', 'hiddenLine', '000000'),
+        ]:
+            extension = ET.SubElement(extensions, f'{{{A}}}ext', {'uri': uri})
+            cache = ET.SubElement(extension, '{http://schemas.microsoft.com/office/drawing/2010/main}' + tag)
+            ET.SubElement(ET.SubElement(cache, f'{{{A}}}solidFill'), f'{{{A}}}srgbClr', {'val': color})
+        creation = ET.SubElement(ET.SubElement(nv[0], f'{{{A}}}extLst'), f'{{{A}}}ext',
+                                {'uri': '{FF2B5EF4-FFF2-40B4-BE49-F238E27FC236}'})
+        ET.SubElement(creation, '{http://schemas.microsoft.com/office/drawing/2014/main}creationId',
+                      {'id': '{67C1D920-E81E-47D8-9439-A30F810D16A0}'})
         ET.SubElement(anchor, f'{{{X}}}clientData')
     parts['xl/drawings/drawing1.xml'] = ET.tostring(root)
     with ZipFile(path, 'w', ZIP_DEFLATED) as z:
