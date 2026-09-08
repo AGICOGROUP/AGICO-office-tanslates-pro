@@ -4,6 +4,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 
 function Release-ComObject($Object) {
     if ($null -ne $Object -and [Runtime.InteropServices.Marshal]::IsComObject($Object)) {

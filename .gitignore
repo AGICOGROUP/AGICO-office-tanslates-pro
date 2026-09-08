@@ -3,6 +3,7 @@ __pycache__/
 .pytest_cache/
 work/
 renders/
+outputs/
 
 # Customer Office artifacts belong outside the source repository.
 /*.doc

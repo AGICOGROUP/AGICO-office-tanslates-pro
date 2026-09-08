@@ -3,7 +3,11 @@ from __future__ import annotations
 from copy import deepcopy
 import importlib.util
 from pathlib import Path
+import os
+import subprocess
+import tempfile
 import unittest
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -21,6 +25,46 @@ def load_runner():
 
 
 class ExcelFastPipelineTests(unittest.TestCase):
+    def test_node_environment_supplies_python_modules_and_modern_powershell(self):
+        runner = load_runner()
+        with tempfile.TemporaryDirectory() as directory:
+            bundle = Path(directory)
+            modules = bundle / 'node' / 'node_modules'
+            modules.mkdir(parents=True)
+            powershell = bundle / 'native' / 'powershell' / 'pwsh.exe'
+            powershell.parent.mkdir(parents=True)
+            powershell.touch()
+            with patch.dict(os.environ, {}, clear=True), patch.object(runner, 'bundled_dependencies', return_value=bundle):
+                env = runner.node_environment(None)
+            self.assertEqual(str(modules), env['NODE_PATH'])
+            self.assertEqual(runner.sys.executable, env['CODEX_PYTHON'])
+            self.assertEqual(str(powershell), env['CODEX_POWERSHELL'])
+
+    def test_explicit_runtime_override_is_not_silently_replaced(self):
+        runner = load_runner()
+        with tempfile.TemporaryDirectory() as directory:
+            executable = Path(directory) / 'custom-node.exe'
+            executable.touch()
+            self.assertEqual(str(executable), runner.resolve_executable(str(executable), 'CODEX_NODE', 'node'))
+            with self.assertRaises(RuntimeError):
+                runner.resolve_executable(str(executable) + '.missing', 'CODEX_NODE', 'node')
+
+    def test_esm_dependency_loads_from_node_path_without_repository_junction(self):
+        runner = load_runner()
+        node = runner.resolve_executable(None, 'CODEX_NODE', 'node')
+        with tempfile.TemporaryDirectory() as directory:
+            modules = Path(directory) / 'node_modules'
+            package = modules / '@oai' / 'artifact-tool'
+            package.mkdir(parents=True)
+            (package / 'package.json').write_text('{"type":"module","exports":"./index.mjs"}', encoding='utf-8')
+            (package / 'index.mjs').write_text('export const FileBlob = 7; export const SpreadsheetFile = 8; export const Workbook = 9;', encoding='utf-8')
+            loader = (ROOT / 'scripts' / 'artifact_runtime.mjs').as_uri()
+            result = subprocess.run([node, '--input-type=module', '-e',
+                f'import {{Workbook}} from {__import__("json").dumps(loader)}; console.log(Workbook);'],
+                env={**os.environ, 'NODE_PATH': str(modules)}, capture_output=True, text=True)
+            self.assertEqual(0, result.returncode, result.stderr)
+            self.assertEqual('9', result.stdout.strip())
+
     def make_manifest(self):
         return {
             "schema_version": 2,

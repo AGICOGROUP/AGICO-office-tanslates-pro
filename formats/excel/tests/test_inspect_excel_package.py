@@ -151,6 +151,38 @@ class ExcelPackageInspectorTests(unittest.TestCase):
         self.assertEqual(1, features["meaningful_drawing_count"])
         self.assertEqual(0, features["decorative_drawing_count"])
 
+    def test_large_invisible_rectangles_are_decorative_without_modifying_package(self):
+        shape = '<xdr:sp><xdr:spPr><a:xfrm><a:ext cx="1270000" cy="1270000"/></a:xfrm><a:prstGeom prst="rect"/><a:noFill/><a:ln><a:noFill/></a:ln></xdr:spPr></xdr:sp>'
+        drawing = ('<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" '
+                   'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">'
+                   + '<xdr:twoCellAnchor>' + shape * 1510 + '</xdr:twoCellAnchor></xdr:wsDr>')
+        with tempfile.TemporaryDirectory() as directory:
+            workbook = self.make_package(directory, drawing_xml=drawing)
+            before = workbook.read_bytes()
+            features = inspect_package(workbook)["features"]
+            self.assertEqual(0, features["meaningful_drawing_count"])
+            self.assertEqual(1510, features["decorative_drawing_count"])
+            self.assertEqual(before, workbook.read_bytes())
+
+    def test_invisible_exemption_requires_explicit_no_fill_and_no_line_without_effects(self):
+        for properties, extra in [
+            ('<a:noFill/>', ''),
+            ('<a:ln><a:noFill/></a:ln>', ''),
+            ('<a:solidFill/><a:ln><a:noFill/></a:ln>', ''),
+            ('<a:noFill/><a:ln><a:solidFill/></a:ln>', ''),
+            ('<a:noFill/><a:ln><a:noFill/></a:ln><a:effectLst><a:outerShdw/></a:effectLst>', ''),
+            ('<a:noFill/><a:ln><a:noFill/></a:ln>', '<xdr:txBody><a:p><a:r><a:t>Equipment</a:t></a:r></a:p></xdr:txBody>'),
+            ('<a:noFill/><a:ln><a:noFill/></a:ln>', '<xdr:style><a:effectRef idx="2"/></xdr:style>'),
+        ]:
+            with self.subTest(properties=properties, extra=extra), tempfile.TemporaryDirectory() as directory:
+                drawing = ('<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" '
+                           'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">'
+                           '<xdr:twoCellAnchor><xdr:sp><xdr:spPr><a:xfrm><a:ext cx="1270000" cy="1270000"/>'
+                           '</a:xfrm><a:prstGeom prst="rect"/>' + properties + '</xdr:spPr>' + extra
+                           + '</xdr:sp></xdr:twoCellAnchor></xdr:wsDr>')
+                features = inspect_package(self.make_package(directory, drawing_xml=drawing))["features"]
+                self.assertEqual(1, features["meaningful_drawing_count"])
+
     def test_connector_shape_is_meaningful(self):
         drawing = """<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing">
           <xdr:twoCellAnchor><xdr:cxnSp/></xdr:twoCellAnchor>

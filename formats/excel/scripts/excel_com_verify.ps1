@@ -5,6 +5,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 $sourceFull = [IO.Path]::GetFullPath($SourcePath)
 $inputFull = [IO.Path]::GetFullPath($InputPath)
 foreach ($candidate in @($sourceFull, $inputFull)) {

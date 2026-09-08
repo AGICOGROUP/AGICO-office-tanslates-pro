@@ -7,7 +7,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 GLOSSARY_NAME = "水泥专业名词中英对照.md"
-EXPECTED_GLOSSARY_SHA256 = "1fe11d08d4f42ea34c752ea1a7a1f6653dd27235a461dbece51981991a082356"
+EXPECTED_GLOSSARY_SHA256 = "38b19eb9005d1a5a50805c92048106adbf669f2a7932f15622695af7ac3224c5"
 
 
 class RootSkillStructureTests(unittest.TestCase):

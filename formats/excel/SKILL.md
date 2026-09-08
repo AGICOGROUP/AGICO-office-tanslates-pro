@@ -15,6 +15,10 @@ and final-render requirements. Do not render a source baseline or add a visual d
 
 ## Fast standard path
 
+Use the workspace's bundled Python to run the commands below. The runner locates its bundled
+Node, official artifact-tool package and PowerShell 7 automatically; explicit runtime options
+remain available. Do not create a node_modules junction or install packages for each translation.
+
 1. Run `python scripts/excel_fast_pipeline.py prepare ...` once. It runs the Excel-internal
    `route_excel_file.py`, validates `resolve_repo_glossary.py`, converts `.xls` once when required,
    then executes `inspect` and `prepare` through `excel_pipeline.mjs`.
@@ -49,6 +53,10 @@ Use `references/pipeline-cli.md` only for troubleshooting. Read
   worksheet and used range, and rejects only new error cells introduced in the output.
 - `finalize` resumes after the last completed gate in `job-state.json`. Stage durations are written
   to `stage-timings.json`; do not recreate task-specific scripts.
+- Ordinary translations use prepare, the compact worklist and finalize. Repository regression
+  tests, full Skill audits, installation and glossary synchronization belong to development/setup,
+  not each translation. After finalize returns deliver, provide the file immediately; do not add
+  renders or repeat verification unless a concrete output issue or an explicit request warrants it.
 
 ## Quality boundary
 
@@ -58,6 +66,13 @@ Use `references/pipeline-cli.md` only for troubleshooting. Read
 - Charts, comments, external links, unsupported drawings, VBA, unsafe legacy conversion, repair
   requirements, or deterministic mismatches fail before delivery; they do not start a slower
   alternate or strict reconstruction path.
+- Empty rectangles explicitly marked with no fill and no line, with no text or visible effects,
+  are legacy placeholders regardless of size. Preserve these objects during translation; do not
+  delete them or let their dimensions alone trigger `unsupported-drawing`. Missing or inherited
+  paint properties, visible effects, text and connectors remain subject to drawing checks.
+  This exemption supports monolingual translation. Paired-row bilingual reconstruction still
+  rejects decorative drawings with `drawing-anchor-rebuild` until their anchors can be retained;
+  never silently discard objects to produce bilingual rows.
 - Bilingual output defaults to paired blue translation rows and is limited to grid-safe workbooks.
 - Do not export PDF or use LibreOffice. Only when the user explicitly requests strict layout
   inspection, perform a separate visual review after `office-validate`.

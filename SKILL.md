@@ -7,6 +7,12 @@ description: Use when translating uploaded Word (.doc/.docx), Excel (.xls/.xlsx)
 
 Route each uploaded file to exactly one format adapter.
 
+All adapters share `references/水泥专业名词中英对照.md`; do not copy, reinstall or validate the
+whole repository during an ordinary translation. Read the selected adapter and the references it
+requires, run its translation workflow, and deliver when that workflow completes. Development tests
+and installation work are separate tasks. Runtime paths should come from the workspace dependencies,
+not a different machine's saved paths.
+
 ## Route the uploaded file
 
 1. Run `python scripts/route_office_file.py <uploaded-file>` from this Skill directory.

@@ -7,7 +7,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { FileBlob, SpreadsheetFile, Workbook } from "@oai/artifact-tool";
+import { FileBlob, SpreadsheetFile, Workbook } from "./artifact_runtime.mjs";
 
 const FIXED_ENGLISH_TRANSLATIONS = JSON.parse(readFileSync(
   new URL("../references/fixed-translations.en.json", import.meta.url), "utf8",
@@ -267,6 +267,8 @@ export function assertSupportedWorkbookRisk(meta = {}) {
 export function classifyBilingualGrid(meta = {}) {
   const features = meta.features ?? {};
   const checks = [
+    // Paired rows rebuild a new workbook and cannot yet remap shape anchors.
+    [features.decorative_drawing_count > 0, "drawing-anchor-rebuild"],
     [features.has_vba, "macro"],
     [features.table_count > 0, "table"],
     [features.chart_count > 0, "chart"],

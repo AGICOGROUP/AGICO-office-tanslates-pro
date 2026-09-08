@@ -3,18 +3,24 @@
 Run commands from `formats/excel/` with the Node.js runtime supplied by the Codex workspace.
 Use `work/<source-stem>-<sha256-prefix>/` as the job directory.
 
+Use the bundled Python interpreter. Runtime flags are optional in a standard Codex installation:
+the runner resolves Node, the official artifact-tool package and PowerShell 7 from that runtime.
+Explicit flags/environment variables take precedence. `--node-modules` is supported by the ESM
+loader directly, so no repository junction or package installation is needed. The default converted
+copy is `<job-dir>/source-working.xlsx`, keeping independent translation jobs separate.
+
 ## Standard commands
 
 Prepare routing, optional legacy conversion, inspection, and the compact worklist in one command:
 
 ```powershell
-python scripts/excel_fast_pipeline.py prepare --source <source.xls|xlsx> --job-dir <job-dir> --target-language <language> --output-mode <monolingual|bilingual> --node-path <node.exe> --node-modules <node_modules>
+python scripts/excel_fast_pipeline.py prepare --source <source.xls|xlsx> --job-dir <job-dir> --target-language <language> --output-mode <monolingual|bilingual>
 ```
 
 Fill only `<job-dir>/translation-worklist.json`, then finish all gates in one command:
 
 ```powershell
-python scripts/excel_fast_pipeline.py finalize --job-dir <job-dir> --output <translated.xlsx> --node-path <node.exe> --node-modules <node_modules>
+python scripts/excel_fast_pipeline.py finalize --job-dir <job-dir> --output <translated.xlsx>
 ```
 
 The runner writes compact JSON to stdout and stage durations to `stage-timings.json`. It suppresses

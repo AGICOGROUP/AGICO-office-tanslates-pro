@@ -157,8 +157,26 @@ def finalize_stage_plan(completed_stages: list[str]) -> list[str]:
     return plan
 
 
+def bundled_dependencies() -> Path:
+    """Prefer the running bundled Python's siblings, then the user's runtime."""
+    adjacent = Path(sys.executable).resolve().parent.parent
+    if (adjacent / 'node' / 'bin' / 'node.exe').is_file():
+        return adjacent
+    return Path.home() / '.cache' / 'codex-runtimes' / 'codex-primary-runtime' / 'dependencies'
+
+
 def resolve_executable(explicit: str | None, env_name: str, fallback: str) -> str:
-    candidate = explicit or os.environ.get(env_name) or shutil.which(fallback)
+    candidate = explicit or os.environ.get(env_name)
+    if not candidate:
+        bundle = bundled_dependencies()
+        bundled = {
+            'CODEX_NODE': bundle / 'node' / 'bin' / 'node.exe',
+            'CODEX_POWERSHELL': bundle / 'native' / 'powershell' / 'pwsh.exe',
+        }.get(env_name)
+        candidate = str(bundled) if bundled and bundled.is_file() else None
+        if not candidate and env_name == 'CODEX_POWERSHELL':
+            candidate = shutil.which('pwsh')
+        candidate = candidate or shutil.which(fallback)
     if not candidate or not Path(candidate).exists():
         raise RuntimeError(f"executable not found; pass the corresponding option or set {env_name}")
     return str(Path(candidate).resolve())
@@ -189,8 +207,16 @@ def timed(stages: dict[str, int], name: str, operation):
 
 def node_environment(node_modules: str | None) -> dict[str, str]:
     env = dict(os.environ)
-    if node_modules:
-        env["NODE_PATH"] = str(Path(node_modules).resolve())
+    modules = node_modules or env.get('NODE_PATH')
+    if not modules:
+        bundled = bundled_dependencies() / 'node' / 'node_modules'
+        if bundled.is_dir():
+            modules = str(bundled)
+    if modules:
+        env['NODE_PATH'] = str(Path(modules).resolve()) if node_modules else modules
+    env['CODEX_PYTHON'] = sys.executable
+    if os.name == 'nt':
+        env['CODEX_POWERSHELL'] = resolve_executable(None, 'CODEX_POWERSHELL', 'powershell.exe')
     env["PYTHONUTF8"] = "1"
     return env
 
@@ -210,13 +236,13 @@ def prepare_job(args: argparse.Namespace) -> dict[str, Any]:
     working_source = source
     if route.get("requires_conversion"):
         powershell = resolve_executable(args.powershell_path, "CODEX_POWERSHELL", "powershell.exe")
-        working_source = Path(args.working_copy).resolve() if args.working_copy else job_dir.parent / "source-working.xlsx"
+        working_source = Path(args.working_copy).resolve() if args.working_copy else job_dir / "source-working.xlsx"
         if working_source.exists():
             raise RuntimeError(f"working copy already exists: {working_source}")
         timed(stages, "convert", lambda: run_process([
             powershell, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(CONVERTER),
             "-SourcePath", str(source), "-OutputPath", str(working_source),
-        ]))
+        ], env=env))
 
     timed(stages, "inspect", lambda: run_process([
         node, str(PIPELINE), "inspect", "--input", str(working_source), "--job-dir", str(job_dir),

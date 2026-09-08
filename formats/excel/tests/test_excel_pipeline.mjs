@@ -3,8 +3,10 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
-import { FileBlob, SpreadsheetFile, Workbook } from "@oai/artifact-tool";
+import { FileBlob, SpreadsheetFile, Workbook } from "../scripts/artifact_runtime.mjs";
 
 import {
   buildImageReviewPlan,
@@ -427,6 +429,16 @@ test("inspect prepare and apply translate text while preserving numbers and form
     sheet.getRange("C2").formulas = [["=B2*2"]];
     const sourceBlob = await SpreadsheetFile.exportXlsx(workbook);
     await sourceBlob.save(source);
+    const fixture = fileURLToPath(new URL("./invisible_drawing_fixture.py", import.meta.url));
+    const python = process.env.CODEX_PYTHON || path.resolve(path.dirname(process.execPath), "..", "..", "python", "python.exe");
+    const drawingCommand = (command, file) => {
+      const result = spawnSync(python, [fixture, command, file], { encoding: "utf8", windowsHide: true, maxBuffer: 4 * 1024 * 1024 });
+      assert.equal(result.status, 0, result.stderr);
+      return result.stdout;
+    };
+    drawingCommand("inject", source);
+    const originalDrawings = JSON.parse(drawingCommand("snapshot", source));
+    assert.equal(originalDrawings.length, 1510);
     const sourceBefore = await fs.readFile(source);
 
     const inspected = await inspectWorkbook({
@@ -478,6 +490,8 @@ test("inspect prepare and apply translate text while preserving numbers and form
       source, "job-dir": jobDir, output,
     });
     assert.equal(verification.passed, true, JSON.stringify(verification));
+    assert.deepEqual(JSON.parse(drawingCommand("snapshot", output)), originalDrawings,
+      "translation must retain all invisible shapes, positions, sizes and paint properties");
     const verifiedState = JSON.parse(await fs.readFile(path.join(jobDir, "job-state.json"), "utf8"));
     assert.equal(verifiedState.completedStages.at(-1), "verify");
     const officeValidated = await officeValidateOutput(
@@ -609,6 +623,8 @@ test("verification reports changed formulas numbers merges and missing translati
 
 
 test("bilingual fast path rejects complex workbook objects before mutation", () => {
+  assert.deepEqual(classifyBilingualGrid({ features: { decorative_drawing_count: 1510 } }),
+    { safe: false, reasons: ["drawing-anchor-rebuild"] });
   assert.deepEqual(classifyBilingualGrid({ features: {} }), { safe: true, reasons: [] });
   assert.deepEqual(classifyBilingualGrid({
     features: {

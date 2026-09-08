@@ -20,6 +20,39 @@ DRAWING_NS = "http://schemas.openxmlformats.org/drawingml/2006/main"
 SHEET_DRAWING_NS = "http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing"
 
 
+def _is_invisible_rectangle(shape: ET.Element) -> bool:
+    """Recognize explicit legacy placeholders, never infer invisibility from size.
+
+    Missing paint properties may inherit a theme. Effects, linked text and
+    extensions are kept conservative; inspection must never delete the object.
+    """
+    if shape.get("textlink") or any(
+        (node.text or "").strip() for node in shape.findall(f".//{{{DRAWING_NS}}}t")
+    ):
+        return False
+    props = shape.find(f"{{{SHEET_DRAWING_NS}}}spPr")
+    if props is None:
+        return False
+    geom = props.find(f"{{{DRAWING_NS}}}prstGeom")
+    if geom is None or geom.get("prst") != "rect":
+        return False
+    if props.find(f"{{{DRAWING_NS}}}noFill") is None:
+        return False
+    line = props.find(f"{{{DRAWING_NS}}}ln")
+    if line is None or line.find(f"{{{DRAWING_NS}}}noFill") is None:
+        return False
+    for node in shape.iter():
+        local = node.tag.rsplit("}", 1)[-1]
+        if local in {"solidFill", "gradFill", "blipFill", "pattFill", "grpFill",
+                     "effectDag", "scene3d", "sp3d", "extLst"}:
+            return False
+        if local == "effectLst" and len(node):
+            return False
+        if local == "effectRef" and node.get("idx") != "0":
+            return False
+    return True
+
+
 def _drawing_shape_counts(archive: ZipFile) -> tuple[int, int]:
     meaningful = decorative = 0
     for name in archive.namelist():
@@ -31,6 +64,9 @@ def _drawing_shape_counts(archive: ZipFile) -> tuple[int, int]:
             for tag in ("cxnSp", "graphicFrame", "contentPart")
         )
         for shape in root.findall(f".//{{{SHEET_DRAWING_NS}}}sp"):
+            if _is_invisible_rectangle(shape):
+                decorative += 1
+                continue
             text = "".join(node.text or "" for node in shape.findall(f".//{{{DRAWING_NS}}}t")).strip()
             extent = shape.find(f".//{{{DRAWING_NS}}}ext")
             width = int(extent.attrib.get("cx", "0")) if extent is not None else 0
