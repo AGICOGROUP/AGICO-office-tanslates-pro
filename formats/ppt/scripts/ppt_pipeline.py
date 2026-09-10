@@ -154,7 +154,9 @@ def complete_delivery(
 ) -> None:
     if not state["stages"]["render"]["completed"]:
         raise PipelineError("render stage must pass before delivery")
-    if not visual_review_passed:
+    warning = state.get("render_warning", {})
+    unrendered = warning.get("code") == "office-unavailable" and warning.get("slides_rendered") == 0
+    if not visual_review_passed and not unrendered:
         raise PipelineError("visual review must pass before delivery")
     if not output.is_file():
         raise PipelineError(f"translated presentation not found: {output}")
@@ -398,9 +400,15 @@ def run_powerpoint_render(
     thumbnail_directory: Path,
     expected_slides: list[int],
 ) -> dict:
+    def unavailable(message: str) -> dict:
+        return {"application": "powerpoint", "status": "unavailable", "code": "office-unavailable",
+                "message": message, "render_directory": str(thumbnail_directory),
+                "powerpoint_starts": 0, "presentation_opens": 0,
+                "slides_rendered": len(list(thumbnail_directory.glob("slide-*.png")))}
+
     powershell = shutil.which("powershell.exe")
     if not powershell:
-        raise PipelineError("Microsoft PowerPoint verification requires powershell.exe")
+        return unavailable("PowerPoint rendering unavailable: powershell.exe not found")
     script = Path(__file__).with_name("ppt_com.ps1")
     command = [
         powershell,
@@ -416,9 +424,19 @@ def run_powerpoint_render(
         "-OutputDirectory",
         str(thumbnail_directory),
     ]
-    completed = subprocess.run(command, capture_output=True, text=True, encoding="utf-8")
+    try:
+        completed = subprocess.run(command, capture_output=True, text=True, encoding="utf-8", timeout=60)
+    except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
+        return unavailable(f"PowerPoint rendering incomplete: {exc}")
     if completed.returncode != 0:
         raise PipelineError(completed.stderr.strip() or "PowerPoint internal render failed")
+    if completed.stdout.strip():
+        try:
+            diagnostic = json.loads(completed.stdout.strip())
+        except json.JSONDecodeError:
+            diagnostic = {}
+        if diagnostic.get("status") == "unavailable" and diagnostic.get("code") == "office-unavailable":
+            return unavailable(diagnostic.get("message", "PowerPoint rendering unavailable"))
     rendered = sorted(thumbnail_directory.glob("slide-*.png"))
     if len(rendered) != len(expected_slides):
         raise PipelineError(
@@ -441,6 +459,8 @@ def command_render(args: argparse.Namespace) -> int:
     plan = read_json(args.job_dir / "render-plan.json")
     if not verification.get("passed"):
         raise PipelineError("structural verification failed; repair before final Office rendering")
+    if sha256_file(output) != verification.get("output_sha256"):
+        raise PipelineError("output changed since structural verification")
     render_root = args.job_dir / "final-renders"
     target_report = run_powerpoint_render(
         output,
@@ -448,6 +468,9 @@ def command_render(args: argparse.Namespace) -> int:
         plan["target_low_resolution"],
     )
     reports = {"target": target_report}
+    state.pop("render_warning", None)
+    if target_report.get("status") == "unavailable":
+        state["render_warning"] = target_report
     state["metrics"]["powerpoint_starts"] += int(target_report["powerpoint_starts"])
     state["metrics"]["presentation_opens"] += int(target_report["presentation_opens"])
     state["metrics"]["full_deck_passes"] += 1
@@ -463,13 +486,18 @@ def command_deliver(args: argparse.Namespace) -> int:
     output = args.output.resolve()
     state_path = args.job_dir / "job-state.json"
     state = read_json(state_path)
+    verification = read_json(args.job_dir / "verification.json")
+    if not verification.get("passed") or sha256_file(output) != verification.get("output_sha256"):
+        raise PipelineError("delivery requires the unchanged output from passing structural verification")
     complete_delivery(
         state,
         output,
         visual_review_passed=args.visual_review_passed,
     )
     write_json(state_path, state)
-    print(json.dumps({"delivered": str(output)}, ensure_ascii=False))
+    warning = state.get("render_warning")
+    print(json.dumps({"delivered": str(output),
+                      "warnings": [warning["message"]] if warning else []}, ensure_ascii=False))
     return 0
 
 

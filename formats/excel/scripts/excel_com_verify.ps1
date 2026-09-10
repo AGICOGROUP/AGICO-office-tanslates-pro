@@ -16,7 +16,9 @@ function Get-WorkbookReport {
     param($Excel, [string]$Path)
     $workbook = $null
     try {
+        $script:validationPhase = 'open-workbook'
         $workbook = $Excel.Workbooks.Open($Path, 0, $true)
+        $script:validationPhase = 'check-workbook'
         $Excel.CalculateFullRebuild()
         $names = @($workbook.Worksheets | ForEach-Object { $_.Name })
         $usedRanges = [ordered]@{}
@@ -70,6 +72,7 @@ function Convert-SourceErrorKeysForBilingual {
 }
 
 $excel = $null
+$script:validationPhase = 'start-application'
 try {
     $excel = New-Object -ComObject Excel.Application
     $excel.AutomationSecurity = 3
@@ -103,6 +106,15 @@ try {
         output_value_error_count = $output.value_errors.Count
         new_value_error_count = $newValueErrors.Count
     } | ConvertTo-Json -Depth 4 -Compress
+} catch {
+    $unavailable = $script:validationPhase -eq 'start-application'
+    [pscustomobject]@{
+        passed = $false
+        status = $(if ($unavailable) { 'unavailable' } else { 'failed' })
+        code = $(if ($unavailable) { 'office-unavailable' } else { 'workbook-validation-failed' })
+        message = $_.Exception.Message
+    } | ConvertTo-Json -Compress
+    if (-not $unavailable) { exit 2 }
 } finally {
     if ($excel) {
         $excel.Quit()

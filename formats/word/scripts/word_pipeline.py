@@ -14,11 +14,12 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import unicodedata
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from lxml import etree
 
-from analyze_docx import analyze
+from analyze_docx import analyze, PROTECTED_TOKEN
 
 
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
@@ -40,6 +41,45 @@ def normalize_protected_tokens(tokens: list[str]) -> set[str]:
         re.sub(r"\s+", "", token).replace("℃", "°C").replace(",", ".").casefold()
         for token in tokens
     }
+
+
+def canonical_parameters(text: str) -> str:
+    text = unicodedata.normalize("NFKC", text).replace("℃", "°C")
+    # Only known unit spellings; do not infer conversions or rewrite model codes.
+    aliases = {"吨/日": "t/d", "吨/天": "t/d", "吨/小时": "t/h",
+               "千瓦": "kW", "毫米": "mm", "厘米": "cm", "千克": "kg",
+               "公斤": "kg", "吨": "t"}
+    for source, target in aliases.items():
+        text = re.sub(r"(?<=\d)\s*" + re.escape(source), target, text)
+    text = re.sub(r"/\s*days?\b", "/d", text, flags=re.IGNORECASE)
+    text = re.sub(r"/\s*hours?\b", "/h", text, flags=re.IGNORECASE)
+    text = re.sub(r"(?<=\d),(?=\d{3}(?:\D|$))", "", text)
+    return text
+
+
+def parameter_mismatch(source: str, target: str) -> bool:
+    if source == target:
+        return False
+    source, target = canonical_parameters(source), canonical_parameters(target)
+    # Check the source's tokens in their translated context, not equality between
+    # two context-sensitive regex inventories. Added English labels are not damage.
+    separated_source = re.sub(r"[\u3400-\u9fff]", " ", source)
+    tokens = PROTECTED_TOKEN.findall(separated_source)
+    # Preserve complete unit expressions (the legacy inventory may match only t).
+    tokens += re.findall(
+        r"(?<![A-Za-z0-9])\d+(?:[.,]\d+)?\s*"
+        r"(?:[kM]?W|[kM]?Pa|[kM]?V|[kcm]?m|kg|t|kcal|mg|Nm|m)"
+        r"(?:[23])?(?:\s*/\s*(?:[kcm]?m[23]?|kg|h|d|min|s))?(?![A-Za-z0-9])",
+        separated_source,
+    )
+    target = target.casefold()
+    for token in normalize_protected_tokens(tokens):
+        left = r"(?<![A-Za-z0-9.])" if token[:1].isdigit() else r"(?<![A-Za-z])"
+        pattern = re.escape(token).replace("/", r"\s*/\s*")
+        pattern = re.sub(r"(?<=\d)(?=[A-Za-z%°])", lambda _: r"\s*", pattern)
+        if not re.search(left + pattern + r"(?![A-Za-z0-9]|\.\d)", target):
+            return True
+    return False
 
 
 def local_content_nodes(paragraph: etree._Element) -> list[etree._Element]:
@@ -108,9 +148,11 @@ def replace_paragraph_text(paragraph: etree._Element, source: str, target: str) 
             groups[-1].append(node)
         else:
             groups.append([])
-    if len(groups) != len(segments) or any(not group for group in groups):
+    if len(groups) != len(segments) or any(not group and segment for group, segment in zip(groups, segments)):
         raise ValueError("paragraph has unsupported empty text segment around a tab or line break")
     for group, segment in zip(groups, segments):
+        if not group:
+            continue
         original = [node.text or "" for node in group]
         if "".join(original) == segment:
             continue
@@ -230,14 +272,10 @@ def validate(candidate: Path, manifest_path: Path, word_native: bool = False) ->
     unsafe_layout = [item for item in report.get("text_layout_risks", []) if item.get("text") in target_texts]
     if unsafe_layout:
         failures.append(f"unsafe translated text layout: {unsafe_layout}")
-    expected_tokens = normalize_protected_tokens([
-        token for occurrence in manifest["protected_tokens"] for token in occurrence["tokens"]
-    ])
-    actual_tokens = normalize_protected_tokens([
-        token for occurrence in report["protected_tokens"] for token in occurrence["tokens"]
-    ])
-    if actual_tokens != expected_tokens:
-        failures.append("protected token mismatch")
+    mismatched = [unit["id"] for unit in manifest["units"]
+                  if parameter_mismatch(unit["source"], unit["target"])]
+    if mismatched:
+        failures.append(f"protected token mismatch for units: {mismatched}")
     for key in ("section_count", "table_count", "media_count"):
         if report[key] != manifest["baseline"][key]:
             failures.append(f"{key}: expected {manifest['baseline'][key]}, got {report[key]}")

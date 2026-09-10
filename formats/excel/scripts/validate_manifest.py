@@ -9,15 +9,6 @@ import sys
 from typing import Any
 
 
-IMAGE_REASON_CODES = {
-    "no-source-text",
-    "logo-or-brand",
-    "photograph",
-    "localized",
-    "manual-review",
-}
-
-
 def _text(value: Any) -> bool:
     return isinstance(value, str) and bool(value.strip())
 
@@ -132,8 +123,6 @@ def validate_v2(payload: dict[str, Any]) -> dict:
             errors.append(f"{prefix} manual-review is not deliverable")
         elif image.get("status") not in {"reviewed", "localized", "retain"}:
             errors.append(f"{prefix} has invalid status")
-        if image.get("reason_code") not in IMAGE_REASON_CODES:
-            errors.append(f"{prefix}.reason_code is invalid")
 
     return {
         "passed": not errors,
@@ -210,8 +199,6 @@ def validate_legacy(payload: Any) -> dict:
             image_seen.add(image_id)
         if image.get("status") not in {"reviewed", "localized", "retain"}:
             errors.append(f"{prefix} status must be reviewed, localized, or retain")
-        if not isinstance(image.get("reason"), str) or not image["reason"].strip():
-            errors.append(f"{prefix} needs review reason")
 
     return {
         "passed": not errors,

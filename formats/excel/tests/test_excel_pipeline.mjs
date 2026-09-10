@@ -31,6 +31,7 @@ import {
   prepareManifest,
   reconcileJobState,
   officeValidateOutput,
+  runExcelOfficeValidation,
   renderOccurrenceTranslation,
   saveJobState,
   translationReuseKey,
@@ -546,6 +547,44 @@ test("office validation completes delivery without creating a visual gate", asyn
     );
     assert.equal(result.next_stage, "deliver");
     await assert.rejects(fs.access(path.join(jobDir, "visual-review.json")));
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("Office environment failures warn; real validation failures and stale files block", async () => {
+  for (const code of ["ENOENT", "ETIMEDOUT"]) {
+    const report = runExcelOfficeValidation("source", "output", "monolingual", (_cmd, _args, options) => {
+      assert.equal(options.timeout, 60000);
+      return { error: { code, message: code }, status: null };
+    });
+    assert.equal(report.status, "unavailable");
+    assert.equal(report.passed, false);
+  }
+  assert.throws(() => runExcelOfficeValidation("source", "output", "monolingual",
+    () => ({ status: 2, stderr: "new formula error" })), /COM validation failed/);
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "excel-office-warning-"));
+  try {
+    const output = path.join(directory, "output.xlsx");
+    await fs.writeFile(output, "verified output");
+    const { createHash } = await import("node:crypto");
+    const outputHash = createHash("sha256").update("verified output").digest("hex");
+    let state = newJobState({sourceSha256: "a".repeat(64), targetLanguage: "en", outputMode: "monolingual"});
+    for (const stage of JOB_STAGES.slice(0, JOB_STAGES.indexOf("office-validate"))) state = completeStage(state, stage, {});
+    state.outputPaths.source = path.join(directory, "source.xlsx");
+    const saveState = () => fs.writeFile(path.join(directory, "job-state.json"), JSON.stringify(state));
+    await saveState();
+    await fs.writeFile(path.join(directory, "verification.json"), JSON.stringify({passed: true, output_sha256: outputHash}));
+    const options = {"job-dir": directory, output};
+    await assert.rejects(officeValidateOutput(options, () => ({passed: false, status: "failed"})), /did not pass/);
+    const unavailable = () => ({passed: false, status: "unavailable", code: "office-unavailable", message: "Excel unavailable"});
+    const report = await officeValidateOutput(options, unavailable);
+    assert.equal(report.next_stage, "deliver");
+    assert.equal(report.passed, false);
+    assert.deepEqual(report.warnings, ["Excel unavailable"]);
+    await saveState();
+    await fs.writeFile(output, "changed output");
+    await assert.rejects(officeValidateOutput(options, unavailable), /output changed/);
   } finally {
     await fs.rm(directory, { recursive: true, force: true });
   }

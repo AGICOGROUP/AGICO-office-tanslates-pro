@@ -30,4 +30,7 @@ Hash the source during inspection and compare it once during final verification.
 integrity, slide count, native translations, protected tokens, and required overlays. Then open the
 output in a hidden background session in PowerPoint and create one low-resolution render of every
 final slide without an external PDF conversion gate. The visual review checks only missing native text,
-clipping, overlap, broken layout, and obviously misplaced overlays.
+clipping, overlap, broken layout, and obviously misplaced overlays. If native rendering is unavailable
+or exceeds 60 seconds, review any available slides and disclose the unreviewed pages on delivery.
+The warning applies only to an unchanged output that passed structural verification; known opening
+failures and serious visual defects remain blocking.

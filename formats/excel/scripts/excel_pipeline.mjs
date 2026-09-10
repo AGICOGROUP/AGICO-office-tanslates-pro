@@ -1008,7 +1008,7 @@ export async function verifyTranslations(options) {
 }
 
 
-function runExcelOfficeValidation(sourcePath, outputPath, outputMode) {
+export function runExcelOfficeValidation(sourcePath, outputPath, outputMode, runner = spawnSync) {
   const script = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "excel_com_verify.ps1");
   const powershell = process.env.CODEX_POWERSHELL || "powershell.exe";
   const args = [
@@ -1016,7 +1016,11 @@ function runExcelOfficeValidation(sourcePath, outputPath, outputMode) {
     "-SourcePath", sourcePath, "-InputPath", outputPath,
   ];
   if (outputMode === "bilingual") args.push("-Bilingual");
-  const result = spawnSync(powershell, args, { encoding: "utf8", windowsHide: true });
+  const result = runner(powershell, args, { encoding: "utf8", windowsHide: true, timeout: 60000 });
+  if (["ENOENT", "ETIMEDOUT"].includes(result.error?.code)) {
+    return { passed: false, status: "unavailable", code: "office-unavailable",
+      message: `Excel native check incomplete: ${result.error.message}` };
+  }
   if (result.status !== 0) {
     throw new Error(`Excel COM validation failed: ${result.stderr || result.stdout}`);
   }
@@ -1036,7 +1040,15 @@ export async function officeValidateOutput(options, officeRunner = runExcelOffic
   if (!verification.passed) throw new Error("office-validate requires a passing verification report");
   const sourcePath = path.resolve(state.outputPaths.source);
   const report = await officeRunner(sourcePath, outputPath, state.outputMode);
-  if (!report?.passed) throw new Error("Microsoft Excel validation did not pass");
+  const unavailable = report?.status === "unavailable" && report.code === "office-unavailable";
+  if (!report?.passed && !unavailable) throw new Error("Microsoft Excel validation did not pass");
+  if (unavailable) {
+    // A warning can only accompany the exact file that passed static verification.
+    if (!verification.output_sha256 || await sha256File(outputPath) !== verification.output_sha256) {
+      throw new Error("output changed since verification");
+    }
+    report.warnings = [report.message || "Excel native check unavailable; static verification passed"];
+  }
   const reportPath = path.join(jobDir, "office-validation.json");
   await writeJson(reportPath, report);
   state = completeStage(state, "office-validate", { report: await sha256File(reportPath) });

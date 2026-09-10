@@ -18,6 +18,37 @@ W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 
 
 class WordPipelineContractTests(unittest.TestCase):
+    def test_equivalent_parameters_pass_but_real_damage_still_fails(self):
+        pipeline = self.load_pipeline()
+        for source_text, target_text, should_pass in [
+            ("浓度10％", "Concentration 10%", True),
+            ("处理量5吨/日", "Capacity 5 t/day", True),
+            ("水分-0.57%", "Moisture-0.57%", True),
+            ("≤10mg/m3", "≤10 mg/m3", True),
+            ("功率10kW", "Power 10 kW.", True),
+            ("浓度10％", "Concentration 11%", False),
+            ("处理量5吨/日", "Capacity 5 kg/day", False),
+            ("编号AB123", "Code AB124", False),
+            ("温度850℃", "Temperature 850", False),
+            ("功率10kW和20kW", "Power 10kW and 10kW", False),
+            ("第一章概述", "Chapter 1 Overview", True),
+            ("气体CH4", "Gas CH4 and nitrogen", True),
+        ]:
+            with self.subTest(source=source_text, target=target_text), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                source = self.make_docx(root, f'<w:p><w:r><w:t>{source_text}</w:t></w:r></w:p>')
+                manifest_path = pipeline.prepare(source, root / "job", "English")
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                manifest["units"][0]["target"] = target_text
+                manifest_path.write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
+                output = root / "output.docx"
+                pipeline.apply(manifest_path, output)
+                if should_pass:
+                    pipeline.validate(output, manifest_path)
+                else:
+                    with self.assertRaisesRegex(ValueError, "protected token mismatch"):
+                        pipeline.validate(output, manifest_path)
+
     def load_pipeline(self):
         spec = importlib.util.spec_from_file_location("word_pipeline_test_module", PIPELINE)
         module = importlib.util.module_from_spec(spec)
@@ -146,6 +177,27 @@ class WordPipelineContractTests(unittest.TestCase):
             apply_report = json.loads((job / "apply-report.json").read_text(encoding="utf-8"))
             self.assertEqual(1, apply_report["applied_occurrences"])
             self.assertEqual([], apply_report["unmatched_unit_ids"])
+
+    def test_apply_preserves_consecutive_breaks_without_requiring_an_empty_text_node(self):
+        pipeline = self.load_pipeline()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = self.make_docx(
+                root,
+                '<w:p><w:r><w:t>First section</w:t><w:br/><w:br/><w:t>Second section</w:t></w:r></w:p>',
+            )
+            manifest_path = pipeline.prepare(source, root / "job", "Chinese")
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["units"][0]["target"] = "第一部分\n\n第二部分"
+            manifest_path.write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
+            output = root / "translated.docx"
+
+            pipeline.apply(manifest_path, output)
+
+            with ZipFile(output) as archive:
+                document = pipeline.etree.fromstring(archive.read("word/document.xml"))
+            paragraph = next(document.iter(pipeline.W_P))
+            self.assertEqual("第一部分\n\n第二部分", pipeline.paragraph_text(paragraph))
 
     def test_apply_distributes_translation_across_existing_formatted_runs(self):
         with tempfile.TemporaryDirectory() as directory:

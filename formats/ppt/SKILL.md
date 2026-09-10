@@ -44,7 +44,12 @@ only when an image needs an overlay.
    tokens, and required overlays.
 7. `render`: open the output in one hidden, alert-suppressed Microsoft PowerPoint session and
    render every final slide once at low resolution. Do not use an external PDF conversion gate.
-8. Review the final slides and run `deliver --visual-review-passed`.
+8. Review the final slides and run `deliver --visual-review-passed`. Native rendering waits at most
+   60 seconds. Missing PowerShell, unavailable PowerPoint, export failure or timeout may produce
+   a warning after structural verification passes. Review every rendered page that is available;
+   only when none were rendered may `deliver` omit `--visual-review-passed`. Disclose unreviewed
+   pages and the warning. Opening failures, structural damage and observed serious layout defects
+   still block delivery; do not claim an unavailable visual check passed.
 
 ## Quality boundary
 
@@ -58,5 +63,7 @@ only when an image needs an overlay.
 - Allow natural wrapping and repair only actual clipping, overlap, missing text, or broken layout.
 - Never use LibreOffice unless PowerPoint is unavailable and the user explicitly authorizes it.
 
-Deliver when the output opens without repair, native translation coverage passes, protected tokens
-match, image decisions are complete, and the final visual review passes.
+Deliver when native translation coverage passes, protected tokens match, image decisions are complete,
+and available final slides pass visual review. The delivery command requires the unchanged output
+from successful structural verification. A recorded rendering-unavailable warning permits delivery
+with that limitation disclosed; a confirmed opening failure or serious visual defect does not.

@@ -27,7 +27,7 @@ Read `../../references/水泥专业名词中英对照.md` before translation. Re
 2. Fill every manifest target in stable source order after applying the glossary and protected-token rules.
 3. Run `apply`; the program uses `lxml`, preserves ZIP parts and namespace mappings, keeps whitespace-only runs from carrying translated words, preserves visible boundary spaces, and removes CJK-only character compression from Latin-script translations without rebuilding OOXML with the standard XML library.
 4. Review embedded image text and record any unsafe region for manual review.
-5. Run `validate` once. Its static checks for source hash, translated strings, structure, media, and protected tokens are the required delivery gate.
+5. Run `validate` once. Its static checks for source hash, translated strings, structure, media, and protected tokens are the required delivery gate. Parameter checks follow each source unit and accept full-width symbols, unit spacing and listed equivalent unit spellings. Keep normal engineering notation; do not spell numbers out or edit the source baseline just to satisfy a check. Changed or missing technical values and model codes still block delivery.
 6. Use `validate --word-native` only when a Word-native opening or pagination diagnostic is specifically useful. This check is optional and non-blocking; failure or timeout is recorded as a warning and never prevents delivery.
 
 ## Delivery gate

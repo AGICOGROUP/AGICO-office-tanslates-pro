@@ -22,5 +22,8 @@ inside an embedded object; validation then blocks delivery until its status beco
 
 The source hash is calculated during `inspect` and compared during `verify`. `render` uses the PPT
 module's hidden PowerPoint session to create one low-resolution image for every final slide, with no
-external PDF conversion gate. Resume from the first
+external PDF conversion gate. Rendering has a 60-second timeout. If native rendering is unavailable,
+the pipeline records a warning; review any available slide images and disclose unreviewed pages.
+Only when no pages were rendered, run `deliver` without `--visual-review-passed`. Opening failures
+and structural verification failures still stop delivery. Resume from the first
 incomplete stage; do not build a second workflow.

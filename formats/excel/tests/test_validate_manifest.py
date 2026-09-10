@@ -132,7 +132,20 @@ class ManifestValidatorTests(unittest.TestCase):
         self.assertIn("duplicate id", errors)
         self.assertIn("context_key", errors)
 
-    def test_v2_rejects_changed_protected_token_and_invalid_image_reason(self):
+    def test_completed_image_review_does_not_require_reason_metadata(self):
+        for schema in (1, 2):
+            for status in ("reviewed", "localized", "retain"):
+                for metadata in ({}, {"reason_code": "already-bilingual", "reason": "已是双语"}):
+                    with self.subTest(schema=schema, status=status, metadata=metadata):
+                        payload = self.make_v2_manifest() if schema == 2 else {"items": [], "images": []}
+                        payload["images"] = [{
+                            "id": "img-001", "sha256": "b" * 64,
+                            "occurrences": ["S1#Image1"], "status": status, **metadata,
+                        }]
+                        report = validate_manifest.validate(payload)
+                        self.assertTrue(report["passed"], report["errors"])
+
+    def test_v2_rejects_changed_protected_token(self):
         payload = self.make_v2_manifest()
         payload["occurrences"][0]["source"] = "功率 45kW"
         payload["occurrences"][0]["protected_tokens"] = ["45kW"]
@@ -156,7 +169,6 @@ class ManifestValidatorTests(unittest.TestCase):
         self.assertFalse(report["passed"])
         errors = " ".join(report["errors"])
         self.assertIn("changed protected token", errors)
-        self.assertIn("reason_code", errors)
 
     def test_v2_rejects_unresolved_manual_image_review(self):
         payload = self.make_v2_manifest()

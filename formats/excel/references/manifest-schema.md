@@ -62,7 +62,7 @@ the worklist into the full manifest and validates this schema.
 
 ## Images
 
-Group identical image bytes by SHA-256 while retaining every occurrence location. Use status `reviewed`, `localized`, `retain`, or `manual-review`. Use one of these reason codes:
+Group identical image bytes by SHA-256 while retaining every occurrence location. Use status `reviewed`, `localized`, `retain`, or `manual-review`. Completed image decisions do not require `reason` or `reason_code`; these are optional notes, not delivery gates. Common reason codes include:
 
 - `no-source-text`
 - `logo-or-brand`

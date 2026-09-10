@@ -5,8 +5,9 @@ worksheet occurrence of the same image. Do not reopen or reclassify duplicate lo
 equipment photographs.
 
 - If the workbook contains no images, skip image review completely.
-- If no clear translatable text exists, record `retain` with reason code `no-source-text`,
-  `logo-or-brand`, or `photograph`, and preserve the image bytes at every occurrence.
+- If no clear translatable text exists, record `retain` and preserve the image bytes at every
+  occurrence. Optional notes such as `no-source-text`, `logo-or-brand`, or `photograph` help explain
+  the decision but their absence or wording must not block delivery.
 - Use `localized` only after the unique image has been edited and checked at native resolution.
 - Use `manual-review` only when text presence or safe localization remains uncertain. This reason
   escalates the workbook to strict verification.

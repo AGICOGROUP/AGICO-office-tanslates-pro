@@ -50,7 +50,10 @@ Use `references/pipeline-cli.md` only for troubleshooting. Read
   compresses only runs of at least three blank, formula-free, unmerged placeholder rows.
 - `verify` checks formulas, typed values, merges, sheet order, coverage, protected tokens, and
   bilingual pairs. `office-validate` uses Microsoft Excel read-only, recalculates, confirms every
-  worksheet and used range, and rejects only new error cells introduced in the output.
+  worksheet and used range, and rejects only new error cells introduced in the output. The native
+  check waits at most 60 seconds. Missing PowerShell, unavailable Excel or a timeout may finish
+  with a disclosed warning only for the unchanged output that passed `verify`; this does not mean
+  native validation passed. Workbook opening/check failures and new error cells still block.
 - `finalize` resumes after the last completed gate in `job-state.json`. Stage durations are written
   to `stage-timings.json`; do not recreate task-specific scripts.
 - Ordinary translations use prepare, the compact worklist and finalize. Repository regression
@@ -63,6 +66,7 @@ Use `references/pipeline-cli.md` only for troubleshooting. Read
 - Preserve numbers, units, model codes, standards, URLs, identifiers, meaningful line breaks, and
   formulas. The source file remains untouched.
 - Resolve each unique image to `reviewed`, `localized`, or `retain`; manual-review is not deliverable.
+  Image reason notes are optional and are not a separate approval or delivery gate.
 - Charts, comments, external links, unsupported drawings, VBA, unsafe legacy conversion, repair
   requirements, or deterministic mismatches fail before delivery; they do not start a slower
   alternate or strict reconstruction path.
@@ -80,5 +84,6 @@ Use `references/pipeline-cli.md` only for troubleshooting. Read
   inspection, perform a separate visual review after `office-validate`.
 - Fixed English translations are exact matches only; ambiguous equipment terminology stays pending.
 
-Deliver immediately when `verify` and `office-validate` pass, the output reopens without repair,
-the source hash is unchanged, and no required translation is missing.
+Deliver immediately when `verify` passes and `office-validate` completes, the source hash is unchanged,
+and no required translation is missing. Disclose any native-check warning returned by `finalize`;
+do not report an unavailable check as successful or hide confirmed workbook damage.

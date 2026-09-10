@@ -311,12 +311,14 @@ def finalize_job(args: argparse.Namespace) -> dict[str, Any]:
     existing = read_json(timing_path) if timing_path.exists() else {}
     report = merge_timing_report(existing, stages)
     write_json(timing_path, report)
+    office_report = read_json(job_dir / "office-validation.json")
     return {
         "next_stage": "deliver",
         "output": str(output),
         "output_sha256": sha256_file(output),
         "timings_ms": stages,
         "total_pipeline_ms": report["total_ms"],
+        "warnings": office_report.get("warnings", []),
     }
 
 

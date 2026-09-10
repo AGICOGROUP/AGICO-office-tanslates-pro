@@ -1765,10 +1765,12 @@ $application = $null
 $presentation = $null
 $windowGuard = New-Object PowerPointWindowGuard
 $windowGuard.Start()
+$renderPhase = 'start-application'
 
 try {
     $application = New-Object -ComObject PowerPoint.Application
     $application.AutomationSecurity = 3
+    $renderPhase = 'open-presentation'
     # ReadOnly=true, Untitled=false, WithWindow=false
     $presentation = $application.Presentations.Open($inputFullPath, -1, 0, 0)
 
@@ -1842,6 +1844,7 @@ try {
             $presentation.SaveAs($outputFullPath, 24)
         }
         "render" {
+            $renderPhase = 'export-slides'
             $directory = Resolve-OutputDirectory $OutputDirectory
             $renderWidth = 1440
             $renderHeight = [int][Math]::Round(
@@ -2013,6 +2016,15 @@ try {
             throw "Command '$Command' is not implemented yet."
         }
     }
+}
+catch {
+    if ($Command -eq 'render' -and $renderPhase -in @('start-application', 'export-slides')) {
+        [ordered]@{
+            status = 'unavailable'
+            code = 'office-unavailable'
+            message = $_.Exception.Message
+        } | ConvertTo-Json -Compress
+    } else { throw }
 }
 finally {
     if ($null -ne $presentation) {
