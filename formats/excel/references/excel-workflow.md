@@ -33,30 +33,39 @@ compact worklist before `finalize`; the runner merges and validates the schema-v
 Resolve every unique image to `reviewed`, `localized`, or `retain` before `apply`. A remaining
 `manual-review` record blocks writing; duplicate occurrences reuse the same SHA-256 decision.
 
-Run `scripts/excel_fast_pipeline.py finalize` once. `apply` imports once, mutates text-bearing cells
-only, and exports once. For bilingual output, apply
+Run `scripts/excel_fast_pipeline.py finalize` once. Monolingual `apply` patches original OOXML text
+cells with an atomic ZIP writer and verifies its temporary output before replacement. All unrelated
+package parts remain byte-identical. Shared strings become per-cell inline strings when edited;
+original rich run properties are retained with translated characters distributed proportionally.
+For bilingual output, apply
 `bilingual-row-layout.md` only after the grid-safety classifier passes. Otherwise enter strict
 processing before creating an output.
 For monolingual output, estimate wrapped line count from final text and effective merged-cell width.
-Increase only affected row heights, cap automatic height at 60 points, and compress to 8 points only
-runs of three or more completely blank, formula-free, unmerged placeholder rows.
+Increase only affected row heights up to Excel's 409.5-point limit and clone wrapping styles only
+where needed. Preserve blank rows, hidden rows and vertically merged row heights. This estimate
+does not replace a requested visual review. Rich style boundaries are approximate where translation
+changes word order, and source phonetic guides are removed only from edited strings.
 
 ## 3. Final checks
 
-- For every job, verify deterministic invariants and run one Microsoft Excel validation pass.
+- For every job, verify deterministic invariants and run one Microsoft Excel validation pass when
+  available and the workbook has no external data requiring execution.
 - Do not render a source baseline or translated workbook in the standard pipeline.
 - Only when the user explicitly requests strict layout inspection, perform a separate visual review
   after `office-validate`; do not make it part of the default delivery gate.
 - Images: read `image-text-localization.md`; review one record per unique SHA-256, not each
   occurrence.
-- Unsupported complex or strict workbook features fail during inspection before mutation. Do not
-  enter an expensive alternate rendering or reconstruction path.
+- Monolingual output preserves charts, comments, drawings, tables, external links and unknown parts.
+  Disclose their untranslated complex text by part name. Formula input strings remain unchanged with
+  retained-cell counts and examples. Macro content and actual damage still block processing.
 
 Treat sub-2-point empty legacy shape fragments as decorative borders, not unsupported drawings.
 Use Microsoft Excel COM to open source and output read-only, fully recalculate both, check
 worksheet/used-range access, and compare formula/value error cells. Reject new error cells introduced
 by translation; do not fail only because the source already contained the same error cells. Do not
-export PDF or invoke LibreOffice. If Microsoft Excel is unavailable, stop and report the blocker.
+export PDF or invoke LibreOffice. External data links/connections skip Office recalculation to avoid
+refresh. If Microsoft Excel is unavailable, disclose the missing check after native verification
+passes; a detected validation failure still blocks delivery.
 
 Verification must reject changed formulas or typed values, broken merges, missing occurrences,
 protected-token loss, incomplete bilingual pairs, or output-open failure. Excel-native validation
@@ -66,5 +75,6 @@ durations in `stage-timings.json`.
 
 ## 4. Delivery
 
-Deliver one new workbook immediately after `verify` and `office-validate` pass. Report strict reasons
-when present. The source hash must still match the value recorded at `inspect`.
+Deliver one new workbook after native verification passes and Office validation passes or records a
+disclosed unavailable/skipped check. Include preserved untranslated complex text and operational
+cell warnings. The source hash must still match the value recorded at `inspect`.

@@ -8,6 +8,8 @@ from pathlib import Path
 import sys
 from typing import Any
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
+from translation_quality import technical_mismatch
 
 def _text(value: Any) -> bool:
     return isinstance(value, str) and bool(value.strip())
@@ -71,9 +73,9 @@ def validate_v2(payload: dict[str, Any]) -> dict:
                 errors.append(f"{prefix} retain translation must equal source")
         else:
             errors.append(f"{prefix} status must be translated or retain")
-        for token in protected_tokens:
-            if token not in (translation or ""):
-                errors.append(f"{prefix} changed protected token: {token!r}")
+        if isinstance(translation, str) and isinstance(unit.get("source"), str):
+            if technical_mismatch(unit["source"], translation, protected_tokens):
+                errors.append(f"{prefix} changed protected token or technical value")
 
     occurrence_seen: set[str] = set()
     for index, occurrence in enumerate(occurrences):
@@ -184,9 +186,9 @@ def validate_legacy(payload: Any) -> dict:
         if not isinstance(protected_tokens, list) or not all(isinstance(token, str) for token in protected_tokens):
             errors.append(f"{prefix}.protected_tokens must be a list of text values")
             protected_tokens = []
-        for token in protected_tokens:
-            if not isinstance(token, str) or token not in (translation or ""):
-                errors.append(f"{prefix} changed protected token: {token!r}")
+        if isinstance(source, str) and isinstance(translation, str):
+            if technical_mismatch(source, translation, protected_tokens):
+                errors.append(f"{prefix} changed protected token or technical value")
 
     image_seen: set[str] = set()
     for index, image in enumerate(images):

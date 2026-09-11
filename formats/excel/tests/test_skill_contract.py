@@ -85,7 +85,7 @@ class ExcelSkillContractTests(unittest.TestCase):
             "do not render a source baseline",
             "new error cells",
             "explicitly requests",
-            "manual-review is not deliverable",
+            "only missing or invalid items",
         ):
             self.assertIn(phrase, combined)
         self.assertNotIn("visual-review", combined)
@@ -119,17 +119,17 @@ class ExcelSkillContractTests(unittest.TestCase):
         skill = (ROOT / "SKILL.md").read_text(encoding="utf-8")
         required = [
             "translate-excel-professionally",
-            "spreadsheets:Spreadsheets",
+            "office_pipeline.py prepare",
             ".xls",
             ".xlsx",
-            "macro-enabled Office files are rejected",
+            "macro-enabled containers remain unsupported",
             "relevant-glossary.json",
-            "route_excel_file.py",
-            "resolve_repo_glossary.py",
-            "validate_manifest.py",
+            "job_identity",
+            "office_pipeline.py merge",
+            "office_pipeline.py finalize",
             "formula",
             "image",
-            "office-validate",
+            "Microsoft Excel read-only",
         ]
         missing = [token for token in required if token not in skill]
         self.assertEqual([], missing)

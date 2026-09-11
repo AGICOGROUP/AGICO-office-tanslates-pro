@@ -138,15 +138,19 @@ test("macro stays strict while ordinary charts and comments are complex", () => 
   assert.deepEqual(complex.reasons, ["chart", "comment"]);
 });
 
-test("production risk gate rejects unsupported workbooks before translation", () => {
+test("production preservation accepts complex parts while bilingual reconstruction stays limited", () => {
   assert.throws(
-    () => assertSupportedWorkbookRisk({ extension: ".xlsm", features: { has_vba: true } }),
+    () => assertSupportedWorkbookRisk({ extension: ".xlsm", outputMode: "bilingual", features: { has_vba: true } }),
     /unsupported Excel workbook features: macro/,
   );
   assert.throws(
-    () => assertSupportedWorkbookRisk({ extension: ".xlsx", features: { chart_count: 1 } }),
+    () => assertSupportedWorkbookRisk({ extension: ".xlsx", outputMode: "bilingual", features: { chart_count: 1 } }),
     /unsupported Excel workbook features: chart/,
   );
+  assert.deepEqual(assertSupportedWorkbookRisk({ extension: ".xlsx", features: { chart_count: 1 } }),
+    { mode: "complex", reasons: ["chart"] });
+  assert.throws(() => assertSupportedWorkbookRisk({ extension: ".xlsm", features: { has_vba: true } }), /macro/);
+  assert.throws(() => assertSupportedWorkbookRisk({ extension: ".xlsx", features: { has_vba: true } }), /macro/);
   assert.deepEqual(
     assertSupportedWorkbookRisk({ extension: ".xlsx", features: { unique_image_count: 2 } }),
     { mode: "fast", reasons: [] },
@@ -566,6 +570,78 @@ test("bilingual mapping handles row ranges and preserves quoted sheet names", ()
   }
 });
 
+test("production monolingual path preserves complex parts and discloses their untranslated text", async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "excel-complex-native-"));
+  try {
+    const source = path.join(directory, "source.xlsx");
+    const output = path.join(directory, "output.xlsx");
+    const fixtureDirectory = fileURLToPath(new URL(".", import.meta.url));
+    const python = process.env.CODEX_PYTHON || path.resolve(path.dirname(process.execPath), "..", "..", "python", "python.exe");
+    const fixture = spawnSync(python, ["-c", "import sys; from pathlib import Path; sys.path.insert(0,sys.argv[1]); from test_excel_native_ooxml import fixture; fixture(Path(sys.argv[2]))", fixtureDirectory, source], { encoding: "utf8", windowsHide: true });
+    assert.equal(fixture.status, 0, fixture.stderr);
+    await inspectWorkbook({ input: source, "job-dir": directory, "target-language": "en", "output-mode": "monolingual" });
+    await prepareManifest({ "job-dir": directory });
+    const manifestPath = path.join(directory, "translation-manifest.json");
+    const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
+    assert.ok(manifest.warnings.some(w => w.includes("chart1.xml")));
+    for (const unit of manifest.translation_units) {
+      if (unit.status === "pending") { unit.status = "retain"; unit.translation = unit.source; }
+    }
+    await fs.writeFile(manifestPath, JSON.stringify(manifest));
+    await applyTranslations({ input: source, output, "job-dir": directory });
+    const report = await verifyTranslations({ source, output, "job-dir": directory });
+    assert.equal(report.passed, true, JSON.stringify(report.errors));
+    assert.ok(report.preserved_parts >= 8);
+    assert.ok(report.warnings.some(w => w.includes("comment1.xml")));
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("external data skips Office recalculation after native verification", async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "excel-external-native-"));
+  try {
+    let state = newJobState({ sourceSha256: "a".repeat(64), targetLanguage: "en", outputMode: "monolingual" });
+    for (const stage of JOB_STAGES.slice(0, JOB_STAGES.indexOf("office-validate"))) state = completeStage(state, stage, {});
+    state.outputPaths.source = path.join(directory, "source.xlsx");
+    const output = path.join(directory, "output.xlsx");
+    await fs.writeFile(output, "verified output");
+    const { createHash } = await import("node:crypto");
+    await fs.writeFile(path.join(directory, "job-state.json"), JSON.stringify(state));
+    await fs.writeFile(path.join(directory, "verification.json"), JSON.stringify({ passed: true,
+      output_sha256: createHash("sha256").update("verified output").digest("hex") }));
+    await fs.writeFile(path.join(directory, "inventory.json"), JSON.stringify({ external_data: true }));
+    const report = await officeValidateOutput({ output, "job-dir": directory }, () => { throw new Error("must not execute Office"); });
+    assert.equal(report.next_stage, "deliver");
+    assert.match(report.warnings[0], /external data links were preserved without execution/);
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("production monolingual writer accepts equivalent technical unit spacing", async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "excel-unit-spacing-"));
+  try {
+    const source = path.join(directory, "source.xlsx");
+    const output = path.join(directory, "output.xlsx");
+    const workbook = Workbook.create();
+    workbook.worksheets.add("S1").getRange("A1").values = [["电机额定功率为45kW"]];
+    await (await SpreadsheetFile.exportXlsx(workbook)).save(source);
+    await inspectWorkbook({ input: source, "job-dir": directory, "target-language": "en", "output-mode": "monolingual" });
+    await prepareManifest({ "job-dir": directory });
+    const manifestPath = path.join(directory, "translation-manifest.json");
+    const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
+    manifest.translation_units[0].status = "translated";
+    manifest.translation_units[0].translation = "The motor is rated at 45 kW";
+    await fs.writeFile(manifestPath, JSON.stringify(manifest));
+    await applyTranslations({ input: source, output, "job-dir": directory });
+    const report = await verifyTranslations({ source, output, "job-dir": directory });
+    assert.equal(report.passed, true, JSON.stringify(report.errors));
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("monolingual preparation retains text used as a formula criterion", async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "excel-formula-text-"));
   try {
@@ -586,8 +662,10 @@ test("monolingual preparation retains text used as a formula criterion", async (
     for (const sourceText of ["电动阀门", "风机甲", "阀*"]) {
       assert.equal(manifest.translation_units.find(unit => unit.source === sourceText).status, "retain", sourceText);
     }
+    // Every text input in the referenced range is operational: a translation
+    // could otherwise start matching a criterion and alter the calculation.
     for (const sourceText of ["设备名称", "阀体", "风机甲乙"]) {
-      assert.notEqual(manifest.translation_units.find(unit => unit.source === sourceText).status, "retain", sourceText);
+      assert.equal(manifest.translation_units.find(unit => unit.source === sourceText).status, "retain", sourceText);
     }
   } finally {
     await fs.rm(directory, {recursive: true, force: true});

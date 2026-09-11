@@ -13,6 +13,9 @@ import sys
 import time
 from typing import Any
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
+from translation_core import atomic_json
+
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
@@ -28,8 +31,7 @@ def read_json(path: Path) -> dict[str, Any]:
 
 
 def write_json(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    atomic_json(path, payload)
 
 
 def sha256_file(path: Path) -> str:

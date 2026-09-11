@@ -1,0 +1,31 @@
+{
+  "tested_at": "2026-09-11T03:10:11.051Z",
+  "host": {
+    "platform": "win32",
+    "release": "10.0.19045",
+    "arch": "x64",
+    "node": "v24.19.0"
+  },
+  "baseline_revision": "3e433e27fe43cb6b3f6895bfb03e16d875b69db9",
+  "rows": 1000,
+  "cells": 6000,
+  "text_cells": 3000,
+  "formula_cells": 1000,
+  "notes": "Actual production inspect/apply/verify. Excludes preparation, translation decisions and Office validation. Single run; same generated workbook and decisions. Runtime modules already loaded; native apply includes pre-replacement verification.",
+  "results": [
+    {
+      "name": "baseline",
+      "inspect_ms": 1548.3485,
+      "apply_ms": 947.4231,
+      "verify_ms": 795.0776000000001,
+      "processing_ms": 3290.8492
+    },
+    {
+      "name": "native",
+      "inspect_ms": 314.3251,
+      "apply_ms": 800.4234000000006,
+      "verify_ms": 585.9495000000006,
+      "processing_ms": 1700.6980000000012
+    }
+  ]
+}

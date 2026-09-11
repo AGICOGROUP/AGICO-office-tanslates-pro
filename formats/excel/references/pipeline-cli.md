@@ -71,9 +71,23 @@ Never mark a stage complete until its artifact is saved and hashed.
   used ranges, and baseline/output/new error counts.
 - `stage-timings.json`: cumulative milliseconds for each runner stage.
 
-## Unsupported-feature boundary
+## Preservation boundary
 
-Charts, comments, external links, unsupported drawings, uncertain images, macro/VBA content, unsafe
-legacy conversion, and repair requirements fail before mutation. Empty tiny legacy shape fragments
-remain decorative. Formula, merge, protected-token, and state-hash mismatches fail closed without
-starting a second translation or full-workbook rendering pass.
+Monolingual `inspect`, `apply`, and `verify` use `excel_native_ooxml.py` through the existing Node
+commands. They read sparse cells and patch the source OOXML package atomically. Shared strings are
+split into per-cell inline strings when translated; rich run properties and original styles survive.
+Only translated cells, cloned wrapping styles and affected row heights may change. Other ZIP parts
+remain byte-identical, including charts, comments, drawings, relationships and unknown extensions.
+Their complex text is preserved without translation and disclosed by part name in the manifest and
+verification report. Formula input text is retained with cell counts and examples.
+
+Bilingual paired-row reconstruction remains limited to simple grids and rejects unsupported complex
+features. Macro/VBA content (including renamed `.xlsx` packages), unsafe legacy conversion and repair
+requirements still fail. Unresolved image decisions still require review. Localized image replacement
+joins the monolingual atomic write and must preserve format, dimensions and verified replacement hash.
+
+Native verification checks coverage, formulas, numbers, rich formatting, original styles, merges,
+sheet structure and untouched part bytes before replacing an existing output. External data links
+are preserved without refresh; `office-validate` skips recalculation with an explicit warning for
+those workbooks. An unavailable Office runtime is also disclosed after static verification passes;
+detected damage still blocks delivery.

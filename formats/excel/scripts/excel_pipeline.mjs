@@ -7,7 +7,11 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { FileBlob, SpreadsheetFile, Workbook } from "./artifact_runtime.mjs";
+// The preservation path does not import/export the workbook through a document model.
+let FileBlob, SpreadsheetFile, Workbook;
+async function loadBilingualRuntime() {
+  if (!SpreadsheetFile) ({ FileBlob, SpreadsheetFile, Workbook } = await import("./artifact_runtime.mjs"));
+}
 
 const FIXED_ENGLISH_TRANSLATIONS = JSON.parse(readFileSync(
   new URL("../references/fixed-translations.en.json", import.meta.url), "utf8",
@@ -254,11 +258,12 @@ export function classifyRisk(meta = {}) {
 
 export function assertSupportedWorkbookRisk(meta = {}) {
   const extension = String(meta.extension ?? "").toLowerCase();
-  if (extension !== ".xlsx") {
-    throw new Error(`unsupported Excel workbook features: ${extension === ".xlsm" ? "macro" : "container"}`);
+  if (extension !== ".xlsx" || meta.features?.has_vba) {
+    throw new Error(`unsupported Excel workbook features: ${extension === ".xlsm" || meta.features?.has_vba ? "macro" : "container"}`);
   }
   const risk = classifyRisk(meta);
-  if (risk.mode !== "fast") {
+  const damage = risk.reasons.filter(reason => !["macro", "chart", "comment", "external-link", "unsupported-drawing", "image-uncertain"].includes(reason));
+  if (damage.length || (meta.outputMode === "bilingual" && risk.mode !== "fast")) {
     throw new Error(`unsupported Excel workbook features: ${risk.reasons.join(", ")}`);
   }
   return risk;
@@ -564,6 +569,21 @@ function runImageOperation(output, manifestPath, action) {
   if (result.status !== 0) throw new Error(`image ${action} failed: ${result.stderr || result.stdout}`);
 }
 
+function runNativeOperation(action, source, manifestPath, output) {
+  const python = process.env.CODEX_PYTHON || path.resolve(path.dirname(process.execPath), "..", "..", "python", "python.exe");
+  const script = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "excel_native_ooxml.py");
+  const args = [script, action, "--source", source];
+  if (manifestPath) args.push("--manifest", manifestPath);
+  if (output) args.push("--output", output);
+  const result = spawnSync(python, args, { encoding: "utf8", windowsHide: true, maxBuffer: 64 * 1024 * 1024 });
+  let report;
+  try { report = JSON.parse(result.stdout); } catch { /* Include process failure below. */ }
+  if (result.status !== 0 && !(action === "verify" && report?.passed === false)) {
+    throw new Error(`native Excel ${action} failed: ${report?.error || result.error?.message || result.stderr || result.stdout}`);
+  }
+  return report;
+}
+
 
 function parseOptions(argv) {
   const command = argv[0];
@@ -609,10 +629,21 @@ export async function inspectWorkbook(options) {
   assertSupportedWorkbookRisk({
     extension: path.extname(input),
     features: packageReport.features,
+    outputMode: config.outputMode,
   });
-  const workbook = await SpreadsheetFile.importXlsx(await FileBlob.load(input));
   const sheets = [];
   const occurrences = [];
+  let nativeWarnings = [];
+  let externalData = false;
+  if (config.outputMode === "monolingual") {
+    const native = runNativeOperation("inspect", input);
+    sheets.push(...native.sheets);
+    occurrences.push(...native.occurrences.map(item => ({ ...item, protected_tokens: protectedTokens(item.source) })));
+    nativeWarnings = native.warnings;
+    externalData = native.external_data;
+  } else {
+  await loadBilingualRuntime();
+  const workbook = await SpreadsheetFile.importXlsx(await FileBlob.load(input));
   const formulaCriteria = new Set();
   for (const sheet of workbook.worksheets.items) {
     for (const row of sheet.getUsedRange()?.formulas ?? []) {
@@ -654,6 +685,7 @@ export async function inspectWorkbook(options) {
       }
     }
   }
+  }
   const inventory = {
     schema_version: 1,
     source_file: input,
@@ -665,6 +697,8 @@ export async function inspectWorkbook(options) {
     features: packageReport.features,
     images: packageReport.images,
     image_uncertain: packageReport.features.unique_image_count > 0,
+    warnings: nativeWarnings,
+    external_data: externalData,
   };
   const inventoryPath = path.join(jobDir, "inventory.json");
   await writeJson(inventoryPath, inventory);
@@ -685,7 +719,7 @@ export async function prepareManifest(options) {
   const inventory = JSON.parse(await fs.readFile(path.join(jobDir, "inventory.json"), "utf8"));
   const built = buildTranslationUnits(inventory.occurrences);
   const autofill = applySafeAutofill(built.translation_units, inventory.target_language);
-  const warnings = [];
+  const warnings = [...(inventory.warnings ?? [])];
   const formulaUnits = new Set(built.occurrences.filter(item => item.formula_dependency).map(item => item.translation_unit_id));
   for (const unit of built.translation_units) {
     if (!formulaUnits.has(unit.id)) continue;
@@ -748,7 +782,9 @@ function validateTranslatedManifest(manifest, state) {
     if (!['translated', 'retain'].includes(unit.status)) throw new Error(`translation unit ${unit.id} is pending`);
     if (typeof unit.translation !== "string" || !unit.translation.trim()) throw new Error(`translation unit ${unit.id} has no translation`);
     if (unit.status === "retain" && unit.translation !== unit.source) throw new Error(`retained unit ${unit.id} changed source`);
-    for (const token of unit.protected_tokens ?? []) {
+    // Monolingual checks use the shared Python canonical technical-value checker
+    // inside the atomic writer, including equivalent unit spacing and notation.
+    for (const token of state.outputMode === "monolingual" ? [] : unit.protected_tokens ?? []) {
       if (!unit.translation.includes(token)) throw new Error(`translation unit ${unit.id} changed protected token ${token}`);
     }
     units.set(unit.id, unit);
@@ -854,82 +890,6 @@ export function assertImageDecisionsComplete(manifest = {}) {
   }
 }
 
-function mergedCellWidth(sheet, address) {
-  const cell = splitCellAddress(address);
-  let startColumn = columnNumber(cell.column);
-  let endColumn = startColumn;
-  let verticalMerge = false;
-  for (const merge of sheet.__getMergedCells?.() ?? []) {
-    const start = splitCellAddress(merge.startAddress);
-    const end = splitCellAddress(merge.endAddress);
-    const startNumber = columnNumber(start.column);
-    const endNumber = columnNumber(end.column);
-    if (cell.row >= start.row && cell.row <= end.row
-      && startColumn >= startNumber && startColumn <= endNumber) {
-      startColumn = startNumber;
-      endColumn = endNumber;
-      verticalMerge = start.row !== end.row;
-      break;
-    }
-  }
-  let width = 0;
-  for (let column = startColumn; column <= endColumn; column += 1) {
-    const value = sheet.getRange(`${columnLabel(column)}:${columnLabel(column)}`).format.columnWidth;
-    width += Number.isFinite(value) ? value : 8.43;
-  }
-  return { width, verticalMerge };
-}
-
-function applyMonolingualLayoutRepairs(workbook, manifest, units) {
-  const sheets = new Map(workbook.worksheets.items.map((sheet) => [sheet.name, sheet]));
-  const expandedRows = new Set();
-  const compressedRows = new Set();
-  for (const occurrence of manifest.occurrences) {
-    if (occurrence.kind !== "cell") continue;
-    const sheet = sheets.get(occurrence.sheet);
-    if (!sheet) continue;
-    const cell = splitCellAddress(occurrence.address);
-    const { width, verticalMerge } = mergedCellWidth(sheet, occurrence.address);
-    if (verticalMerge) continue;
-    const rowRange = sheet.getRange(`${cell.row}:${cell.row}`);
-    const currentHeight = Number.isFinite(rowRange.format.rowHeight)
-      ? rowRange.format.rowHeight : 15;
-    const text = renderOccurrenceTranslation(
-      occurrence, units.get(occurrence.translation_unit_id),
-    );
-    const neededHeight = estimateTranslatedRowHeight({
-      text, columnWidth: width, currentHeight,
-    });
-    if (shouldWrapTranslatedText({ text, columnWidth: width })) {
-      sheet.getRange(occurrence.address).format.wrapText = true;
-    }
-    if (neededHeight > currentHeight) {
-      rowRange.format.rowHeight = neededHeight;
-      expandedRows.add(`${sheet.name}!${cell.row}:${cell.row}`);
-    }
-  }
-  for (const sheet of workbook.worksheets.items) {
-    const used = sheet.getUsedRange();
-    if (!used?.address) continue;
-    const origin = rangeOrigin(used.address);
-    const mergedRows = verticalMergeRows(sheet.__getMergedCells?.() ?? []);
-    for (const row of findCompressibleBlankRows(
-      used.values ?? [], used.formulas ?? [], origin.row,
-    )) {
-      if (mergedRows.has(row)) continue;
-      const rowRange = sheet.getRange(`${row}:${row}`);
-      const currentHeight = Number.isFinite(rowRange.format.rowHeight)
-        ? rowRange.format.rowHeight : 15;
-      if (currentHeight > 8) {
-        rowRange.format.rowHeight = 8;
-        compressedRows.add(`${sheet.name}!${row}:${row}`);
-      }
-    }
-  }
-  return { expandedRows: expandedRows.size, compressedRows: compressedRows.size };
-}
-
-
 function normalizedMerges(sheet) {
   if (typeof sheet.__getMergedCells !== "function") return [];
   return sheet.__getMergedCells()
@@ -984,11 +944,20 @@ export async function verifyTranslations(options) {
   }
   let sourceWorkbook;
   let outputWorkbook;
+  let nativeReport;
+  if (state.outputMode === "monolingual") {
+    try {
+      nativeReport = runNativeOperation("verify", sourcePath, path.join(jobDir, "translation-manifest.json"), outputPath);
+      errors.push(...nativeReport.errors);
+    } catch (error) { errors.push(`output-open-failure:${error.message}`); }
+  } else {
   try {
+    await loadBilingualRuntime();
     sourceWorkbook = await SpreadsheetFile.importXlsx(await FileBlob.load(sourcePath));
     outputWorkbook = await SpreadsheetFile.importXlsx(await FileBlob.load(outputPath));
   } catch (error) {
     errors.push(`output-open-failure:${error.message}`);
+  }
   }
 
   if (sourceWorkbook && outputWorkbook) {
@@ -1061,6 +1030,8 @@ export async function verifyTranslations(options) {
     errors: [...new Set(errors)],
     source_sha256: state.sourceSha256,
     output_sha256: await sha256File(outputPath).catch(() => null),
+    warnings: nativeReport?.warnings ?? manifest.warnings ?? [],
+    ...(nativeReport ? { checked_cells: nativeReport.checked_cells, preserved_parts: nativeReport.preserved_parts } : {}),
   };
   const reportPath = path.join(jobDir, "verification.json");
   await writeJson(reportPath, report);
@@ -1108,7 +1079,12 @@ export async function officeValidateOutput(options, officeRunner = runExcelOffic
     throw new Error("output changed since verification");
   }
   const sourcePath = path.resolve(state.outputPaths.source);
-  const report = await officeRunner(sourcePath, outputPath, state.outputMode);
+  const inventory = await fs.readFile(path.join(jobDir, "inventory.json"), "utf8")
+    .then(JSON.parse).catch(error => { if (error.code === "ENOENT") return {}; throw error; });
+  const report = inventory.external_data || inventory.features?.external_link_count > 0
+    ? { passed: false, status: "unavailable", code: "office-unavailable",
+      message: "Excel recalculation skipped: external data links were preserved without execution; native static verification passed" }
+    : await officeRunner(sourcePath, outputPath, state.outputMode);
   const unavailable = report?.status === "unavailable" && report.code === "office-unavailable";
   if (!report?.passed && !unavailable) throw new Error("Microsoft Excel validation did not pass");
   if (unavailable) {
@@ -1132,40 +1108,30 @@ export async function applyTranslations(options) {
   if (nextStage(state) !== "translate") throw new Error(`apply requires stage translate; found ${nextStage(state)}`);
   if (await sha256File(input) !== state.sourceSha256) throw new Error("input workbook hash changed since inspection");
   const inventory = JSON.parse(await fs.readFile(path.join(jobDir, "inventory.json"), "utf8"));
-  assertSupportedWorkbookRisk({ extension: path.extname(input), features: inventory.features });
+  assertSupportedWorkbookRisk({ extension: path.extname(input), features: inventory.features, outputMode: state.outputMode });
   const manifestPath = path.join(jobDir, "translation-manifest.json");
   const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
   const units = validateTranslatedManifest(manifest, state);
   state = completeStage(state, "translate", { manifest: await sha256File(manifestPath) });
   state = completeStage(state, "validate", { manifest: await sha256File(manifestPath) });
 
-  const workbook = await SpreadsheetFile.importXlsx(await FileBlob.load(input));
-  const sheets = new Map(workbook.worksheets.items.map((sheet) => [sheet.name, sheet]));
   const changedSheets = new Set();
   let layoutRepairs = { expandedRows: 0, compressedRows: 0 };
-  let outputWorkbook = workbook;
   if (state.outputMode === "bilingual") {
     const safety = classifyBilingualGrid(inventory);
     if (!safety.safe) throw new Error(`bilingual strict fallback required: ${safety.reasons.join(", ")}`);
-    outputWorkbook = await buildBilingualWorkbook(workbook, manifest, units);
+    await loadBilingualRuntime();
+    const workbook = await SpreadsheetFile.importXlsx(await FileBlob.load(input));
+    const outputWorkbook = await buildBilingualWorkbook(workbook, manifest, units);
     for (const occurrence of manifest.occurrences) changedSheets.add(occurrence.sheet);
+    await fs.mkdir(path.dirname(output), { recursive: true });
+    const blob = await SpreadsheetFile.exportXlsx(outputWorkbook);
+    await blob.save(output);
+    if (manifest.images?.some(image => image.status === "localized")) runImageOperation(output, manifestPath, "apply");
   } else {
-    for (const occurrence of manifest.occurrences) {
-      if (occurrence.kind !== "cell") continue;
-      const sheet = sheets.get(occurrence.sheet);
-      if (!sheet) throw new Error(`worksheet not found: ${occurrence.sheet}`);
-      sheet.getRange(occurrence.address).values = [[renderOccurrenceTranslation(
-        occurrence, units.get(occurrence.translation_unit_id),
-      )]];
-      changedSheets.add(occurrence.sheet);
-    }
-    layoutRepairs = applyMonolingualLayoutRepairs(outputWorkbook, manifest, units);
-  }
-  await fs.mkdir(path.dirname(output), { recursive: true });
-  const blob = await SpreadsheetFile.exportXlsx(outputWorkbook);
-  await blob.save(output);
-  if (manifest.images?.some(image => image.status === "localized")) {
-    runImageOperation(output, manifestPath, "apply");
+    const native = runNativeOperation("apply", input, manifestPath, output);
+    for (const sheet of native.changed_sheets) changedSheets.add(sheet);
+    layoutRepairs = native;
   }
   state = completeStage(state, "apply", { output: await sha256File(output) });
   state.outputPaths = { ...state.outputPaths, output };

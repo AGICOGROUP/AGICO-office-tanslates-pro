@@ -16,6 +16,17 @@ import validate_manifest  # noqa: E402
 
 
 class ManifestValidatorTests(unittest.TestCase):
+    def test_safe_unit_spacing_is_accepted_but_values_signs_and_unit_case_are_not(self):
+        payload = self.make_v2_manifest()
+        for item in payload["translation_units"] + payload["occurrences"]:
+            item["source"] = "电机额定功率为45kW"
+            item["protected_tokens"] = ["45kW"]
+        payload["translation_units"][0]["translation"] = "The motor is rated at 45 kW"
+        self.assertTrue(validate_manifest.validate(payload)["passed"])
+        for target in ["The motor is rated at 46 kW", "The motor is rated at 45 MW", "The motor is rated at 45 KW"]:
+            payload["translation_units"][0]["translation"] = target
+            self.assertFalse(validate_manifest.validate(payload)["passed"], target)
+
     def make_v2_manifest(self):
         return {
             "schema_version": 2,
