@@ -82,7 +82,9 @@ def merge_assets(manifest, decisions, format_name):
         key = decision.get("id")
         group = groups.get(key)
         try:
-            if group is None or decision.get("sha256") != group["sha256"]:
+            # The current job already resolves this ID to its original asset.
+            # A copied decision may omit the redundant digest, but cannot override it.
+            if group is None or ("sha256" in decision and decision["sha256"] != group["sha256"]):
                 raise ValueError("image identity changed")
             field = "decision" if format_name == "ppt" else "status"
             value = decision.get(field)

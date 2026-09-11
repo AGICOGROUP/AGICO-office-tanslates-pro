@@ -15,17 +15,22 @@ From this adapter directory:
 python ../../scripts/office_pipeline.py prepare <source> --job-dir <job> --target-language <language> --output-mode monolingual
 python ../../scripts/office_pipeline.py merge --job-dir <job> --decisions <batch.json>
 python ../../scripts/office_pipeline.py finalize --job-dir <job> --output <translated.xlsx>
-python ../../scripts/office_pipeline.py status --job-dir <job>
 ```
 
-Use `--output-mode bilingual` for paired translation rows. Read only `translation-worklist.json` and
+Use `--output-mode bilingual` for paired translation rows. Read
+[translation decisions](../../references/translation-decisions.md), then `translation-worklist.json` and
 `relevant-glossary.json`. Follow its batches, keeping `job_identity`, IDs and source strings intact.
-Fill `translation` and merge completed subsets. Accepted work persists; only missing or invalid items
-need repair. Finalize can merge the default worklist itself. Repeated prepare/finalize resumes work.
+Fill `translation` in the supplied worklist and merge completed subsets. For a small batch, fill the
+default worklist and call finalize directly; it performs merge itself. When using explicit merge,
+continue to finalize only when its JSON says `ready: true`; exit code 0 alone does not mean ready.
+Repair only rejected items from the refreshed worklist. Accepted work persists. Repeated
+prepare/finalize resumes work; use status only to recover uncertain or interrupted state.
 
 Existing jobs can still use `scripts/excel_fast_pipeline.py prepare` and
 `scripts/excel_fast_pipeline.py finalize`. Runtimes resolve from bundled dependencies; do not install
-packages or create runtime junctions per job. Timings are in `stage-timings.json` and `office-job.json`.
+packages or create runtime junctions per job. `stage-timings.json` measures pipeline commands, not
+end-to-end translation, image generation, model work or waiting. Use actual task/tool timestamps
+when investigating total latency; do not describe pipeline milliseconds as total task time.
 
 ## Translation and preservation
 
@@ -48,7 +53,9 @@ need a supported layout choice; never silently discard objects or substitute mon
 
 Read `references/image-text-localization.md` only when images exist. Review each unique image once;
 choose `reviewed`, `retain` or `localized`. Localization requires an absolute `replacement_path` to
-an edited PNG/JPEG of the original format and dimensions. The writer replaces every matching part
+an edited PNG/JPEG of the original format and dimensions. Start required image editing after reading
+its labels, then use asynchronous generation time to translate/review/merge cells. Do not leave the
+text batch untouched while repeatedly waiting for images. The writer replaces every matching part
 and verifies actual bytes; status alone is not translation. Disclose labels left untranslated.
 
 The source stays unchanged. `.xls` converts once to a working `.xlsx`. Corrupt, encrypted and

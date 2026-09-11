@@ -7,6 +7,24 @@ from translation_assets import merge_assets
 
 
 class TranslationAssetsTests(unittest.TestCase):
+    def test_known_image_id_can_omit_redundant_hash(self):
+        digest = "a" * 64
+        manifest = {"images": [{"id": "img-" + digest[:16], "sha256": digest,
+                                "status": "manual-review"}]}
+        decision = {"id": "img-" + digest[:16], "status": "retain"}
+        self.assertEqual(merge_assets(manifest, [decision], "excel"), [])
+        self.assertEqual(manifest["images"][0]["status"], "retain")
+        self.assertEqual(manifest["images"][0]["sha256"], digest)
+
+    def test_missing_hash_does_not_accept_unknown_id_or_explicit_hash_conflict(self):
+        manifest = {"images": [{"id": "img-a", "sha256": "a" * 64,
+                                "status": "manual-review"}]}
+        for decision in ({"id": "img-unknown", "status": "retain"},
+                         {"id": "img-a", "sha256": "b" * 64, "status": "retain"}):
+            with self.subTest(decision=decision):
+                self.assertTrue(merge_assets(manifest, [decision], "excel"))
+                self.assertEqual(manifest["images"][0]["status"], "manual-review")
+
     def test_overlay_sets_preservation_metadata_and_skip_removes_old_shapes(self):
         manifest = {"image_groups": [{"sha256": "a"*64, "decision": "pending", "overlay_ids": []}], "overlays": []}
         decision = {"id": "a"*64, "sha256": "a"*64, "decision": "overlay", "overlays": [{"id": "label", "translation": "Cooler",

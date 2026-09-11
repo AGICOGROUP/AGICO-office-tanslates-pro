@@ -33,11 +33,11 @@ def run_adapter(format_name, *arguments):
     for line in reversed(completed.stdout.splitlines()):
         try:
             report = json.loads(line)
-            if isinstance(report, dict):
+            if isinstance(report, dict) and report:
                 return report
         except json.JSONDecodeError:
             continue
-    return {}
+    raise RuntimeError(f"{format_name} adapter returned no structured result; rerun the failed command")
 
 
 def paths(job_dir):
@@ -46,6 +46,9 @@ def paths(job_dir):
 
 
 def check_source(state):
+    if (state.get("prepared") is not True or not state.get("working_source")
+            or not state.get("working_sha256")):
+        raise ValueError("prepare is incomplete; rerun office_pipeline.py prepare with the same source and job directory")
     source = Path(state["source"])
     if not source.is_file() or file_hash(source) != state["source_sha256"]:
         raise ValueError("source file changed since preparation; use a new job directory")
@@ -149,9 +152,9 @@ def finalize_job(job_dir, output, decisions=None, visual_review_passed=False):
     job, state_path, manifest_path, work_path = paths(job_dir)
     state = read_json(state_path)
     output = Path(output).resolve()
+    check_source(state)
     if output in {Path(state["source"]).resolve(), Path(state["working_source"]).resolve()}:
         raise ValueError("output must not overwrite the original source or working copy")
-    check_source(state)
     format_name = state["format"]
     expected_suffix = {"word": ".docx", "excel": ".xlsx", "ppt": ".pptx"}[format_name]
     if output.suffix.lower() != expected_suffix:
@@ -246,7 +249,7 @@ def status_job(job_dir):
     manifest = read_json(manifest_path)
     result = summary(job, state, manifest)
     delivered = state.get("stages", {}).get("deliver", {})
-    if delivered:
+    if delivered and not result["pending_count"] and not result["pending_images"]:
         output = Path(delivered["result"]["output"])
         key = fingerprint({"manifest": manifest, "output": str(output)})
         if output.is_file() and file_hash(output) == delivered.get("output_sha256") and key == delivered.get("key"):

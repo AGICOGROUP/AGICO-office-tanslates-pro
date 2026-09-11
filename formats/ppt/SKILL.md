@@ -18,7 +18,8 @@ python ../../scripts/office_pipeline.py finalize --job-dir <job> --output <trans
 python ../../scripts/office_pipeline.py finalize --job-dir <job> --output <translated.pptx> --visual-review-passed
 ```
 
-Read only `translation-worklist.json` and `relevant-glossary.json` initially. Translate complete
+Read [translation decisions](../../references/translation-decisions.md), then
+`translation-worklist.json` and `relevant-glossary.json` initially. Translate complete
 paragraphs and table cells using the returned batches and context. Preserve `job_identity`, IDs and
 source text. Merge completed subsets; successful decisions remain saved and only missing or invalid
 items need repair. Small jobs may fill the default worklist and finalize directly.

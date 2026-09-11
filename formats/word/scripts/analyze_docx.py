@@ -18,7 +18,7 @@ W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 XML_NS = "http://www.w3.org/XML/1998/namespace"
 NS = {"w": W_NS}
 W = f"{{{W_NS}}}"
-TEXT_PART = re.compile(r"word/(document|header\d+|footer\d+|footnotes|endnotes|comments)\.xml$")
+TEXT_PART = re.compile(r"word/(document|header\d+|footer\d+|footnotes|endnotes|comments|numbering)\.xml$")
 PROTECTED_TOKEN = re.compile(
     r"https?://\S+|www\.\S+|\b\d+(?:[.,]\d+)?\s*(?:%|°C|℃|kW|MW|V|kV|A|mA|Pa|kPa|MPa|"
     r"mm|cm|m|km|kg|t|t/h|m[³3]/h|Nm[³3]/min|rpm|r/min)(?![A-Za-z0-9])|\b[A-Z][A-Z0-9._/-]*\d[A-Z0-9._/-]*\b",
@@ -35,6 +35,8 @@ def package_has_vba(archive: ZipFile, names: set[str]) -> bool:
 
 
 def paragraph_text(paragraph: ET.Element) -> str:
+    if paragraph.tag == f"{W}lvlText":
+        return paragraph.get(f"{W}val", "")
     pieces: list[str] = []
     for node in paragraph.iter():
         if (
@@ -155,8 +157,12 @@ def analyze(path: Path) -> dict:
                         if count > 1:
                             reasons.add("multi_column_sections")
 
-                for index, paragraph in enumerate(root.iter(f"{W}p"), start=1):
+                nodes = root.iter(f"{W}lvlText") if part_name == 'word/numbering.xml' else root.iter(f"{W}p")
+                for index, paragraph in enumerate(nodes, start=1):
                     text = paragraph_text(paragraph)
+                    if part_name == 'word/numbering.xml' and not any(
+                            char.isalpha() for char in re.sub(r'%[1-9]', '', text)):
+                        continue
                     if not text:
                         continue
                     style = paragraph.find(f"{W}pPr/{W}pStyle")
@@ -180,6 +186,9 @@ def analyze(path: Path) -> dict:
         item["context"] = {"part": item["part"], "style": item["style"],
                            "before": before.get("text", "")[-160:] if before.get("part") == item["part"] else "",
                            "after": after.get("text", "")[:160] if after.get("part") == item["part"] else ""}
+        if item['part'] == 'word/numbering.xml':
+            item['context']['kind'] = 'automatic_numbering_template'
+            item['context']['instruction'] = 'Translate label words; preserve each %1..%9 placeholder exactly. Word generates the number.'
     return {
         "source": str(path.resolve()),
         "sha256": hashlib.sha256(raw).hexdigest().upper(),

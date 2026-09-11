@@ -33,7 +33,7 @@ W_R = f"{{{W_NS}}}r"
 W_T = f"{{{W_NS}}}t"
 W_TAB = f"{{{W_NS}}}tab"
 W_BREAKS = {f"{{{W_NS}}}br", f"{{{W_NS}}}cr"}
-TEXT_PARTS = ("word/document.xml", "word/header", "word/footer", "word/footnotes.xml", "word/endnotes.xml", "word/comments.xml")
+TEXT_PARTS = ("word/document.xml", "word/header", "word/footer", "word/footnotes.xml", "word/endnotes.xml", "word/comments.xml", "word/numbering.xml")
 
 
 def is_text_part(name: str) -> bool:
@@ -50,6 +50,8 @@ def local_content_nodes(paragraph: etree._Element) -> list[etree._Element]:
 
 
 def paragraph_text(paragraph: etree._Element) -> str:
+    if paragraph.tag == f"{{{W_NS}}}lvlText":
+        return paragraph.get(f"{{{W_NS}}}val", "")
     pieces = []
     for node in local_content_nodes(paragraph):
         if node.tag == W_T:
@@ -87,6 +89,19 @@ def remove_cjk_width_controls(node: etree._Element, source: str, target: str) ->
 
 def replace_paragraph_text(paragraph: etree._Element, source: str, target: str) -> None:
     if target == source:
+        return
+    if paragraph.tag == f"{{{W_NS}}}lvlText":
+        if Counter(re.findall(r'%[1-9]', source)) != Counter(re.findall(r'%[1-9]', target)):
+            raise ValueError('numbering translation changed dynamic placeholders')
+        paragraph.set(f"{{{W_NS}}}val", target)
+        number_format = paragraph.getparent().find(f"{{{W_NS}}}numFmt")
+        if (number_format is not None and re.search(r'[A-Za-z]', target)
+                and not re.search(r'[\u3400-\u9fff]', target)
+                and number_format.get(f"{{{W_NS}}}val") in {
+                    'chineseCounting', 'chineseCountingThousand', 'chineseLegalSimplified',
+                    'ideographTraditional', 'ideographLegalTraditional', 'japaneseCounting',
+                    'japaneseLegal', 'japaneseDigitalTenThousand'}):
+            number_format.set(f"{{{W_NS}}}val", 'decimal')
         return
     nodes = local_content_nodes(paragraph)
     text_indexes = [index for index, node in enumerate(nodes) if node.tag == W_T and (node.text or "").strip()]
@@ -156,6 +171,8 @@ def prepare(source: Path, job_dir: Path, target_language: str) -> Path:
         if not (job_dir / "relevant-glossary.json").exists():
             atomic_json(job_dir / "relevant-glossary.json", lookup_terms(
                 [unit["source"] for unit in previous["units"]], target_language=target_language))
+        print(json.dumps({"stage": "prepared", "units": len(previous["units"]),
+                          "manifest": str(path.resolve()), "resumed": True}, ensure_ascii=False))
         return path
     if source.suffix.lower() == ".doc":
         working = job_dir / "source-working.docx"
@@ -230,7 +247,8 @@ def apply(manifest_path: Path, output: Path) -> None:
                     parser = etree.XMLParser(remove_blank_text=False, resolve_entities=False)
                     root = etree.fromstring(data, parser)
                     changed = False
-                    for index, paragraph in enumerate(root.iter(W_P), 1):
+                    nodes = root.iter(f"{{{W_NS}}}lvlText") if info.filename == 'word/numbering.xml' else root.iter(W_P)
+                    for index, paragraph in enumerate(nodes, 1):
                         source_text = paragraph_text(paragraph)
                         unit = mapping.get((info.filename, index))
                         if unit is not None:

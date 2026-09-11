@@ -18,6 +18,38 @@ W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 
 
 class WordPipelineContractTests(unittest.TestCase):
+    def test_numbering_templates_are_translated_and_verified(self):
+        pipeline = self.load_pipeline()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = self.make_docx(root)
+            numbering = f'<w:numbering xmlns:w="{W_NS}"><w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="japaneseCounting"/><w:lvlText w:val="第%1章"/></w:lvl></w:abstractNum></w:numbering>'
+            with ZipFile(source, 'a') as archive:
+                archive.writestr('word/numbering.xml', numbering)
+            path = pipeline.prepare(source, root / 'job', 'en')
+            manifest = json.loads(path.read_text(encoding='utf-8'))
+            labels = [u for u in manifest['units'] if u['source'] == '第%1章']
+            self.assertEqual(len(labels), 1)
+            for unit in manifest['units']:
+                unit['target'] = 'Chapter %1' if unit['source'] == '第%1章' else unit['source']
+            path.write_text(json.dumps(manifest), encoding='utf-8')
+            output = root / 'out.docx'
+            pipeline.apply(path, output)
+            pipeline.validate(output, path)
+            with ZipFile(output) as archive:
+                xml = archive.read('word/numbering.xml').decode()
+            self.assertIn('Chapter %1', xml)
+            self.assertIn('w:val="decimal"', xml)
+            self.assertNotIn('japaneseCounting', xml)
+            labels[0]['target'] = 'Chapter 1'
+            path.write_text(json.dumps(manifest), encoding='utf-8')
+            with self.assertRaisesRegex(ValueError, 'placeholders'):
+                pipeline.apply(path, root / 'bad.docx')
+            labels[0]['target'] = 'Chapter %1'
+            path.write_text(json.dumps(manifest), encoding='utf-8')
+            with self.assertRaisesRegex(ValueError, 'missing|changed'):
+                pipeline.validate(source, path)
+
     def test_contextual_duplicates_can_receive_different_translations(self):
         pipeline = self.load_pipeline()
         with tempfile.TemporaryDirectory() as directory:

@@ -116,6 +116,83 @@ class TranslationCoreTests(unittest.TestCase):
             _, report = merge_decisions(manifest, work, "word")
             self.assertFalse(report["ready"], source)
 
+    def test_chinese_target_rejects_untranslated_english_language(self):
+        manifest = {"source_sha256": "a"*64, "target_language": "zh-CN", "units": [
+            {"id": 1, "source": "BASIC REQUIREMENTS", "target": ""},
+            {"id": 2, "source": "WELDING", "target": ""},
+            {"id": 3, "source": "ISO 9001", "target": ""},
+            {"id": 4, "source": "96 m3/m2h", "target": ""},
+        ]}
+        work = build_worklist(manifest, "word")
+        for item in work["translation_units"]:
+            item["translation"] = item["source"]
+        merged, report = merge_decisions(manifest, work, "word")
+        self.assertEqual([item["id"] for item in report["rejected"]], [1, 2])
+        self.assertEqual(merged["units"][2]["target"], "ISO 9001")
+        self.assertEqual(merged["units"][3]["target"], "96 m3/m2h")
+
+    def test_language_checks_handle_changed_spelling_short_labels_and_existing_chinese(self):
+        cases = [
+            ("BASIC REQUIREMENTS", "Basic requirements.", False),
+            ("FANS", "FANS", False),
+            ("WELDING", "WELDING。", False),
+            ("DRIVE\nSAFETY", "驱动装置\nSAFETY", False),
+            ("风机 ISO 9001", "风机 ISO 9001", True),
+            ("ISO 9001 / ASTM A36", "ISO 9001 / ASTM A36", True),
+            ("96 m3/m2h", "96 m3/m2h", True),
+            ("Air Volume\t:\t2.5 (m3/min)/m2", "风量\t:\t2.5 (m3/min)/m2", True),
+            ("Gearboxes\t0.15 million hours.", "齿轮箱\t0.15 million hours。", False),
+            ("Fans", "风机", True),
+        ]
+        for source, target, expected in cases:
+            with self.subTest(source=source, target=target):
+                manifest = {"target_language": "zh-CN", "units": [{"id": 1, "source": source, "target": ""}]}
+                work = build_worklist(manifest, "word")
+                work["translation_units"][0]["translation"] = target
+                _, report = merge_decisions(manifest, work, "word")
+                self.assertEqual(report["ready"], expected)
+
+    def test_retention_needs_an_explicit_reason_and_survives_resume(self):
+        manifest = {"target_language": "zh-CN", "units": [{"id": 1, "source": "BEUMER", "target": ""}]}
+        work = build_worklist(manifest, "word")
+        item = work["translation_units"][0]
+        item.update(translation="BEUMER", status="retain")
+        _, report = merge_decisions(manifest, work, "word")
+        self.assertFalse(report["ready"])
+        item["reason"] = "Equipment manufacturer's registered brand; retain official spelling."
+        merged, report = merge_decisions(manifest, work, "word")
+        self.assertTrue(report["ready"])
+        self.assertEqual(build_worklist(merged, "word")["pending_count"], 0)
+        item.update(translation="伯曼", status="translated")
+        merged, report = merge_decisions(merged, work, "word")
+        self.assertTrue(report["ready"])
+        self.assertNotIn("reason", merged["units"][0])
+
+    def test_automatic_code_retention_does_not_claim_human_review(self):
+        manifest = {"target_language": "zh-CN", "units": [{"id": 1, "source": "ISO 9001", "target": ""}]}
+        work = build_worklist(manifest, "word")
+        work["translation_units"][0]["translation"] = "ISO 9001"
+        merged, report = merge_decisions(manifest, work, "word")
+        self.assertTrue(report["ready"])
+        self.assertNotIn("Reviewed", merged["units"][0].get("reason", ""))
+
+    def test_all_formats_retry_only_untranslated_heading(self):
+        for fmt, collection, src_key, dst_key in [
+                ("word", "units", "source", "target"),
+                ("excel", "translation_units", "source", "translation"),
+                ("ppt", "translation_units", "source_text", "translation")]:
+            with self.subTest(format=fmt):
+                manifest = {"target_language": "zh-CN", collection: [
+                    {"id": 1, src_key: "BASIC REQUIREMENTS", dst_key: ""},
+                    {"id": 2, src_key: "Fans", dst_key: ""}]}
+                work = build_worklist(manifest, fmt)
+                work["translation_units"][0]["translation"] = "Basic requirements"
+                work["translation_units"][1]["translation"] = "风机"
+                merged, report = merge_decisions(manifest, work, fmt)
+                self.assertEqual(report["accepted"], [2])
+                self.assertEqual([u["id"] for u in build_worklist(merged, fmt)["translation_units"]], [1])
+                self.assertEqual(merged[collection][1][dst_key], "风机")
+
 
 if __name__ == "__main__":
     unittest.main()

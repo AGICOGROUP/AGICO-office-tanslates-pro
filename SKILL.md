@@ -9,7 +9,11 @@ Route each uploaded file to exactly one format adapter.
 
 All adapters share `references/水泥专业名词中英对照.md`; do not copy, reinstall or validate the
 whole repository during an ordinary translation. Read the selected adapter and the references it
-requires, run its translation workflow, and deliver when that workflow completes. Gate on concrete
+requires. The selected adapter's workflow and linked translation-decision rules are required for all
+executors and helper scripts; do not replace them with an improvised workflow or hand-edited success
+state. Translate only with the current model's native capability and the matched cement terminology subset;
+never send document content to a third-party translation service, website, API, local translation
+engine or browser translator. Deliver when that workflow completes and its required reviews are performed. Gate on concrete
 content loss, technical-value damage, unreadable output or serious layout defects, not cosmetic
 imperfection or administrative metadata. Disclose minor limitations with usable output; do not add
 repeat checks or approval steps without a specific unresolved risk. Development tests

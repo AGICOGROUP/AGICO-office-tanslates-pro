@@ -4,6 +4,7 @@ __pycache__/
 work/
 renders/
 outputs/
+.translation-jobs/
 
 # Customer Office artifacts belong outside the source repository.
 /*.doc

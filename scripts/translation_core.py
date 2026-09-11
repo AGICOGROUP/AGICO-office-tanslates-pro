@@ -56,9 +56,42 @@ def manifest_identity(manifest: dict, format_name: str) -> str:
                                   for unit in manifest.get(collection, [])]})
 
 
-def decision_error(source: str, target: str, format_name: str, protected_tokens=()) -> str | None:
+def untranslated_natural_language(source: str, target: str, target_language: str | None) -> bool:
+    """Flag English-only segments for Chinese output, not semantic quality.
+
+    Casing never establishes that a word is a code. Keep narrow exemptions for
+    standards, identifiers and quantities; ambiguous names require a decision.
+    """
+    if not str(target_language or "").lower().startswith("zh"):
+        return False
+    for segment in re.split(r"[\t\r\n]+", target):
+        if re.search(r"[\u3400-\u9fff]", segment):
+            continue
+        segment = re.sub(r"https?://\S+|www\.\S+", "", segment)
+        segment = re.sub(r"\b(?:ISO|IEC|EN|DIN|ASTM|ASME|ANSI|BS|GB)\s*[-/]?\s*[A-Z]*\d[\w:./-]*", "", segment)
+        segment = re.sub(r"\b[A-Z][A-Z0-9._/-]*\d[A-Z0-9._/-]*\b", "", segment)
+        # A quantity may contain compound units and parentheses, e.g.
+        # 2.5 (m3/min)/m2. Do not exempt spelled-out prose such as million hours.
+        unit_free = re.sub(r"(?<![A-Za-z])(?:Nm|kN|N|mm|cm|km|m|kg|mg|kW|MW|W|kPa|MPa|Pa|kV|V|mA|A|Hz|rpm|min|t|h|s)(?![A-Za-z])", "", segment)
+        if re.search(r"\d", segment) and not re.search(r"[A-Za-z]", unit_free):
+            continue
+        if re.search(r"[A-Za-z]{2,}", segment):
+            return True
+    return False
+
+
+def reviewed_retention(source, target, decision):
+    reason = decision.get("reason")
+    return (source == target and decision.get("status") == "retain"
+            and isinstance(reason, str) and bool(reason.strip())
+            and reason != "Reviewed: source is appropriate in the target document")
+
+
+def decision_error(source: str, target: str, format_name: str, protected_tokens=(), target_language=None, retained=False) -> str | None:
     if not isinstance(target, str) or not target.strip():
         return "translation required"
+    if not retained and untranslated_natural_language(source, target, target_language):
+        return "possible untranslated English segment: translate it, or explicitly retain unchanged text with a specific reason"
     if technical_mismatch(source, target, protected_tokens):
         return "technical values, units or identifiers changed; preserve the source values"
     if format_name == "word" and re.findall(r"[\t\n]", source) != re.findall(r"[\t\n]", target):
@@ -75,7 +108,9 @@ def build_worklist(manifest: dict, format_name: str, max_chars: int = 12000) -> 
     units, batches, ids, size = [], [], [], 0
     for unit in manifest.get(collection, []):
         target = unit.get(target_field, "")
-        error = unit.get("translation_error") or decision_error(unit[source_field], target, format_name, unit.get("protected_tokens", []))
+        error = unit.get("translation_error") or decision_error(
+            unit[source_field], target, format_name, unit.get("protected_tokens", []), manifest.get("target_language"),
+            reviewed_retention(unit[source_field], target, unit))
         if not error:
             continue
         record = {"id": unit["id"], "source": unit[source_field], "translation": target,
@@ -135,7 +170,8 @@ def merge_decisions(manifest: dict, worklist: dict, format_name: str) -> tuple[d
         elif decision.get("source") != unit[source_field]:
             error = "source text changed; edit translation only"
         else:
-            error = decision_error(unit[source_field], target, format_name, unit.get("protected_tokens", []))
+            error = decision_error(unit[source_field], target, format_name, unit.get("protected_tokens", []), result.get("target_language"),
+                                   reviewed_retention(unit[source_field], target, decision))
         if error:
             rejected.append({"id": unit_id, "error": error})
             if unit is not None:
@@ -143,8 +179,9 @@ def merge_decisions(manifest: dict, worklist: dict, format_name: str) -> tuple[d
             continue
         unit[target_field] = target
         unit["status"] = "retain" if target == unit[source_field] else "translated"
-        if unit["status"] == "retain":
-            unit["reason"] = decision.get("reason") or "Reviewed: source is appropriate in the target document"
+        unit.pop("reason", None)
+        if unit["status"] == "retain" and reviewed_retention(unit[source_field], target, decision):
+            unit["reason"] = decision["reason"].strip()
         unit.pop("translation_error", None)
         accepted.append(unit_id)
     remaining = build_worklist(result, format_name)["pending_count"]

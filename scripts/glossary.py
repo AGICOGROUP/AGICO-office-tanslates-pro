@@ -43,14 +43,18 @@ def relevant_entries(text: str, entries) -> list[dict]:
     normalized = text.strip()
     exact = [entry for entry in entries if entry["source"].casefold() == normalized.casefold()]
     if exact:
-        return [{**entry, "match_type": "exact", "offset": 0} for entry in exact]
+        return [{key: value for key, value in {**entry, "match_type": "exact", "offset": 0}.items()
+                 if key != "_pattern"} for entry in exact]
     candidates = []
     for entry in entries:
         term = entry["source"]
-        expression = re.escape(term)
-        if term.isascii():
-            expression = r"(?<![A-Za-z0-9])" + expression + r"(?![A-Za-z0-9])"
-        for match in re.finditer(expression, normalized, re.IGNORECASE):
+        pattern = entry.get("_pattern")
+        if pattern is None:
+            expression = re.escape(term)
+            if term.isascii():
+                expression = r"(?<![A-Za-z0-9])" + expression + r"(?![A-Za-z0-9])"
+            pattern = re.compile(expression, re.IGNORECASE)
+        for match in pattern.finditer(normalized):
             candidates.append((match.start(), match.end(), entry))
     candidates.sort(key=lambda item: (-(item[1] - item[0]), item[0], item[2]["source"]))
     selected = []
@@ -59,7 +63,8 @@ def relevant_entries(text: str, entries) -> list[dict]:
             continue
         selected.append((start, end, entry))
     selected.sort(key=lambda item: item[0])
-    return [{**entry, "match_type": "contained", "offset": start} for start, _, entry in selected]
+    return [{key: value for key, value in {**entry, "match_type": "contained", "offset": start}.items()
+             if key != "_pattern"} for start, _, entry in selected]
 
 
 def lookup_terms(texts: list[str], repo_root=None, target_language: str = "en") -> dict:
@@ -72,9 +77,15 @@ def lookup_terms(texts: list[str], repo_root=None, target_language: str = "en") 
         for entry in entries:
             for english in dict.fromkeys([entry["target"], *entry.get("aliases", [])]):
                 candidates.append({**entry, "source": english, "target": entry["source"]})
+    compiled = []
+    for entry in candidates:
+        expression = re.escape(entry["source"])
+        if entry["source"].isascii():
+            expression = r"(?<![A-Za-z0-9])" + expression + r"(?![A-Za-z0-9])"
+        compiled.append({**entry, "_pattern": re.compile(expression, re.IGNORECASE)})
     matches = {}
     for index, text in enumerate(texts):
-        for match in relevant_entries(text, candidates):
+        for match in relevant_entries(text, compiled):
             key = (match["source"], match["target"])
             record = matches.setdefault(key, {key: value for key, value in match.items() if key != "offset"})
             indices = record.setdefault("text_indices", [])

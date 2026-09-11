@@ -3,15 +3,34 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 import unittest
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
 GLOSSARY_NAME = "水泥专业名词中英对照.md"
 sys.path.insert(0, str(ROOT / "scripts"))
+import glossary
 from glossary import parse_glossary
+from translation_core import untranslated_natural_language
 
 
 class RootSkillStructureTests(unittest.TestCase):
+    def test_chinese_translation_allows_structural_force_units(self):
+        self.assertFalse(untranslated_natural_language(
+            "Floor panels on supports\t13 kN/m2",
+            "直接铺设在支承件上的楼板\t13 kN/m2",
+            "zh-CN",
+        ))
+
+    def test_glossary_patterns_are_compiled_once_per_lookup(self):
+        entries = [{"source": "cement mill", "target": "水泥磨"},
+                   {"source": "fan", "target": "风机"}]
+        with mock.patch.object(glossary, "parse_glossary", return_value=entries), \
+             mock.patch.object(glossary.re, "compile", wraps=glossary.re.compile) as compiler, \
+             mock.patch.object(glossary, "resolve_glossary", return_value={"exists": True, "path": __file__}):
+            glossary.lookup_terms(["cement mill fan"] * 20)
+        self.assertEqual(compiler.call_count, len(entries))
+
     def test_python_caches_are_excluded_from_the_repository(self):
         ignore_file = ROOT / ".gitignore"
         self.assertTrue(ignore_file.is_file())
@@ -72,6 +91,13 @@ class RootSkillStructureTests(unittest.TestCase):
         self.assertEqual("Vertical roller mill", terms["立磨"]["target"])
         self.assertIn("Roller Mill", terms["立磨"]["aliases"])
         self.assertTrue(terms["护套"]["context"])
+
+    def test_translation_policy_forbids_third_party_services(self):
+        policy = (ROOT / "references" / "translation-decisions.md").read_text(encoding="utf-8")
+        self.assertIn("Do not send document content to third-party translation services", policy)
+        self.assertIn("Use the current model's native translation capability", policy)
+        self.assertIn("水泥专业名词中英对照.md", policy)
+        self.assertNotIn("An external translation service may provide a draft", policy)
 
 
 class WordAdapterStructureTests(unittest.TestCase):
