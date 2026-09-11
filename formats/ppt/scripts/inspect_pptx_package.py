@@ -23,6 +23,7 @@ UNSUPPORTED_TEXT_PARTS = (
     "ppt/diagrams/",
     "ppt/notesSlides/",
     "ppt/slideMasters/",
+    "ppt/slideLayouts/",
 )
 PROTECTED_RE = re.compile(
     r"(?:https?://\S+|\b[A-Z]{1,8}[-/]?\d[\w./-]*\b|\b\d+(?:[.,]\d+)?\s*(?:%|mm|cm|m|km|kg|t|kW|MW|V|kV|Hz|°C)\b)",
@@ -46,8 +47,18 @@ def local_name(tag: str) -> str:
     return tag.rsplit("}", 1)[-1]
 
 
-def xml_contains_human_text(payload: bytes) -> bool:
+def xml_contains_human_text(payload: bytes, *, template: bool = False) -> bool:
     root = ET.fromstring(payload)
+    if template:
+        # Template title/body/object text is an editing prompt. Footer/date text
+        # and ordinary shapes can be visible and must remain in the inventory gate.
+        for parent in list(root.iter()):
+            for shape in list(parent):
+                if shape.tag != f"{{{P_NS}}}sp":
+                    continue
+                placeholder = shape.find(f"./{{{P_NS}}}nvSpPr/{{{P_NS}}}nvPr/{{{P_NS}}}ph")
+                if placeholder is not None and placeholder.get("type", "obj") in {"title", "ctrTitle", "subTitle", "body", "obj"}:
+                    parent.remove(shape)
     return any(
         node.text and any(character.isalpha() for character in node.text)
         for node in root.iter()
@@ -297,7 +308,7 @@ def inspect_package(input_path: str | Path) -> dict:
                 for name in names
                 if name.endswith(".xml")
                 and name.startswith(UNSUPPORTED_TEXT_PARTS)
-                and xml_contains_human_text(package.read(name))
+                and xml_contains_human_text(package.read(name), template=name.startswith(("ppt/slideMasters/", "ppt/slideLayouts/")))
             )
             if unsupported_text:
                 raise InspectionError(

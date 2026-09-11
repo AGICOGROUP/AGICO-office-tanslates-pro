@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import json
 import sys
 import tempfile
 import unittest
@@ -71,6 +72,27 @@ OLE_SLIDE_RELS = """<?xml version="1.0" encoding="UTF-8"?>
 
 
 class PowerPointPackageInspectorTests(unittest.TestCase):
+    def test_default_master_placeholders_do_not_block_real_presentation(self):
+        from pptx import Presentation
+        from ppt_pipeline import build_translation_manifest
+        from pptx_ooxml import apply_manifest
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "default-template.pptx"
+            presentation = Presentation()
+            slide = presentation.slides.add_slide(presentation.slide_layouts[0])
+            slide.shapes.title.text = "设备清单"
+            presentation.save(source)
+            inventory = inspect_package(source)
+            manifest = build_translation_manifest(inventory, "en")
+            self.assertEqual(["设备清单"], [unit["source_text"] for unit in manifest["translation_units"]])
+            manifest["translation_units"][0]["translation"] = "Equipment List"
+            manifest_path = Path(directory) / "manifest.json"
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            output = Path(directory) / "translated.pptx"
+            apply_manifest(source, manifest_path, output)
+            self.assertEqual("Equipment List", inspect_package(output)["occurrences"][0]["source_text"])
+            self.assertEqual("Equipment List", Presentation(output).slides[0].shapes.title.text)
+
     def make_deck(self, directory: str, texts=("重复术语", "重复术语"), content_types: str = "<Types/>") -> Path:
         path = Path(directory) / "sample.pptx"
         with ZipFile(path, "w", ZIP_DEFLATED) as archive:

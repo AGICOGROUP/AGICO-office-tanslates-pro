@@ -12,8 +12,10 @@ Use `scripts/ppt_pipeline.py` as the single production entry. Preserve the immut
 one separate `.pptx`, translate native text in place, and use Microsoft PowerPoint as final
 authority.
 
-Classify content by capability: selectable or copyable text belongs to an editable-content handler,
-including charts and SmartArt. Preserve OLE/Visio/PDF embedded objects, their binary content, and
+The production text writer supports native slide paragraphs and table cells. Master/layout editing
+prompts are ignored; they are not visible slide content. Actual text in charts, SmartArt, notes,
+masters or layouts requires an editable-content handler that this pipeline does not yet provide;
+inspection reports the exact unsupported parts. Preserve OLE/Visio/PDF embedded objects, their binary content, and
 their preview images unchanged by default; record a warning and continue translating ordinary slide
 content. Never translate the preview image as a substitute for the object. Only when the user explicitly
 requests translation inside an embedded object, set it to `pending_native_handler` and stop if its native
