@@ -41,6 +41,8 @@ class WordPipelineContractTests(unittest.TestCase):
             ("功率：5 MW", "Power: 5 mW"),
             ("电机45kW，备用45kW", "Motor 45kW"),
             ("温度-5°C", "Temperature 5°C"),
+            ("温度−5°C", "Temperature 5°C"),
+            ("尺寸±5 mm", "Size 5 mm"),
         ]
         for source, target in damaged:
             with self.subTest(source=source, target=target):
@@ -50,6 +52,8 @@ class WordPipelineContractTests(unittest.TestCase):
             ("压力：5 MPa", "Pressure: 5 MPa"),
             ("功率10kW和10kW", "Power 10 kW and 10 kW"),
             ("电压10Kv", "Voltage 10 kV"),
+            ("温度−5°C", "Temperature -5°C"),
+            ("尺寸±5 mm", "Size ±5 mm"),
         ]:
             with self.subTest(source=source, target=target):
                 self.assertFalse(pipeline.parameter_mismatch(source, target))

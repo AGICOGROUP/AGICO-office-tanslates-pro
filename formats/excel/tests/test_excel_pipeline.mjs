@@ -561,7 +561,7 @@ test("bilingual mapping handles row ranges and preserves quoted sheet names", ()
   assert.equal(mapFormulaToSourceRows("=SUM(1:3)"), "=SUM(1:5)");
   assert.equal(mapFormulaToSourceRows("=SUM($2:$3)"), "=SUM($3:$5)");
   assert.equal(mapFormulaToSourceRows("='A2'!B2"), "='A2'!B3");
-  for (const formula of ['=ROWS(A1:A3)', '=COUNTA(A1:A3)', '=OFFSET(A1,1,0)', '=COUNTIF(A1:A3,"Valve")']) {
+  for (const formula of ['=ROWS(A1:A3)', '=COUNTA(A1:A3)', '=OFFSET(A1,1,0)', '=COUNTIF(A1:A3,"Valve")', '=TEXTJOIN(",",TRUE,A1:A2)', '=CONCAT(A1:A2)']) {
     assert.throws(() => mapFormulaToSourceRows(formula), /bilingual formula/);
   }
 });
@@ -572,8 +572,8 @@ test("monolingual preparation retains text used as a formula criterion", async (
     const source = path.join(directory, "source.xlsx");
     const workbook = Workbook.create();
     const sheet = workbook.worksheets.add("S1");
-    sheet.getRange("A1:A2").values = [["阀门"], ["设备名称"]];
-    sheet.getRange("B1").formulas = [['=COUNTIF(A1:A2,"阀门")']];
+    sheet.getRange("A1:A7").values = [["阀门"], ["设备名称"], ["电动阀门"], ["风机甲"], ["阀*"], ["阀体"], ["风机甲乙"]];
+    sheet.getRange("B1:B4").formulas = [['=COUNTIF(A1:A7,"阀门")'], ['=COUNTIF(A1:A7,"*阀门*")'], ['=COUNTIF(A1:A7,"风机?")'], ['=COUNTIF(A1:A7,"阀~*")']];
     await (await SpreadsheetFile.exportXlsx(workbook)).save(source);
     await inspectWorkbook({input: source, "job-dir": directory, "target-language": "en", "output-mode": "monolingual"});
     await prepareManifest({"job-dir": directory});
@@ -583,6 +583,12 @@ test("monolingual preparation retains text used as a formula criterion", async (
     assert.equal(criterion.translation, "阀门");
     assert.match(criterion.reason, /formula/);
     assert.ok(manifest.warnings.some(warning => warning.includes("阀门")));
+    for (const sourceText of ["电动阀门", "风机甲", "阀*"]) {
+      assert.equal(manifest.translation_units.find(unit => unit.source === sourceText).status, "retain", sourceText);
+    }
+    for (const sourceText of ["设备名称", "阀体", "风机甲乙"]) {
+      assert.notEqual(manifest.translation_units.find(unit => unit.source === sourceText).status, "retain", sourceText);
+    }
   } finally {
     await fs.rm(directory, {recursive: true, force: true});
   }

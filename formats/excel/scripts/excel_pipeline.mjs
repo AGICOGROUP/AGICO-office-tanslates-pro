@@ -464,7 +464,7 @@ export function mapFormulaToSourceRows(formula) {
   const code = String(formula).replace(quoted, "");
   // Inserting translation rows changes these functions' meaning even when
   // their references remain syntactically valid. Stop before translating.
-  const sensitive = /\b(?:ROW|ROWS|COLUMN|COLUMNS|OFFSET|INDIRECT|ADDRESS|CELL|COUNTA|COUNTBLANK|COUNTIFS?|SUMIFS?|AVERAGEIFS?|SUMPRODUCT|INDEX|MATCH|XMATCH|XLOOKUP|VLOOKUP|HLOOKUP|FILTER|SORT|UNIQUE|SEQUENCE)\s*\(/iu.exec(code);
+  const sensitive = /\b(?:ROW|ROWS|COLUMN|COLUMNS|OFFSET|INDIRECT|ADDRESS|CELL|COUNTA|COUNTBLANK|COUNTIFS?|SUMIFS?|AVERAGEIFS?|SUMPRODUCT|INDEX|MATCH|XMATCH|XLOOKUP|VLOOKUP|HLOOKUP|FILTER|SORT|UNIQUE|SEQUENCE|TEXTJOIN|CONCAT(?:ENATE)?)\s*\(/iu.exec(code);
   if (sensitive) throw new Error(`unsupported bilingual formula function: ${sensitive[0]}`);
   const mapReferences = (segment) => segment.replace(
     /(?<![A-Z0-9_.])(\$?)(\d+)\s*:\s*(\$?)(\d+)(?![A-Z0-9_.])/giu,
@@ -481,6 +481,21 @@ export function mapFormulaToSourceRows(formula) {
     cursor = match.index + match[0].length;
   }
   return result + mapReferences(formula.slice(cursor));
+}
+
+
+function formulaCriterionPattern(criterion) {
+  let pattern = "";
+  const escape = character => character.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  for (let index = 0; index < criterion.length; index += 1) {
+    const character = criterion[index];
+    if (character === "~" && /[~*?]/u.test(criterion[index + 1] ?? "")) {
+      pattern += escape(criterion[++index]);
+    } else {
+      pattern += character === "*" ? ".*" : character === "?" ? "." : escape(character);
+    }
+  }
+  return new RegExp(`^${pattern}$`, "isu");
 }
 
 
@@ -610,6 +625,7 @@ export async function inspectWorkbook(options) {
       }
     }
   }
+  const criterionPatterns = [...formulaCriteria].map(formulaCriterionPattern);
   for (const sheet of workbook.worksheets.items) {
     const used = sheet.getUsedRange();
     if (!used?.address) {
@@ -631,7 +647,7 @@ export async function inspectWorkbook(options) {
           sheet: sheet.name,
           address,
           source,
-          formula_dependency: config.outputMode === "monolingual" && formulaCriteria.has(source.toLowerCase()),
+          formula_dependency: config.outputMode === "monolingual" && criterionPatterns.some(pattern => pattern.test(source)),
           context_key: contextForCell(values, row, column),
           protected_tokens: protectedTokens(source),
         });

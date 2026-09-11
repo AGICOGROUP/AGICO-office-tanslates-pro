@@ -47,7 +47,7 @@ def normalize_protected_tokens(tokens: list[str]) -> set[str]:
 
 
 def canonical_parameters(text: str) -> str:
-    text = unicodedata.normalize("NFKC", text).replace("℃", "°C")
+    text = unicodedata.normalize("NFKC", text).replace("℃", "°C").replace("−", "-")
     # Only known unit spellings; do not infer conversions or rewrite model codes.
     aliases = {"吨/日": "t/d", "吨/天": "t/d", "吨/小时": "t/h",
                "千瓦": "kW", "毫米": "mm", "厘米": "cm", "千克": "kg",
@@ -66,7 +66,7 @@ def parameter_mismatch(source: str, target: str) -> bool:
     source, target = canonical_parameters(source), canonical_parameters(target)
     # Include bare values and multiplicity; translating a Chinese chapter label
     # may legitimately add a numeral, but must never remove a source value.
-    numbers = re.compile(r"(?<![\d.])[-+]?\d+(?:[.,]\d+)?")
+    numbers = re.compile(r"(?<![\d.])[-+±]?\d+(?:[.,]\d+)?")
     source_numbers = Counter(value.replace(",", ".") for value in numbers.findall(source))
     target_numbers = Counter(value.replace(",", ".") for value in numbers.findall(target))
     if source_numbers - target_numbers:
