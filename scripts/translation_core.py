@@ -120,12 +120,37 @@ def build_worklist(manifest: dict, format_name: str, max_chars: int = 12000) -> 
         if target or unit.get("translation_error"):
             record["error"] = error
         units.append(record)
-        cost = len(record["source"]) + len(str(record["context"]))
-        if ids and size + cost > max_chars:
+
+    def cost(record):
+        return len(record["source"]) + len(str(record["context"]))
+
+    for index, record in enumerate(units):
+        previous = units[index - 1] if ids else None
+        before_context = after_context = None
+        saving = 0
+        if (format_name == "word" and previous is not None
+                and isinstance(previous["context"], dict) and isinstance(record["context"], dict)
+                and previous["context"].get("part") == record["context"].get("part")):
+            # Adjacent source units already supply this context in the same batch.
+            # Keep external/batch-edge snippets and all style/location metadata.
+            before_context, after_context = dict(previous["context"]), dict(record["context"])
+            following = before_context.get("after")
+            preceding = after_context.get("before")
+            if isinstance(following, str) and following and record["source"].startswith(following):
+                before_context.pop("after")
+            if isinstance(preceding, str) and preceding and previous["source"].endswith(preceding):
+                after_context.pop("before")
+            saving = (len(str(previous["context"])) + len(str(record["context"]))
+                      - len(str(before_context)) - len(str(after_context)))
+        record_cost = cost(record)
+        if ids and size + record_cost - saving > max_chars:
             batches.append({"unit_ids": ids, "characters": size})
             ids, size = [], 0
-        ids.append(unit["id"])
-        size += cost
+        elif before_context is not None:
+            previous["context"], record["context"] = before_context, after_context
+            size -= saving
+        ids.append(record["id"])
+        size += record_cost
     if ids:
         batches.append({"unit_ids": ids, "characters": size})
     return {"schema_version": 2, "format": format_name,
@@ -167,7 +192,7 @@ def merge_decisions(manifest: dict, worklist: dict, format_name: str) -> tuple[d
             error = "duplicate decision ID; submit one decision per unit"
         elif unit is None:
             error = "unknown decision ID"
-        elif decision.get("source") != unit[source_field]:
+        elif "source" in decision and decision["source"] != unit[source_field]:
             error = "source text changed; edit translation only"
         else:
             error = decision_error(unit[source_field], target, format_name, unit.get("protected_tokens", []), result.get("target_language"),

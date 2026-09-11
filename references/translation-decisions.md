@@ -6,7 +6,10 @@ Read the selected adapter and this reference before translating. Use its documen
 `prepare` → translate/review a batch → `merge` → repair rejected items → `finalize`.
 The documented small-job shortcut (fill the default worklist, then finalize) is valid because finalize
 performs merge itself. Complete any adapter-required image or visual review when requested by the
-pipeline. Resume accepted work; do not restart the whole job to repair individual decisions.
+pipeline. After each merge, continue with pending items in the same turn, then finalize and deliver.
+A batch boundary or saved progress is not a stopping condition. Pause only for a user interruption
+or an actual blocker requiring input/access; report progress without ending the task otherwise.
+Resume accepted work; do not restart the whole job to repair individual decisions.
 
 Executors may edit translation decisions in the worklist or a batch JSON, including supported image
 decisions. The pipeline owns manifests, source identity, working files, completion flags, stage caches
@@ -48,9 +51,15 @@ Before merging a batch, review its headings, short labels and ambiguous equipmen
 and confirm complete thoughts and all lines were translated. Review each unique term/context once;
 reuse reviewed wording for matching contexts. Fix the affected units rather than restarting the job.
 
-Edit the supplied decision objects rather than reconstructing their schema or reading pipeline source
-to guess it. Keep identity fields and technical tokens, including repeated identifier occurrences
-checked by the current pipeline. A rejection does not request another whole batch: use the returned
+Read source text and context from the supplied worklist. Submit compact decisions containing the
+unchanged top-level `job_identity` and `translation_units` entries with `id` and `translation`;
+include `status` and `reason` for explicit retention. `source` is optional: omit it instead of retyping
+the English text, tabs or spaces. If included, it must match exactly. For example:
+`{"job_identity":"<copy from worklist>","translation_units":[{"id":1,"translation":"译文"}]}`.
+Word batches omit neighboring snippets already visible as adjacent units in the same batch; read
+those units together. Batch-edge context and style metadata remain available. Preserve technical
+tokens and repeated values, but do not insert untranslated prose merely to satisfy a suspected
+identifier misclassification; diagnose that specific rejection. A rejection does not request another whole batch: use the returned
 IDs and the refreshed worklist to repair only affected entries. Read the JSON readiness result before
 finalizing; a successful merge command may still contain rejected decisions.
 

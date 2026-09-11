@@ -42,6 +42,11 @@ def normalize_protected_tokens(tokens: list[str]) -> set[str]:
 
 def canonical_parameters(text: str) -> str:
     text = unicodedata.normalize("NFKC", text).replace("℃", "°C").replace("−", "-")
+    text = re.sub(r"\b(Annexure|Appendix|Attachment)-(?=\d)", r"\1 ", text, flags=re.IGNORECASE)
+    # Repair a missing space in prose followed by a complete voltage quantity.
+    # Do not split arbitrary letter/digit identifiers (ab123, To6.3X, etc.).
+    text = re.sub(r"\b(to|from|at|of|voltage)(?=\d+(?:[.,]\d+)?\s*[kM]?V(?![A-Za-z0-9]))",
+                  r"\1 ", text, flags=re.IGNORECASE)
     # Only known unit spellings; do not infer conversions or rewrite model codes.
     aliases = {"吨/日": "t/d", "吨/天": "t/d", "吨/小时": "t/h",
                "千瓦": "kW", "毫米": "mm", "厘米": "cm", "千克": "kg",
@@ -60,7 +65,12 @@ def parameter_mismatch(source: str, target: str) -> bool:
     source, target = canonical_parameters(source), canonical_parameters(target)
     # Include bare values and multiplicity; translating a Chinese chapter label
     # may legitimately add a numeral, but must never remove a source value.
-    numbers = re.compile(r"(?<![\d.])[-+±]?\d+(?:[.,]\d+)?")
+    # A hyphen adjoining a word is an identifier/reference separator, not a
+    # negative sign (Annexure-15). The numeral itself still remains protected.
+    numbers = re.compile(
+        r"-\d+(?:[.,]\d+)?(?=\s*°C)|[+±]\d+(?:[.,]\d+)?|"
+        r"(?<![\w.])-\d+(?:[.,]\d+)?|(?<![\d.])\d+(?:[.,]\d+)?"
+    )
     source_numbers = Counter(value.replace(",", ".") for value in numbers.findall(source))
     target_numbers = Counter(value.replace(",", ".") for value in numbers.findall(target))
     if source_numbers - target_numbers:

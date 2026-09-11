@@ -20,8 +20,9 @@ python ../../scripts/office_pipeline.py status --job-dir <job>
 ```
 
 Read [translation decisions](../../references/translation-decisions.md), then the job's
-`translation-worklist.json` and `relevant-glossary.json`. Follow the listed batches and
-keep `job_identity`, IDs and source strings intact. Fill `translation`, then merge completed subsets.
+`translation-worklist.json` and `relevant-glossary.json`. Read the listed batches with their context,
+then submit compact ID/translation decisions with the unchanged `job_identity` as described in that reference.
+Merge completed subsets and immediately continue pending batches through finalization and delivery.
 Accepted decisions remain saved; only missing or invalid items return with repair reasons. Finalize
 also merges the default worklist, so small jobs can omit a separate merge command. Repeated preparation
 preserves existing work; use a new job directory for a different source or target language.
