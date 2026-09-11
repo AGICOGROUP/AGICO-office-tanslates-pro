@@ -51,6 +51,11 @@ class WordPipelineContractTests(unittest.TestCase):
             with mock.patch.object(pipeline, "analyze", side_effect=AssertionError("do not rescan")):
                 self.assertEqual(path, pipeline.prepare(source, root / "job", "English"))
             self.assertEqual(json.loads(path.read_text(encoding="utf-8"))["units"][0]["target"], "Equipment")
+            (root / "job" / "translation-worklist.json").unlink()
+            (root / "job" / "relevant-glossary.json").unlink()
+            pipeline.prepare(source, root / "job", "English")
+            self.assertTrue((root / "job" / "translation-worklist.json").is_file())
+            self.assertTrue((root / "job" / "relevant-glossary.json").is_file())
 
     def test_apply_rejects_original_output_before_writing(self):
         pipeline = self.load_pipeline()

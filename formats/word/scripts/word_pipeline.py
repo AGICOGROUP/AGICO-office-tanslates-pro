@@ -151,6 +151,11 @@ def prepare(source: Path, job_dir: Path, target_language: str) -> Path:
             raise ValueError("job identity changed; use a separate job directory")
         if not working.is_file() or (previous.get("working_sha256") and file_hash(working) != previous["working_sha256"]):
             raise ValueError("prepared working copy changed; use a separate job directory")
+        if not (job_dir / "translation-worklist.json").exists():
+            atomic_json(job_dir / "translation-worklist.json", build_worklist(previous, "word"))
+        if not (job_dir / "relevant-glossary.json").exists():
+            atomic_json(job_dir / "relevant-glossary.json", lookup_terms(
+                [unit["source"] for unit in previous["units"]], target_language=target_language))
         return path
     if source.suffix.lower() == ".doc":
         working = job_dir / "source-working.docx"

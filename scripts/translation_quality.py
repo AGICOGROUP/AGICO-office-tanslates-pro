@@ -1,5 +1,6 @@
 """Shared deterministic technical-value checks; no model or network dependency."""
 from collections import Counter
+from functools import lru_cache
 import re
 import unicodedata
 
@@ -8,6 +9,28 @@ PROTECTED_TOKEN = re.compile(
     r"mm|cm|m|km|kg|t|t/h|m[³3]/h|Nm[³3]/min|rpm|r/min)(?![A-Za-z0-9])|\b[A-Z][A-Z0-9._/-]*\d[A-Z0-9._/-]*\b",
     re.IGNORECASE,
 )
+
+
+def technical_mismatch(source: str, target: str, protected_tokens=()) -> bool:
+    return _technical_mismatch(source, target, tuple(protected_tokens))
+
+
+@lru_cache(maxsize=4096)
+def _technical_mismatch(source: str, target: str, protected_tokens: tuple) -> bool:
+    # Process-local validation memoization never supplies a translation.
+    if parameter_mismatch(source, target):
+        return True
+    normalized_target = re.sub(r"(?<=\d)\s*Kv\b", "kV", canonical_parameters(target)).replace(",", ".")
+    for token in protected_tokens:
+        normalized_token = re.sub(r"(?<=\d)\s*Kv\b", "kV", canonical_parameters(token)).replace(",", ".")
+        normalized_token = re.sub(r"(?<=\d)\s+(?=[A-Za-z%°])", "", normalized_token)
+        pattern = r"\s+".join(re.escape(piece) for piece in normalized_token.split())
+        pattern = re.sub(r"(?<=\d)(?=[A-Za-z%°])", lambda _: r"\s*", pattern)
+        left = r"(?<![A-Za-z0-9_])" if normalized_token[:1].isascii() and normalized_token[:1].isalnum() else ""
+        right = r"(?![A-Za-z0-9_])" if normalized_token[-1:].isascii() and normalized_token[-1:].isalnum() else ""
+        if not re.search(left + pattern + right, normalized_target):
+            return True
+    return False
 
 def normalize_protected_tokens(tokens: list[str]) -> set[str]:
     return {

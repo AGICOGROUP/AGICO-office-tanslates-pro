@@ -14,7 +14,7 @@ from pathlib import Path
 import re
 import tempfile
 
-from translation_quality import parameter_mismatch
+from translation_quality import technical_mismatch
 
 FIELDS = {"word": ("units", "source", "target"),
           "excel": ("translation_units", "source", "translation"),
@@ -56,10 +56,10 @@ def manifest_identity(manifest: dict, format_name: str) -> str:
                                   for unit in manifest.get(collection, [])]})
 
 
-def decision_error(source: str, target: str, format_name: str) -> str | None:
+def decision_error(source: str, target: str, format_name: str, protected_tokens=()) -> str | None:
     if not isinstance(target, str) or not target.strip():
         return "translation required"
-    if parameter_mismatch(source, target):
+    if technical_mismatch(source, target, protected_tokens):
         return "technical values, units or identifiers changed; preserve the source values"
     if format_name == "word" and re.findall(r"[\t\n]", source) != re.findall(r"[\t\n]", target):
         return "preserve Word tab and line-break boundaries"
@@ -75,7 +75,7 @@ def build_worklist(manifest: dict, format_name: str, max_chars: int = 12000) -> 
     units, batches, ids, size = [], [], [], 0
     for unit in manifest.get(collection, []):
         target = unit.get(target_field, "")
-        error = unit.get("translation_error") or decision_error(unit[source_field], target, format_name)
+        error = unit.get("translation_error") or decision_error(unit[source_field], target, format_name, unit.get("protected_tokens", []))
         if not error:
             continue
         record = {"id": unit["id"], "source": unit[source_field], "translation": target,
@@ -105,14 +105,29 @@ def merge_decisions(manifest: dict, worklist: dict, format_name: str) -> tuple[d
     result = deepcopy(manifest)
     collection, source_field, target_field = FIELDS[format_name]
     units = {unit["id"]: unit for unit in result.get(collection, [])}
-    decisions = worklist.get("translation_units", [])
-    counts = Counter(decision.get("id") for decision in decisions)
     accepted, rejected = [], []
+    raw_decisions = worklist.get("translation_units", [])
+    if not isinstance(raw_decisions, list):
+        rejected.append({"id": None, "error": "translation_units must be an array"})
+        raw_decisions = []
+    decisions = []
+    for decision in raw_decisions:
+        if not isinstance(decision, dict) or type(decision.get("id")) not in {str, int}:
+            rejected.append({"id": None, "error": "each decision needs an object with a string or integer id"})
+        else:
+            decisions.append(decision)
+    counts = Counter(decision.get("id") for decision in decisions)
     for decision in decisions:
         unit_id = decision.get("id")
         unit = units.get(unit_id)
         error = None
         target = decision.get("translation", "")
+        # A stale batch often includes blank placeholders for units accepted by
+        # an earlier batch. They are absence of a decision, not a rollback.
+        if unit is not None and not target and decision.get("status", "pending") == "pending":
+            continue
+        if format_name == "word" and isinstance(target, str):
+            target = target.strip()
         if counts[unit_id] != 1:
             error = "duplicate decision ID; submit one decision per unit"
         elif unit is None:
@@ -120,7 +135,7 @@ def merge_decisions(manifest: dict, worklist: dict, format_name: str) -> tuple[d
         elif decision.get("source") != unit[source_field]:
             error = "source text changed; edit translation only"
         else:
-            error = decision_error(unit[source_field], target, format_name)
+            error = decision_error(unit[source_field], target, format_name, unit.get("protected_tokens", []))
         if error:
             rejected.append({"id": unit_id, "error": error})
             if unit is not None:

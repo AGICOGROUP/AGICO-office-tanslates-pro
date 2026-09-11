@@ -1,39 +1,56 @@
 ---
 name: translate-word-professionally
-description: Use when translating uploaded Word documents (.doc or .docx), especially cement-industry tables, quotations, specifications, and technical documents whose styles, pagination, tables, images, editable text, and layout must be preserved.
+description: Use when translating uploaded Word documents (.doc or .docx), especially technical tables, quotations and specifications whose terminology, editable text, styles, images and layout must be preserved.
 ---
 
 # Professional Word Translation
 
-Translate only human-language content while preserving the document's native Word structure and visual hierarchy.
+Top-level routing is complete. Do not run the root Office router again or read another format adapter.
+This adapter does not depend on another Office translation skill.
 
-Top-level routing is complete when this adapter starts. Do not run the root Office router again,
-read another format adapter, or consider another format workflow.
+## Standard task
 
-This adapter contains the complete professional translation, terminology, structure-preservation,
-and quality-control contract; it does not depend on another Office translation skill.
+From this adapter directory, run:
 
-## Start from the original
+```text
+python ../../scripts/office_pipeline.py prepare <source> --job-dir <job> --target-language <language>
+python ../../scripts/office_pipeline.py merge --job-dir <job> --decisions <batch.json>
+python ../../scripts/office_pipeline.py finalize --job-dir <job> --output <translated.docx>
+python ../../scripts/office_pipeline.py status --job-dir <job>
+```
 
-Hash and preserve the source. Work from a copy and create a separate translated output. Never overwrite the uploaded file; `apply` rejects both original-source and working-copy output paths before writing.
+Read only `translation-worklist.json` and `relevant-glossary.json`. Follow the listed batches and
+keep `job_identity`, IDs and source strings intact. Fill `translation`, then merge completed subsets.
+Accepted decisions remain saved; only missing or invalid items return with repair reasons. Finalize
+also merges the default worklist, so small jobs can omit a separate merge command. Repeated preparation
+preserves existing work; use a new job directory for a different source or target language.
 
-Use `scripts/word_pipeline.py` for the complete workflow. For `.doc`, its conversion stage opens visible Microsoft Word and immediately saves an immutable working `.docx`; do not inventory, repaginate, or run statistics before conversion.
+## Translation quality
 
-After `prepare`, read `<job-dir>/relevant-glossary.json` before translation; it contains only matched entries from `../../references/水泥专业名词中英对照.md`. Do not load the full glossary for an ordinary job. Use exact phrases first, then the longest applicable term. Read returned context/aliases for ambiguous terms; prefer the listed translation only when its sense fits. Chinese targets use reverse English lookup.
+The shared terminology source is `../../references/水泥专业名词中英对照.md`. Use its matched subset,
+exact phrases before shorter terms, and returned context/aliases to choose the engineering meaning.
+Chinese targets support reverse English lookup. Do not load the complete glossary during ordinary work.
 
-## Required workflow
+Units include neighboring paragraphs and style context. The same source word can need different
+translations in different contexts; writes use locations rather than global string replacement.
+Translate complete thoughts rather than formatting runs. Preserve numbers, units, signs, models,
+standards, meaningful line breaks and tabs. Protected tokens accept equivalent spacing and full-width
+symbols while retaining SI prefix case and repeated values. Retain source text only when appropriate
+in the requested output; do not hide untranslated sentences behind a retention decision.
 
-1. Run `prepare` to convert when needed, inventory the working DOCX, and create `translation-manifest.json`.
-2. Fill targets using the compact `translation-worklist.json` and matched glossary. Units include surrounding paragraph context; identical source text in different contexts may receive different translations. Write decisions through the common task entry when batching or retrying. Direct manifest targets remain supported.
-3. Run `apply`; the program writes each translation at its prepared paragraph location, uses `lxml`, preserves ZIP parts and namespace mappings, keeps whitespace-only runs from carrying translated words, preserves visible boundary spaces, and removes CJK-only character compression from Latin-script translations without rebuilding OOXML with the standard XML library. Identical `prepare` calls resume the existing manifest instead of erasing accepted translations.
-4. Review embedded image text and record any unsafe region for manual review.
-5. Run `validate` once. It checks the source hash, every translated paragraph at its original location, structure, unchanged media bytes, and protected tokens. Parameter checks retain bare values, signs and repeated occurrences; they accept full-width symbols, unit spacing and listed equivalent spellings while distinguishing SI prefix case. New jobs reuse the prepared occurrence/media inventory; older manifests recover it from the working copy. Keep normal engineering notation; do not spell numbers out or edit the source baseline just to satisfy a check. Changed or missing technical values and model codes still block delivery.
-6. Use `validate --word-native` only when a Word-native opening or pagination diagnostic is specifically useful. This check is optional and non-blocking; failure or timeout is recorded as a warning and never prevents delivery.
+Review unique embedded image text once. The worklist extracts images and accepts `reviewed` or
+`retain`; Word preserves their bytes. Disclose readable image labels left untranslated. A review
+status does not translate image pixels.
 
-## Delivery gate
+## Preservation and delivery
 
-Deliver only when the source hash is unchanged, every expected native string remains editable,
-clear image text has been reviewed, glossary terms are consistent, protected tokens match, and
-the static validation passes, including its boundary-space and unsafe character-compression checks. The optional Word-native check and its pagination result are
-diagnostic only and never a delivery gate. Do not require PDF export, PDF conversion, or a PDF file
-as delivery evidence. Complete the final check without an external PDF conversion or rendering gate.
+Hash and preserve the source. Never overwrite it. `.doc` conversion uses Microsoft Word once to
+create a working `.docx`. The writer preserves styles, tables, editable text, namespace mappings and
+boundary spaces, and removes unsafe inherited compression from Latin translations. Only changed text
+parts are rewritten. Output replacement is atomic.
+
+Finalize checks translated paragraph locations, protected tokens, media bytes and structure. Repair
+actual content loss, value changes or malformed output, then resume. Deliver at `next_stage: deliver`.
+The legacy `scripts/word_pipeline.py prepare|apply|validate` commands remain for existing jobs and
+troubleshooting. `validate --word-native` is optional and non-blocking, reporting diagnostics and
+warnings. Deliver without an external PDF conversion or rendering gate. Never hide confirmed damage.

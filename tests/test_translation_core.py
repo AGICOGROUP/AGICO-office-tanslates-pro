@@ -41,6 +41,44 @@ class TranslationCoreTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "identity"):
             merge_decisions(manifest, work, "word")
 
+    def test_stale_blank_records_do_not_undo_accepted_decisions(self):
+        manifest = self.manifest()
+        stale = build_worklist(manifest, "word")
+        first = copy.deepcopy(stale)
+        first["translation_units"] = first["translation_units"][:1]
+        first["translation_units"][0]["translation"] = "Power 45 kW"
+        merged, _ = merge_decisions(manifest, first, "word")
+        stale["translation_units"][1]["translation"] = "Price 1000 USD"
+        merged, _ = merge_decisions(merged, stale, "word")
+        self.assertEqual([u["id"] for u in build_worklist(merged, "word")["translation_units"]], [3])
+
+    def test_word_decision_trims_incidental_outer_whitespace(self):
+        manifest = self.manifest()
+        work = build_worklist(manifest, "word")
+        work["translation_units"] = [work["translation_units"][2]]
+        work["translation_units"][0]["translation"] = " Equipment "
+        merged, _ = merge_decisions(manifest, work, "word")
+        self.assertEqual(merged["units"][2]["target"], "Equipment")
+
+    def test_malformed_neighbor_does_not_discard_valid_decision(self):
+        manifest = self.manifest()
+        work = build_worklist(manifest, "word")
+        work["translation_units"] = [None, {"id": [], "translation": "invalid"}, work["translation_units"][2]]
+        work["translation_units"][2]["translation"] = "Equipment"
+        merged, report = merge_decisions(manifest, work, "word")
+        self.assertEqual(report["accepted"], [3])
+        self.assertEqual(merged["units"][2]["target"], "Equipment")
+
+    def test_explicit_custom_tokens_survive_shared_merge(self):
+        manifest = self.manifest()
+        manifest["units"] = [{"id": 1, "source": "AGICO 设备", "target": "", "protected_tokens": ["AGICO"]}]
+        work = build_worklist(manifest, "word")
+        for target in ("Equipment", "XAGICOY Equipment", "A G I C O Equipment"):
+            work["translation_units"][0]["translation"] = target
+            _, report = merge_decisions(manifest, work, "word")
+            self.assertFalse(report["ready"], target)
+            self.assertEqual(report["pending_count"], 1)
+
     def test_conflicting_duplicates_rejected_while_independent_decision_survives(self):
         manifest = self.manifest()
         work = build_worklist(manifest, "word")
