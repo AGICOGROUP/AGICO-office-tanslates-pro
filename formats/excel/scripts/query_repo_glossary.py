@@ -9,37 +9,20 @@ import sys
 from pathlib import Path
 
 
-GLOSSARY = Path("references") / "水泥专业名词中英对照.md"
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
+from glossary import lookup_terms, parse_glossary
 
 
-def parse_rows(text: str) -> list[dict[str, str]]:
-    rows: list[dict[str, str]] = []
-    for line in text.splitlines():
-        if not line.lstrip().startswith("|"):
-            continue
-        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
-        if len(cells) < 2 or all(set(cell) <= {"-", ":"} for cell in cells[:2]):
-            continue
-        if cells[0].lower() in {"中文术语", "chinese", "source"}:
-            continue
-        if cells[0] and cells[1]:
-            rows.append({"source": cells[0], "target": cells[1]})
-    return rows
+def parse_rows(text: str) -> list[dict]:
+    return parse_glossary(text)
 
 
 def query(repo_root: Path, manifest_path: Path) -> dict:
-    glossary_path = repo_root / GLOSSARY
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    sources = {str(unit.get("source", "")) for unit in manifest.get("translation_units", [])}
-    rows = parse_rows(glossary_path.read_text(encoding="utf-8"))
-    matches = [row for row in rows if any(row["source"] in source for source in sources)]
-    matches.sort(key=lambda row: next(i for i, item in enumerate(rows) if item == row))
-    return {
-        "glossary": str(glossary_path.resolve()),
-        "source_units": len(sources),
-        "matched_entries": len(matches),
-        "entries": matches,
-    }
+    sources = list(dict.fromkeys(str(unit.get("source", "")) for unit in manifest.get("translation_units", [])))
+    result = lookup_terms(sources, repo_root, manifest.get("target_language", "en"))
+    return {"glossary": result["path"], "source_units": len(sources),
+            "matched_entries": len(result["matched_entries"]), "entries": result["matched_entries"]}
 
 
 def main() -> int:

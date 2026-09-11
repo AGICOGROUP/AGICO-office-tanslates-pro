@@ -15,6 +15,27 @@ from resolve_repo_glossary import lookup_terms  # noqa: E402
 
 
 class RepositoryGlossaryResolutionTests(unittest.TestCase):
+    def test_reverse_lookup_and_context_are_available(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory)
+            glossary = repo / "references" / "水泥专业名词中英对照.md"
+            glossary.parent.mkdir(parents=True)
+            glossary.write_text('| 立磨 | Vertical roller mill <!-- {"aliases": ["Roller Mill"], "context": "立式辊磨机"} --> |\n', encoding="utf-8")
+            reverse = lookup_terms(["VERTICAL ROLLER MILL inlet"], repo_root=repo, target_language="zh-CN")
+            self.assertEqual("立磨", reverse["matched_entries"][0]["target"])
+            self.assertEqual("立式辊磨机", reverse["matched_entries"][0]["context"])
+            direct = lookup_terms(["立磨"], repo_root=repo)
+            self.assertEqual("Vertical roller mill", direct["matched_entries"][0]["target"])
+
+    def test_unresolved_exact_conflicts_are_not_silently_discarded(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory)
+            glossary = repo / "references" / "水泥专业名词中英对照.md"
+            glossary.parent.mkdir(parents=True)
+            glossary.write_text('| 护套 | Protective Pipe |\n| 护套 | Shield |\n', encoding="utf-8")
+            report = lookup_terms(["护套"], repo_root=repo)
+            self.assertEqual(2, len(report["matched_entries"]))
+
     def test_resolves_repository_root_glossary(self):
         with tempfile.TemporaryDirectory() as directory:
             repo = Path(directory)

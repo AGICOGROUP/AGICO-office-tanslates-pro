@@ -20,6 +20,8 @@ from zipfile import ZIP_DEFLATED, ZipFile
 from lxml import etree
 
 from analyze_docx import analyze, PROTECTED_TOKEN
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
+from glossary import lookup_terms
 
 
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
@@ -216,6 +218,8 @@ def prepare(source: Path, job_dir: Path, target_language: str) -> Path:
     }
     path = job_dir / "translation-manifest.json"
     path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    glossary = lookup_terms(report["unique_texts"], target_language=target_language)
+    (job_dir / "relevant-glossary.json").write_text(json.dumps(glossary, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps({"stage": "prepared", "units": len(units), "manifest": str(path.resolve())}, ensure_ascii=False))
     return path
 

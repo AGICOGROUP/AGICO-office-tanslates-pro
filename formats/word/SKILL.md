@@ -19,7 +19,7 @@ Hash and preserve the source. Work from a copy and create a separate translated 
 
 Use `scripts/word_pipeline.py` for the complete workflow. For `.doc`, its conversion stage opens visible Microsoft Word and immediately saves an immutable working `.docx`; do not inventory, repaginate, or run statistics before conversion.
 
-Read `../../references/水泥专业名词中英对照.md` before translation. Resolve an exact full phrase first, then the longest valid listed term; use professional contextual translation only when no listed term matches the intended sense.
+After `prepare`, read `<job-dir>/relevant-glossary.json` before translation; it contains only matched entries from `../../references/水泥专业名词中英对照.md`. Do not load the full glossary for an ordinary job. Use exact phrases first, then the longest applicable term. Read returned context/aliases for ambiguous terms; prefer the listed translation only when its sense fits. Chinese targets use reverse English lookup.
 
 ## Required workflow
 

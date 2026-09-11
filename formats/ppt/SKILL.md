@@ -26,8 +26,10 @@ editor or handler is unavailable.
 Read `references/powerpoint-workflow.md`, `references/pipeline-cli.md`, and
 `references/manifest-schema.md`. The shared glossary is
 `../../references/水泥专业名词中英对照.md`; do not load it completely. After text extraction,
-use `scripts/resolve_repo_glossary.py` to retrieve only relevant source-matched terms, resolving
-exact phrases first and then the longest non-overlapping terms before model translation. Read
+`prepare` writes `<job-dir>/relevant-glossary.json` with source-matched terms, resolving
+exact phrases first and then the longest non-overlapping terms before model translation. Context and aliases distinguish
+ambiguous senses; Chinese targets use reverse English lookup. For an explicit lookup, use
+`scripts/resolve_repo_glossary.py --target-language <language>`. Read
 `references/image-text-localization.md` only when images exist and `references/overlay-schema.md`
 only when an image needs an overlay.
 

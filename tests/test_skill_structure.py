@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-import hashlib
+import sys
 from pathlib import Path
 import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
 GLOSSARY_NAME = "水泥专业名词中英对照.md"
-EXPECTED_GLOSSARY_SHA256 = "38b19eb9005d1a5a50805c92048106adbf669f2a7932f15622695af7ac3224c5"
+sys.path.insert(0, str(ROOT / "scripts"))
+from glossary import parse_glossary
 
 
 class RootSkillStructureTests(unittest.TestCase):
@@ -61,11 +62,16 @@ class RootSkillStructureTests(unittest.TestCase):
         for removed in ("PDF", "PNG", "JPEG", "image"):
             self.assertNotIn(removed, text)
 
-    def test_shared_glossary_is_complete_source_copy(self):
+    def test_shared_glossary_has_one_preferred_translation_per_source(self):
         glossary = ROOT / "references" / GLOSSARY_NAME
         self.assertTrue(glossary.is_file())
-        digest = hashlib.sha256(glossary.read_bytes()).hexdigest()
-        self.assertEqual(EXPECTED_GLOSSARY_SHA256, digest)
+        entries = parse_glossary(glossary.read_text(encoding="utf-8"))
+        self.assertGreaterEqual(len(entries), 1200)
+        self.assertEqual(len(entries), len({entry["source"] for entry in entries}))
+        terms = {entry["source"]: entry for entry in entries}
+        self.assertEqual("Vertical roller mill", terms["立磨"]["target"])
+        self.assertIn("Roller Mill", terms["立磨"]["aliases"])
+        self.assertTrue(terms["护套"]["context"])
 
 
 class WordAdapterStructureTests(unittest.TestCase):

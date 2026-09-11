@@ -216,6 +216,7 @@ class WordPipelineContractTests(unittest.TestCase):
             manifest = json.loads((job / "translation-manifest.json").read_text(encoding="utf-8"))
             self.assertEqual("设备", manifest["units"][0]["source"])
             self.assertEqual("", manifest["units"][0]["target"])
+            self.assertTrue((job / "relevant-glossary.json").is_file())
 
     def test_apply_uses_manifest_and_preserves_package_parts(self):
         with tempfile.TemporaryDirectory() as directory:

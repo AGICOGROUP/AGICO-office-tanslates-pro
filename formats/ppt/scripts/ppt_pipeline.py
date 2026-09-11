@@ -15,6 +15,7 @@ from typing import Any
 from inspect_pptx_package import InspectionError, inspect_package, sha256_file
 from pptx_ooxml import OoxmlError, apply_manifest
 from validate_manifest import ManifestError, validate_manifest
+from resolve_repo_glossary import lookup_terms
 
 
 STAGES = (
@@ -284,6 +285,8 @@ def command_prepare(args: argparse.Namespace) -> int:
     )
     manifest_path = args.job_dir / "translation-manifest.json"
     write_json(manifest_path, manifest)
+    write_json(args.job_dir / "relevant-glossary.json", lookup_terms(
+        [unit["source_text"] for unit in manifest["translation_units"]], target_language=state["target_language"]))
     mark_stage(state, "prepare", str(manifest_path))
     write_json(args.job_dir / "job-state.json", state)
     print(

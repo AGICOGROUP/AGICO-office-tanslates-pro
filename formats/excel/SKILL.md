@@ -26,7 +26,8 @@ remain available. Do not create a node_modules junction or install packages for 
    `<job-dir>/relevant-glossary.json`. Do not read `inventory.json`, the complete manifest, the full
    glossary, or pipeline references during an ordinary job.
 3. Fill every pending worklist record with glossary-first professional terminology. Preserve every
-   protected token. Use `translated` for translated text; use justified `retain` only when output
+   protected token. The shared lookup provides preferred terms, context and aliases, with reverse
+   English lookup for Chinese targets; select the term whose engineering sense fits. Use `translated` for translated text; use justified `retain` only when output
    equals source. Safe deduplication reuses exact text only when context and protected tokens match.
 4. Run `python scripts/excel_fast_pipeline.py finalize ...` once. It merges the worklist, runs
    `validate_manifest.py`, then executes `apply`, `verify`, and `office-validate`. Deliver after it
