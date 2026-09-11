@@ -142,6 +142,8 @@ class ManifestValidatorTests(unittest.TestCase):
                             "id": "img-001", "sha256": "b" * 64,
                             "occurrences": ["S1#Image1"], "status": status, **metadata,
                         }]
+                        if status == "localized":
+                            payload["images"][0].update(replacement_path="D:/job/translated.png", replacement_sha256="c" * 64)
                         report = validate_manifest.validate(payload)
                         self.assertTrue(report["passed"], report["errors"])
 

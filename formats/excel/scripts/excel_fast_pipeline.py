@@ -61,6 +61,7 @@ def build_worklist(manifest: dict[str, Any]) -> dict[str, Any]:
                 "id": image["id"],
                 "sha256": image["sha256"],
                 "occurrences": list(image.get("occurrences", [])),
+                "source_image": image.get("source_image"),
                 "status": "manual-review",
                 "reason_code": "manual-review",
             })
@@ -136,6 +137,12 @@ def apply_worklist(manifest: dict[str, Any], worklist: dict[str, Any]) -> dict[s
             raise ValueError(f"pending image decision: {image_id}")
         image_index[image_id]["status"] = status
         image_index[image_id]["reason_code"] = decision.get("reason_code")
+        if status == "localized":
+            replacement = Path(decision.get("replacement_path", ""))
+            if not replacement.is_absolute() or not replacement.is_file():
+                raise ValueError(f"localized image needs an absolute replacement_path: {image_id}")
+            image_index[image_id]["replacement_path"] = str(replacement)
+            image_index[image_id]["replacement_sha256"] = sha256_file(replacement)
     return result
 
 

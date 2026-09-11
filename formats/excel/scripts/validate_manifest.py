@@ -123,6 +123,8 @@ def validate_v2(payload: dict[str, Any]) -> dict:
             errors.append(f"{prefix} manual-review is not deliverable")
         elif image.get("status") not in {"reviewed", "localized", "retain"}:
             errors.append(f"{prefix} has invalid status")
+        if image.get("status") == "localized" and (not _text(image.get("replacement_path")) or not isinstance(image.get("replacement_sha256"), str) or len(image["replacement_sha256"]) != 64):
+            errors.append(f"{prefix} localized image requires replacement_path and replacement_sha256")
 
     return {
         "passed": not errors,

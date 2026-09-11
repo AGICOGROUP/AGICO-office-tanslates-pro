@@ -542,6 +542,13 @@ function queryRelevantGlossary(manifestPath, outputPath) {
   }
 }
 
+function runImageOperation(output, manifestPath, action) {
+  const python = process.env.CODEX_PYTHON || path.resolve(path.dirname(process.execPath), "..", "..", "python", "python.exe");
+  const script = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "inspect_excel_package.py");
+  const result = spawnSync(python, [script, output, `--${action}-images`, manifestPath], {encoding: "utf8", windowsHide: true});
+  if (result.status !== 0) throw new Error(`image ${action} failed: ${result.stderr || result.stdout}`);
+}
+
 
 function parseOptions(argv) {
   const command = argv[0];
@@ -685,6 +692,7 @@ export async function prepareManifest(options) {
     images: (inventory.images ?? []).map((image) => ({
       id: `img-${image.sha256.slice(0, 16)}`,
       sha256: image.sha256,
+      source_image: image.extracted_path,
       occurrences: [...image.occurrences],
       status: "manual-review",
       reason_code: "manual-review",
@@ -954,6 +962,10 @@ export async function verifyTranslations(options) {
   const errors = [];
   if (await sha256File(sourcePath) !== state.sourceSha256) errors.push("source-hash-change");
   const manifest = JSON.parse(await fs.readFile(path.join(jobDir, "translation-manifest.json"), "utf8"));
+  if (manifest.images?.length) {
+    try { runImageOperation(outputPath, path.join(jobDir, "translation-manifest.json"), "verify"); }
+    catch (error) { errors.push(error.message); }
+  }
   let sourceWorkbook;
   let outputWorkbook;
   try {
@@ -1136,6 +1148,9 @@ export async function applyTranslations(options) {
   await fs.mkdir(path.dirname(output), { recursive: true });
   const blob = await SpreadsheetFile.exportXlsx(outputWorkbook);
   await blob.save(output);
+  if (manifest.images?.some(image => image.status === "localized")) {
+    runImageOperation(output, manifestPath, "apply");
+  }
   state = completeStage(state, "apply", { output: await sha256File(output) });
   state.outputPaths = { ...state.outputPaths, output };
   state.counts = {

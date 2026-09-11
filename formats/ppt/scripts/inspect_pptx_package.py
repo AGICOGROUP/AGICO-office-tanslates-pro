@@ -93,6 +93,18 @@ def shape_role(shape: ET.Element, name: str) -> str:
     return "body"
 
 
+def shape_geometry(shape: ET.Element) -> dict | None:
+    transform = shape.find(f".//{{{A_NS}}}xfrm")
+    if transform is None:
+        return None
+    offset = transform.find(f"{{{A_NS}}}off")
+    extent = transform.find(f"{{{A_NS}}}ext")
+    if offset is None or extent is None:
+        return None
+    return {"x": int(offset.get("x", "0")), "y": int(offset.get("y", "0")),
+            "w": int(extent.get("cx", "0")), "h": int(extent.get("cy", "0"))}
+
+
 def extract_slide_occurrences(slide_xml: bytes, slide_index: int) -> list[dict]:
     root = ET.fromstring(slide_xml)
     occurrences: list[dict] = []
@@ -168,6 +180,7 @@ def extract_slide_occurrences(slide_xml: bytes, slide_index: int) -> list[dict]:
                     "paragraph_index": paragraph_index,
                     "role": role,
                     "shape_name": shape_name,
+                    "geometry": shape_geometry(shape),
                     "context_signature": role,
                     "protected_tokens": PROTECTED_RE.findall(text),
                 }
@@ -223,6 +236,7 @@ def extract_slide_images(
                         "slide_index": slide_index,
                         "shape_id": int(identity.attrib.get("id", "0")),
                         "shape_name": identity.attrib.get("name", ""),
+                        "geometry": shape_geometry(container),
                         "media_path": media_path,
                     }
                 )

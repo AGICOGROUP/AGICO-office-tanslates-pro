@@ -5,10 +5,14 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import io
 import json
+import os
 from pathlib import Path, PurePosixPath
 import posixpath
 import sys
+import tempfile
+from collections import Counter
 import xml.etree.ElementTree as ET
 from zipfile import BadZipFile, ZipFile
 
@@ -246,15 +250,75 @@ def inspect_package(path: str | Path, extract_dir: str | Path | None = None) -> 
         raise ValueError("unsupported or corrupt Excel OOXML package") from exc
 
 
+def apply_image_replacements(path: Path, manifest: dict) -> dict:
+    from PIL import Image
+    localized = [item for item in manifest.get("images", []) if item.get("status") == "localized"]
+    with ZipFile(path) as archive:
+        originals = {hashlib.sha256(archive.read(name)).hexdigest(): archive.read(name)
+                     for name in archive.namelist() if name.startswith("xl/media/")}
+    replacements = {}
+    for item in localized:
+        digest = item["sha256"]
+        replacement = Path(item.get("replacement_path", ""))
+        if digest not in originals or not replacement.is_file():
+            raise ValueError("localized image requires its source asset and replacement file")
+        data = replacement.read_bytes()
+        actual_hash = hashlib.sha256(data).hexdigest()
+        if actual_hash != item.get("replacement_sha256") or actual_hash == digest:
+            raise ValueError("localized image replacement hash is changed or identical to source")
+        with Image.open(io.BytesIO(originals[digest])) as before, Image.open(io.BytesIO(data)) as after:
+            before.load(); after.load()
+            if before.format not in {"PNG", "JPEG"} or before.format != after.format or before.size != after.size:
+                raise ValueError("localized image must preserve PNG/JPEG format and pixel dimensions")
+        replacements[digest] = data
+    descriptor, temporary_name = tempfile.mkstemp(prefix=".images-", suffix=".xlsx", dir=path.parent)
+    os.close(descriptor)
+    temporary = Path(temporary_name)
+    try:
+        with ZipFile(path) as source, ZipFile(temporary, "w") as target:
+            target.comment = source.comment
+            for entry in source.infolist():
+                data = source.read(entry.filename)
+                if entry.filename.startswith("xl/media/"):
+                    data = replacements.get(hashlib.sha256(data).hexdigest(), data)
+                target.writestr(entry, data)
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+    return {"replaced_images": len(replacements)}
+
+
+def verify_image_manifest(report: dict, manifest: dict) -> None:
+    expected = Counter()
+    actual = Counter()
+    for item in manifest.get("images", []):
+        digest = item.get("replacement_sha256") if item.get("status") == "localized" else item.get("sha256")
+        if not digest:
+            raise ValueError("localized image has no replacement hash")
+        expected[digest] += max(1, len(item.get("occurrences", [])))
+    for item in report.get("images", []):
+        actual[item["sha256"]] += item["occurrence_count"]
+    if expected - actual:
+        raise ValueError("expected image bytes or image occurrences are missing from output")
+
+
 def main(argv: list[str] | None = None) -> int:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("source", type=Path)
     parser.add_argument("--extract-dir", type=Path)
+    actions = parser.add_mutually_exclusive_group()
+    actions.add_argument("--apply-images", type=Path)
+    actions.add_argument("--verify-images", type=Path)
     args = parser.parse_args(argv)
     try:
-        report = inspect_package(args.source, args.extract_dir)
+        if args.apply_images:
+            report = apply_image_replacements(args.source, json.loads(args.apply_images.read_text(encoding="utf-8")))
+        else:
+            report = inspect_package(args.source, args.extract_dir)
+            if args.verify_images:
+                verify_image_manifest(report, json.loads(args.verify_images.read_text(encoding="utf-8")))
     except (OSError, ValueError, ET.ParseError) as exc:
         print(json.dumps({"error": str(exc)}, ensure_ascii=False))
         return 2

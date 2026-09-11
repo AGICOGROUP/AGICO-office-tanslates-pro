@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import hashlib
+import io
+import json
+import subprocess
 from pathlib import Path
 import sys
 import tempfile
@@ -33,6 +36,80 @@ SHEET_XML = """<?xml version="1.0" encoding="UTF-8"?>
 
 
 class ExcelPackageInspectorTests(unittest.TestCase):
+    def test_real_workbook_pipeline_localizes_image_bytes(self):
+        from openpyxl import Workbook
+        from openpyxl.drawing.image import Image as ExcelImage
+        from PIL import Image
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            original, replacement = root / "original.png", root / "replacement.png"
+            Image.new("RGB", (16, 16), "white").save(original)
+            Image.new("RGB", (16, 16), "black").save(replacement)
+            workbook = Workbook()
+            workbook.active["A1"] = "设备"
+            for cell in ("A3", "D3"):
+                workbook.active.add_image(ExcelImage(io.BytesIO(original.read_bytes())), cell)
+            source, output, job = root / "source.xlsx", root / "output.xlsx", root / "job"
+            workbook.save(source)
+            node = Path(sys.executable).parent.parent / "node" / "bin" / "node.exe"
+            pipeline = ROOT / "scripts" / "excel_pipeline.mjs"
+            def run(*args):
+                result = subprocess.run([str(node), str(pipeline), *map(str, args)], capture_output=True, text=True, encoding="utf-8")
+                self.assertIn(result.returncode, (0, 3), result.stdout + result.stderr)
+            run("inspect", "--input", source, "--job-dir", job, "--target-language", "en", "--output-mode", "monolingual")
+            run("prepare", "--job-dir", job)
+            manifest_path = job / "translation-manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            for unit in manifest["translation_units"]:
+                unit.update(status="translated", translation="Equipment")
+            for image in manifest["images"]:
+                image.update(status="localized", replacement_path=str(replacement), replacement_sha256=hashlib.sha256(replacement.read_bytes()).hexdigest())
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            run("apply", "--input", source, "--job-dir", job, "--output", output)
+            run("verify", "--source", source, "--job-dir", job, "--output", output)
+            self.assertTrue(json.loads((job / "verification.json").read_text(encoding="utf-8"))["passed"])
+
+    def test_localized_image_writes_every_copy_and_preserves_other_parts(self):
+        import inspect_excel_package as inspector
+        from PIL import Image
+        def png(color, size=(16, 16)):
+            data = io.BytesIO()
+            Image.new("RGB", size, color).save(data, format="PNG")
+            return data.getvalue()
+        with tempfile.TemporaryDirectory() as directory:
+            original, translated = png("white"), png("black")
+            package = self.make_package(directory, media={"xl/media/a.png": original, "xl/media/b.png": original})
+            replacement = Path(directory) / "translated.png"
+            replacement.write_bytes(translated)
+            with ZipFile(package) as archive:
+                before = {name: archive.read(name) for name in archive.namelist()}
+            group = inspect_package(package)["images"][0]
+            manifest = {"images": [{**group, "status": "localized", "replacement_path": str(replacement),
+                                    "replacement_sha256": hashlib.sha256(translated).hexdigest()}]}
+            inspector.apply_image_replacements(package, manifest)
+            inspector.verify_image_manifest(inspect_package(package), manifest)
+            with ZipFile(package) as archive:
+                for name, data in before.items():
+                    self.assertEqual(translated if name.startswith("xl/media/") else data, archive.read(name))
+            with self.assertRaisesRegex(ValueError, "image"):
+                inspector.verify_image_manifest({"images": []}, manifest)
+
+    def test_localized_image_requires_same_format_and_dimensions(self):
+        import inspect_excel_package as inspector
+        from PIL import Image
+        with tempfile.TemporaryDirectory() as directory:
+            buffer = io.BytesIO()
+            Image.new("RGB", (16, 16)).save(buffer, format="PNG")
+            package = self.make_package(directory, media={"xl/media/a.png": buffer.getvalue()})
+            before = package.read_bytes()
+            replacement = Path(directory) / "wrong-size.png"
+            Image.new("RGB", (8, 8)).save(replacement)
+            manifest = {"images": [{"sha256": hashlib.sha256(buffer.getvalue()).hexdigest(), "status": "localized",
+                                    "replacement_path": str(replacement), "replacement_sha256": hashlib.sha256(replacement.read_bytes()).hexdigest()}]}
+            with self.assertRaisesRegex(ValueError, "dimensions"):
+                inspector.apply_image_replacements(package, manifest)
+            self.assertEqual(before, package.read_bytes())
+
     def test_hidden_paint_cache_is_inactive_but_live_paint_and_unknown_extensions_are_not(self):
         xml = '''<xdr:sp xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing"
           xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"

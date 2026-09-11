@@ -43,7 +43,8 @@ only when an image needs an overlay.
      target-language text immediately below each source label using `bilingual_below`.
 5. `apply`: write all native translations and overlays once.
 6. `verify`: compare the final source hash, package integrity, slide count, translations, protected
-   tokens, and required overlays.
+   tokens, and required overlays. Overlay verification checks each written editable text object
+   by its stable name, translation and position relative to the unchanged host image.
 7. `render`: open the output in one hidden, alert-suppressed Microsoft PowerPoint session and
    render every final slide once at low resolution. Do not use an external PDF conversion gate.
 8. Review the final slides and run `deliver --visual-review-passed`. Native rendering waits at most

@@ -368,6 +368,22 @@ class ManifestPreparationTests(unittest.TestCase):
 
 
 class PipelineStateTests(unittest.TestCase):
+    def test_verification_requires_actual_overlay_text_and_location(self):
+        from ppt_pipeline import verify_required_overlays
+        manifest = {"overlays": [{"id": "label-1", "translation": "Cooler", "location": {"page_or_slide": 1, "host_shape_id": 3},
+                                  "region": {"x": 0.1, "y": 0.5, "w": 0.4, "h": 0.1}}]}
+        output = {"occurrences": [], "image_groups": [{"occurrences": [{"slide_index": 1, "shape_id": 3,
+                  "geometry": {"x": 100000, "y": 100000, "w": 1000000, "h": 1000000}}]}]}
+        self.assertTrue(verify_required_overlays(manifest, output))
+        output["occurrences"] = [{"slide_index": 1, "shape_id": 9, "shape_name": "office-translate-overlay:label-1",
+                                  "source_text": "Cooler", "geometry": {"x": 200000, "y": 600000, "w": 400000, "h": 100000}}]
+        self.assertEqual([], verify_required_overlays(manifest, output))
+        output["occurrences"][0]["source_text"] = "Wrong"
+        self.assertTrue(verify_required_overlays(manifest, output))
+        output["occurrences"][0]["source_text"] = "Cooler"
+        output["occurrences"][0]["geometry"]["y"] = 100000
+        self.assertTrue(verify_required_overlays(manifest, output))
+
     def test_source_hash_is_not_recomputed_during_apply(self):
         source = PIPELINE_SCRIPT.read_text(encoding="utf-8")
         apply_body = source.split("def command_apply", 1)[1].split(

@@ -68,6 +68,9 @@ Use `references/pipeline-cli.md` only for troubleshooting. Read
 - Preserve numbers, units, model codes, standards, URLs, identifiers, meaningful line breaks, and
   formulas. The source file remains untouched.
 - Resolve each unique image to `reviewed`, `localized`, or `retain`; manual-review is not deliverable.
+  `localized` requires an absolute `replacement_path` to an edited PNG/JPEG of the original format
+  and dimensions. The runner records its hash, writes every matching image part, and verifies the
+  output bytes and occurrence counts; setting a status alone does not localize an image.
   Image reason notes are optional and are not a separate approval or delivery gate.
 - Charts, comments, external links, unsupported drawings, VBA, unsafe legacy conversion, repair
   requirements, or deterministic mismatches fail before delivery; they do not start a slower

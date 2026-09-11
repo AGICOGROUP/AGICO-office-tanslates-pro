@@ -956,6 +956,7 @@ function Apply-OverlayManifest {
             $textRange.Font.Color.RGB = $textColor
             $textRange.ParagraphFormat.Alignment = $alignment
             $overlayShape.Tags.Add("maltipal_translate_overlay", $itemId)
+            $overlayShape.Name = "office-translate-overlay:$itemId"
             $overlayShape.ZOrder(0)
         }
         finally {

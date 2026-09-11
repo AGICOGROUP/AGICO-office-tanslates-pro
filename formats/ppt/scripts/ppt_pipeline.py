@@ -163,6 +163,33 @@ def complete_delivery(
     mark_stage(state, "deliver", str(output.resolve()))
 
 
+def verify_required_overlays(manifest: dict, output_inventory: dict) -> list[dict]:
+    errors = []
+    hosts = {(item["slide_index"], item["shape_id"]): item.get("geometry")
+             for group in output_inventory.get("image_groups", []) for item in group.get("occurrences", [])}
+    for overlay in manifest.get("overlays", []):
+        location = overlay.get("location", {})
+        slide = location.get("page_or_slide")
+        matches = [item for item in output_inventory.get("occurrences", [])
+                   if item["slide_index"] == slide and item.get("shape_name") == "office-translate-overlay:" + overlay["id"]]
+        actual_text = " ".join(" ".join(item["source_text"] for item in matches).split())
+        if not matches or actual_text != " ".join(str(overlay.get("translation", "")).split()):
+            errors.append({"code": "overlay-missing-or-text-mismatch", "id": overlay["id"]})
+            continue
+        host = hosts.get((slide, location.get("host_shape_id")))
+        actual = matches[0].get("geometry")
+        region = overlay.get("region", {})
+        if not host or not actual or not all(isinstance(region.get(key), (int, float)) for key in ("x", "y", "w", "h")):
+            errors.append({"code": "overlay-location-unverifiable", "id": overlay["id"]})
+            continue
+        expected = {"x": host["x"] + region["x"] * host["w"], "y": host["y"] + region["y"] * host["h"],
+                    "w": region["w"] * host["w"], "h": region["h"] * host["h"]}
+        # 0.1 point allows the Office serialization rounding of point/EMU values.
+        if any(abs(actual[key] - expected[key]) > 1270 for key in expected):
+            errors.append({"code": "overlay-location-mismatch", "id": overlay["id"]})
+    return errors
+
+
 def build_render_plan(inventory: dict, verification_passed: bool) -> dict:
     all_slides = [int(item["index"]) for item in inventory.get("slides", [])]
     return {
@@ -341,6 +368,7 @@ def command_verify(args: argparse.Namespace) -> int:
         errors.append({"code": "source-hash-mismatch"})
     output_inventory = inspect_package(output)
     errors.extend(verify_localized_image_hashes(manifest, output_inventory))
+    errors.extend(verify_required_overlays(manifest, output_inventory))
     if len(output_inventory["slides"]) != len(inventory["slides"]):
         errors.append(
             {

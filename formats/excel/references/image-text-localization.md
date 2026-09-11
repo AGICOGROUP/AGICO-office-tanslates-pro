@@ -8,11 +8,16 @@ equipment photographs.
 - If no clear translatable text exists, record `retain` and preserve the image bytes at every
   occurrence. Optional notes such as `no-source-text`, `logo-or-brand`, or `photograph` help explain
   the decision but their absence or wording must not block delivery.
-- Use `localized` only after the unique image has been edited and checked at native resolution.
+- Use `localized` only after the unique PNG/JPEG has been edited and checked at native resolution.
+  Set `replacement_path` to the absolute edited-image path in the worklist; the runner records its
+  SHA-256. The compact worklist includes `source_image` for the extracted original. Replacement
+  must retain the original format and pixel dimensions. `apply` replaces all matching image parts
+  atomically after workbook export; `verify` checks their resulting hashes and occurrence counts.
 - Use `manual-review` only when text presence or safe localization remains uncertain. This reason
   escalates the workbook to strict verification.
-- Prefer an editable worksheet text box or chart-native label when it can replace or cover only the source label without obscuring cells, chart marks, process lines, or unrelated pixels.
-- When raster editing is necessary, limit changes to approved text masks and preserve crop, anchor, aspect ratio, z-order, and all unrelated pixels.
+- This pipeline writes raster replacements; it does not create worksheet text boxes or translate
+  native chart labels. Limit image edits to source-text masks and preserve all unrelated pixels.
+  The image writer leaves package relationships, crop, anchors and z-order unchanged.
 - Preserve logos, equipment, arrows, symbols, topology, numbers, units, and flow direction.
 - Deep-review only images marked `localized` or `manual-review`. Reject
   overlap, hidden labels, illegible type, or structural movement.
