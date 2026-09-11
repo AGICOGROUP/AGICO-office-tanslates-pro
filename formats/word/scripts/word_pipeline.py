@@ -22,6 +22,8 @@ from lxml import etree
 from analyze_docx import analyze, PROTECTED_TOKEN
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
 from glossary import lookup_terms
+from translation_quality import canonical_parameters, normalize_protected_tokens, parameter_mismatch
+from translation_core import atomic_json, build_worklist, file_hash, fingerprint
 
 
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
@@ -36,61 +38,6 @@ TEXT_PARTS = ("word/document.xml", "word/header", "word/footer", "word/footnotes
 
 def is_text_part(name: str) -> bool:
     return name in TEXT_PARTS or name.startswith(("word/header", "word/footer")) and name.endswith(".xml")
-
-
-def normalize_protected_tokens(tokens: list[str]) -> set[str]:
-    return {
-        re.sub(r"(?<=\d)Kv$", "kV", re.sub(r"\s+", "", token)
-               .replace("℃", "°C").replace(",", "."))
-        for token in tokens
-    }
-
-
-def canonical_parameters(text: str) -> str:
-    text = unicodedata.normalize("NFKC", text).replace("℃", "°C").replace("−", "-")
-    # Only known unit spellings; do not infer conversions or rewrite model codes.
-    aliases = {"吨/日": "t/d", "吨/天": "t/d", "吨/小时": "t/h",
-               "千瓦": "kW", "毫米": "mm", "厘米": "cm", "千克": "kg",
-               "公斤": "kg", "吨": "t"}
-    for source, target in aliases.items():
-        text = re.sub(r"(?<=\d)\s*" + re.escape(source), target, text)
-    text = re.sub(r"/\s*days?\b", "/d", text, flags=re.IGNORECASE)
-    text = re.sub(r"/\s*hours?\b", "/h", text, flags=re.IGNORECASE)
-    text = re.sub(r"(?<=\d),(?=\d{3}(?:\D|$))", "", text)
-    return text
-
-
-def parameter_mismatch(source: str, target: str) -> bool:
-    if source == target:
-        return False
-    source, target = canonical_parameters(source), canonical_parameters(target)
-    # Include bare values and multiplicity; translating a Chinese chapter label
-    # may legitimately add a numeral, but must never remove a source value.
-    numbers = re.compile(r"(?<![\d.])[-+±]?\d+(?:[.,]\d+)?")
-    source_numbers = Counter(value.replace(",", ".") for value in numbers.findall(source))
-    target_numbers = Counter(value.replace(",", ".") for value in numbers.findall(target))
-    if source_numbers - target_numbers:
-        return True
-    # Prefer a complete unit expression over the legacy regex's shorter match.
-    technical = re.compile(
-        r"\d+(?:[.,]\d+)?\s*"
-        r"(?:[mMk]?W|[mMk]?Pa|[kM]?V|mA|A|[kcm]?m|kg|t|kcal|mg|Nm|%|°C|Hz|rpm|r/min)"
-        r"(?:[23])?(?:\s*/\s*(?:[kcm]?m[23]?|kg|h|d|min|s))?(?![A-Za-z0-9])"
-        r"|" + PROTECTED_TOKEN.pattern,
-        re.IGNORECASE,
-    )
-    source = re.sub(r"[\u3400-\u9fff]", " ", source)
-    expected = Counter(next(iter(normalize_protected_tokens([match.group()])))
-                       for match in technical.finditer(source))
-    # Normalize only the documented legacy spelling, not SI prefixes or models.
-    target = re.sub(r"(?<=\d)\s*Kv\b", " kV", target)
-    for token, count in expected.items():
-        left = r"(?<![A-Za-z0-9.])" if token[:1].isdigit() else r"(?<![A-Za-z])"
-        pattern = re.escape(token).replace("/", r"\s*/\s*")
-        pattern = re.sub(r"(?<=\d)(?=[A-Za-z%°])", lambda _: r"\s*", pattern)
-        if len(re.findall(left + pattern + r"(?![A-Za-z0-9]|\.\d)", target)) < count:
-            return True
-    return False
 
 
 def local_content_nodes(paragraph: etree._Element) -> list[etree._Element]:
@@ -195,6 +142,16 @@ def replace_paragraph_text(paragraph: etree._Element, source: str, target: str) 
 def prepare(source: Path, job_dir: Path, target_language: str) -> Path:
     job_dir.mkdir(parents=True, exist_ok=True)
     source_hash = hashlib.sha256(source.read_bytes()).hexdigest().upper()
+    path = job_dir / "translation-manifest.json"
+    if path.exists():
+        previous = json.loads(path.read_text(encoding="utf-8"))
+        working = Path(previous["working_docx"])
+        if (previous["source"] != str(source.resolve()) or previous["source_sha256"] != source_hash
+                or previous["target_language"] != target_language):
+            raise ValueError("job identity changed; use a separate job directory")
+        if not working.is_file() or (previous.get("working_sha256") and file_hash(working) != previous["working_sha256"]):
+            raise ValueError("prepared working copy changed; use a separate job directory")
+        return path
     if source.suffix.lower() == ".doc":
         working = job_dir / "source-working.docx"
         script = Path(__file__).with_name("word_com.ps1")
@@ -207,21 +164,38 @@ def prepare(source: Path, job_dir: Path, target_language: str) -> Path:
     report = analyze(working)
     if "unsupported_chart_text" in report["complex_reasons"]:
         raise ValueError("unsupported editable chart text; translate or remove the chart text before retrying")
-    units = [{"id": index, "source": text, "target": ""} for index, text in enumerate(report["unique_texts"], 1)]
+    units, reuse = [], {}
+    for occurrence in report["occurrences"]:
+        key = fingerprint([occurrence["text"], occurrence.get("context"), target_language])
+        if key not in reuse:
+            unit = {"id": len(units) + 1, "source": occurrence["text"], "target": "",
+                    "context": occurrence.get("context", {}), "occurrence_count": 0}
+            reuse[key] = unit
+            units.append(unit)
+        reuse[key]["occurrence_count"] += 1
+        occurrence["translation_unit_id"] = reuse[key]["id"]
     manifest = {
         "schema": 1, "source": str(source.resolve()), "source_sha256": source_hash,
         "working_docx": str(working.resolve()), "target_language": target_language,
+        "working_sha256": file_hash(working),
         "baseline": {key: report[key] for key in ("section_count", "table_count", "media_count")},
         "protected_tokens": report["protected_tokens"], "units": units,
         "occurrences": report["occurrences"],
         "media_sha256": report["media_sha256"],
     }
-    path = job_dir / "translation-manifest.json"
-    path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
-    glossary = lookup_terms(report["unique_texts"], target_language=target_language)
-    (job_dir / "relevant-glossary.json").write_text(json.dumps(glossary, ensure_ascii=False, indent=2), encoding="utf-8")
+    atomic_json(path, manifest)
+    atomic_json(job_dir / "translation-worklist.json", build_worklist(manifest, "word"))
+    glossary = lookup_terms([unit["source"] for unit in units], target_language=target_language)
+    atomic_json(job_dir / "relevant-glossary.json", glossary)
     print(json.dumps({"stage": "prepared", "units": len(units), "manifest": str(path.resolve())}, ensure_ascii=False))
     return path
+
+
+def location_units(manifest: dict, occurrences: list[dict]) -> dict:
+    by_id = {unit["id"]: unit for unit in manifest["units"]}
+    legacy = {unit["source"]: unit for unit in manifest["units"]}
+    return {(item["part"], item["paragraph"]): by_id[item["translation_unit_id"]]
+            if "translation_unit_id" in item else legacy[item["text"]] for item in occurrences}
 
 
 def apply(manifest_path: Path, output: Path) -> None:
@@ -229,12 +203,17 @@ def apply(manifest_path: Path, output: Path) -> None:
     missing = [unit["id"] for unit in manifest["units"] if not unit.get("target")]
     if missing:
         raise ValueError(f"translation targets are empty: {missing}")
-    mapping = {unit["source"]: unit["target"] for unit in manifest["units"]}
     applied = Counter()
     source = Path(manifest["working_docx"])
     output.parent.mkdir(parents=True, exist_ok=True)
     if output.resolve() in {source.resolve(), Path(manifest["source"]).resolve()}:
         raise ValueError("output must not overwrite the original source or working copy")
+    if file_hash(Path(manifest["source"])).upper() != manifest["source_sha256"].upper():
+        raise ValueError("source file hash changed")
+    if manifest.get("working_sha256") and file_hash(source) != manifest["working_sha256"]:
+        raise ValueError("working source hash changed")
+    occurrences = manifest.get("occurrences")
+    mapping = location_units(manifest, occurrences if occurrences is not None else analyze(source)["occurrences"])
     descriptor, temporary_name = tempfile.mkstemp(prefix=f".{output.name}.", suffix=".tmp", dir=output.parent)
     os.close(descriptor)
     temporary = Path(temporary_name)
@@ -245,14 +224,20 @@ def apply(manifest_path: Path, output: Path) -> None:
                 if is_text_part(info.filename):
                     parser = etree.XMLParser(remove_blank_text=False, resolve_entities=False)
                     root = etree.fromstring(data, parser)
-                    for paragraph in root.iter(W_P):
+                    changed = False
+                    for index, paragraph in enumerate(root.iter(W_P), 1):
                         source_text = paragraph_text(paragraph)
-                        if source_text in mapping:
-                            replace_paragraph_text(paragraph, source_text, mapping[source_text])
-                            applied[source_text] += 1
-                    data = etree.tostring(root, xml_declaration=True, encoding="UTF-8", standalone=True)
+                        unit = mapping.get((info.filename, index))
+                        if unit is not None:
+                            if source_text != unit["source"]:
+                                raise ValueError(f"source occurrence changed: {info.filename} paragraph {index}")
+                            replace_paragraph_text(paragraph, source_text, unit["target"])
+                            applied[unit["id"]] += 1
+                            changed |= source_text != unit["target"]
+                    if changed:
+                        data = etree.tostring(root, xml_declaration=True, encoding="UTF-8", standalone=True)
                 dst.writestr(info, data)
-        unmatched = [unit["id"] for unit in manifest["units"] if applied[unit["source"]] == 0]
+        unmatched = [unit["id"] for unit in manifest["units"] if applied[unit["id"]] == 0]
         apply_report = {
             "applied_occurrences": sum(applied.values()),
             "matched_units": len(applied),
@@ -286,9 +271,7 @@ def validate(candidate: Path, manifest_path: Path, word_native: bool = False) ->
     # Older jobs recover their occurrence baseline from the untouched working
     # copy. New jobs reuse the prepare inventory without another source scan.
     baseline = manifest if "occurrences" in manifest and "media_sha256" in manifest else analyze(Path(manifest["working_docx"]))
-    translations = {unit["source"]: unit["target"] for unit in manifest["units"]}
-    expected_occurrences = {(item["part"], item["paragraph"]): translations[item["text"]]
-                            for item in baseline["occurrences"]}
+    expected_occurrences = {location: unit["target"] for location, unit in location_units(manifest, baseline["occurrences"]).items()}
     actual_occurrences = {(item["part"], item["paragraph"]): item["text"]
                           for item in report["occurrences"]}
     if expected_occurrences != actual_occurrences:

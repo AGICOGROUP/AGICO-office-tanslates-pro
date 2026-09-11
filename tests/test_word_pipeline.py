@@ -18,6 +18,40 @@ W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 
 
 class WordPipelineContractTests(unittest.TestCase):
+    def test_contextual_duplicates_can_receive_different_translations(self):
+        pipeline = self.load_pipeline()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            body = ''.join(f'<w:p><w:r><w:t>{text}</w:t></w:r></w:p>' for text in
+                           ["电气设备", "台", "操作平台", "台"])
+            source = self.make_docx(root, body)
+            path = pipeline.prepare(source, root / "job", "English")
+            manifest = json.loads(path.read_text(encoding="utf-8"))
+            repeated = [unit for unit in manifest["units"] if unit["source"] == "台"]
+            self.assertEqual(len(repeated), 2)
+            self.assertNotEqual(repeated[0]["context"], repeated[1]["context"])
+            for unit, target in zip(manifest["units"], ["Electrical equipment", "Unit", "Operating platform", "Platform"]):
+                unit["target"] = target
+            path.write_text(json.dumps(manifest), encoding="utf-8")
+            output = root / "output.docx"
+            pipeline.apply(path, output)
+            pipeline.validate(output, path)
+            self.assertEqual([item["text"] for item in pipeline.analyze(output)["occurrences"]],
+                             ["Electrical equipment", "Unit", "Operating platform", "Platform"])
+
+    def test_prepare_resumes_without_losing_translation_decisions(self):
+        pipeline = self.load_pipeline()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = self.make_docx(root)
+            path = pipeline.prepare(source, root / "job", "English")
+            manifest = json.loads(path.read_text(encoding="utf-8"))
+            manifest["units"][0]["target"] = "Equipment"
+            path.write_text(json.dumps(manifest), encoding="utf-8")
+            with mock.patch.object(pipeline, "analyze", side_effect=AssertionError("do not rescan")):
+                self.assertEqual(path, pipeline.prepare(source, root / "job", "English"))
+            self.assertEqual(json.loads(path.read_text(encoding="utf-8"))["units"][0]["target"], "Equipment")
+
     def test_apply_rejects_original_output_before_writing(self):
         pipeline = self.load_pipeline()
         with tempfile.TemporaryDirectory() as directory:

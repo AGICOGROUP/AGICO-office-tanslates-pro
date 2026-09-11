@@ -159,7 +159,9 @@ def analyze(path: Path) -> dict:
                     text = paragraph_text(paragraph)
                     if not text:
                         continue
-                    occurrences.append({"part": part_name, "paragraph": index, "text": text})
+                    style = paragraph.find(f"{W}pPr/{W}pStyle")
+                    occurrences.append({"part": part_name, "paragraph": index, "text": text,
+                                        "style": style.get(f"{W}val", "") if style is not None else ""})
                     if text not in seen:
                         seen.add(text)
                         unique_texts.append(text)
@@ -172,6 +174,12 @@ def analyze(path: Path) -> dict:
     except (BadZipFile, ET.XMLSyntaxError, OSError, ValueError) as exc:
         raise ValueError(f"Cannot analyze DOCX: {exc}") from exc
 
+    for index, item in enumerate(occurrences):
+        before = occurrences[index - 1] if index else {}
+        after = occurrences[index + 1] if index + 1 < len(occurrences) else {}
+        item["context"] = {"part": item["part"], "style": item["style"],
+                           "before": before.get("text", "")[-160:] if before.get("part") == item["part"] else "",
+                           "after": after.get("text", "")[:160] if after.get("part") == item["part"] else ""}
     return {
         "source": str(path.resolve()),
         "sha256": hashlib.sha256(raw).hexdigest().upper(),
