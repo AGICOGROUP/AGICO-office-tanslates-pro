@@ -18,6 +18,89 @@ W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 
 
 class WordPipelineContractTests(unittest.TestCase):
+    def test_apply_rejects_original_output_before_writing(self):
+        pipeline = self.load_pipeline()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = self.make_docx(root)
+            original = source.read_bytes()
+            manifest_path = pipeline.prepare(source, root / "job", "English")
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["units"][0]["target"] = "Equipment"
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "original|source"):
+                pipeline.apply(manifest_path, source)
+            self.assertEqual(original, source.read_bytes())
+
+    def test_parameter_check_preserves_counts_signs_and_unit_case(self):
+        pipeline = self.load_pipeline()
+        damaged = [
+            ("数量：2台", "Quantity: 3 units"),
+            ("价格：1000美元", "Price: 9000 USD"),
+            ("压力：5 MPa", "Pressure: 5 mPa"),
+            ("功率：5 MW", "Power: 5 mW"),
+            ("电机45kW，备用45kW", "Motor 45kW"),
+            ("温度-5°C", "Temperature 5°C"),
+        ]
+        for source, target in damaged:
+            with self.subTest(source=source, target=target):
+                self.assertTrue(pipeline.parameter_mismatch(source, target))
+        for source, target in [
+            ("数量：2台", "Quantity: 2 units"),
+            ("压力：5 MPa", "Pressure: 5 MPa"),
+            ("功率10kW和10kW", "Power 10 kW and 10 kW"),
+            ("电压10Kv", "Voltage 10 kV"),
+        ]:
+            with self.subTest(source=source, target=target):
+                self.assertFalse(pipeline.parameter_mismatch(source, target))
+
+    def test_validate_rejects_missing_or_misplaced_duplicate_occurrences(self):
+        pipeline = self.load_pipeline()
+        for damage in ("delete", "move", "media"):
+            with self.subTest(damage=damage), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                body = '<w:p><w:r><w:t>设备</w:t></w:r></w:p>' * 2
+                body += '<w:p><w:r><w:t>清单</w:t></w:r></w:p>'
+                source = self.make_docx(root, body)
+                manifest_path = pipeline.prepare(source, root / "job", "English")
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                for unit in manifest["units"]:
+                    unit["target"] = {"设备": "Equipment", "清单": "List"}[unit["source"]]
+                manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+                output = root / "output.docx"
+                pipeline.apply(manifest_path, output)
+                with ZipFile(output) as archive:
+                    parts = {name: archive.read(name) for name in archive.namelist()}
+                document = pipeline.etree.fromstring(parts["word/document.xml"])
+                paragraphs = list(document.iter(pipeline.W_P))
+                if damage == "delete":
+                    paragraphs[1].getparent().remove(paragraphs[1])
+                elif damage == "move":
+                    paragraphs[1].getparent().append(paragraphs[1])
+                else:
+                    parts["word/media/image1.png"] = b"changed-image"
+                parts["word/document.xml"] = pipeline.etree.tostring(document)
+                with ZipFile(output, "w") as archive:
+                    for name, payload in parts.items():
+                        archive.writestr(name, payload)
+                with self.assertRaisesRegex(ValueError, "occurrence|media"):
+                    pipeline.validate(output, manifest_path)
+
+    def test_validate_accepts_older_manifest_without_occurrence_baseline(self):
+        pipeline = self.load_pipeline()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = self.make_docx(root)
+            manifest_path = pipeline.prepare(source, root / "job", "English")
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest.pop("occurrences", None)
+            manifest.pop("media_sha256", None)
+            manifest["units"][0]["target"] = "Equipment"
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            output = root / "output.docx"
+            pipeline.apply(manifest_path, output)
+            pipeline.validate(output, manifest_path)
+
     def test_equivalent_parameters_pass_but_real_damage_still_fails(self):
         pipeline = self.load_pipeline()
         for source_text, target_text, should_pass in [
@@ -405,7 +488,7 @@ class WordPipelineContractTests(unittest.TestCase):
     def test_protected_token_normalization_accepts_equivalent_office_notation(self):
         pipeline = self.load_pipeline()
         self.assertEqual(
-            {"10kv", "1.4°c", "40mm"},
+            {"10kV", "1.4°C", "40mm"},
             pipeline.normalize_protected_tokens(["10Kv", "10 kV", "1,4 ℃", "40 mm"]),
         )
 

@@ -106,6 +106,7 @@ def analyze(path: Path) -> dict:
                 raise ValueError("macro-enabled Word package is not supported")
 
             media = sorted(name for name in names if name.startswith("word/media/") and not name.endswith("/"))
+            media_sha256 = {name: hashlib.sha256(archive.read(name)).hexdigest() for name in media}
             chart_parts = sorted(name for name in names if name.startswith("word/charts/") and name.endswith(".xml"))
             if chart_parts:
                 reasons.add("charts")
@@ -179,6 +180,7 @@ def analyze(path: Path) -> dict:
         "section_count": section_count,
         "table_count": table_count,
         "media_count": len(media),
+        "media_sha256": media_sha256,
         "needs_image_triage": bool(media),
         "text_occurrence_count": len(occurrences),
         "unique_text_count": len(unique_texts),

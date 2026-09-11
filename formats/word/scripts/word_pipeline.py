@@ -38,7 +38,8 @@ def is_text_part(name: str) -> bool:
 
 def normalize_protected_tokens(tokens: list[str]) -> set[str]:
     return {
-        re.sub(r"\s+", "", token).replace("℃", "°C").replace(",", ".").casefold()
+        re.sub(r"(?<=\d)Kv$", "kV", re.sub(r"\s+", "", token)
+               .replace("℃", "°C").replace(",", "."))
         for token in tokens
     }
 
@@ -61,23 +62,31 @@ def parameter_mismatch(source: str, target: str) -> bool:
     if source == target:
         return False
     source, target = canonical_parameters(source), canonical_parameters(target)
-    # Check the source's tokens in their translated context, not equality between
-    # two context-sensitive regex inventories. Added English labels are not damage.
-    separated_source = re.sub(r"[\u3400-\u9fff]", " ", source)
-    tokens = PROTECTED_TOKEN.findall(separated_source)
-    # Preserve complete unit expressions (the legacy inventory may match only t).
-    tokens += re.findall(
-        r"(?<![A-Za-z0-9])\d+(?:[.,]\d+)?\s*"
-        r"(?:[kM]?W|[kM]?Pa|[kM]?V|[kcm]?m|kg|t|kcal|mg|Nm|m)"
-        r"(?:[23])?(?:\s*/\s*(?:[kcm]?m[23]?|kg|h|d|min|s))?(?![A-Za-z0-9])",
-        separated_source,
+    # Include bare values and multiplicity; translating a Chinese chapter label
+    # may legitimately add a numeral, but must never remove a source value.
+    numbers = re.compile(r"(?<![\d.])[-+]?\d+(?:[.,]\d+)?")
+    source_numbers = Counter(value.replace(",", ".") for value in numbers.findall(source))
+    target_numbers = Counter(value.replace(",", ".") for value in numbers.findall(target))
+    if source_numbers - target_numbers:
+        return True
+    # Prefer a complete unit expression over the legacy regex's shorter match.
+    technical = re.compile(
+        r"\d+(?:[.,]\d+)?\s*"
+        r"(?:[mMk]?W|[mMk]?Pa|[kM]?V|mA|A|[kcm]?m|kg|t|kcal|mg|Nm|%|°C|Hz|rpm|r/min)"
+        r"(?:[23])?(?:\s*/\s*(?:[kcm]?m[23]?|kg|h|d|min|s))?(?![A-Za-z0-9])"
+        r"|" + PROTECTED_TOKEN.pattern,
+        re.IGNORECASE,
     )
-    target = target.casefold()
-    for token in normalize_protected_tokens(tokens):
+    source = re.sub(r"[\u3400-\u9fff]", " ", source)
+    expected = Counter(next(iter(normalize_protected_tokens([match.group()])))
+                       for match in technical.finditer(source))
+    # Normalize only the documented legacy spelling, not SI prefixes or models.
+    target = re.sub(r"(?<=\d)\s*Kv\b", " kV", target)
+    for token, count in expected.items():
         left = r"(?<![A-Za-z0-9.])" if token[:1].isdigit() else r"(?<![A-Za-z])"
         pattern = re.escape(token).replace("/", r"\s*/\s*")
         pattern = re.sub(r"(?<=\d)(?=[A-Za-z%°])", lambda _: r"\s*", pattern)
-        if not re.search(left + pattern + r"(?![A-Za-z0-9]|\.\d)", target):
+        if len(re.findall(left + pattern + r"(?![A-Za-z0-9]|\.\d)", target)) < count:
             return True
     return False
 
@@ -202,6 +211,8 @@ def prepare(source: Path, job_dir: Path, target_language: str) -> Path:
         "working_docx": str(working.resolve()), "target_language": target_language,
         "baseline": {key: report[key] for key in ("section_count", "table_count", "media_count")},
         "protected_tokens": report["protected_tokens"], "units": units,
+        "occurrences": report["occurrences"],
+        "media_sha256": report["media_sha256"],
     }
     path = job_dir / "translation-manifest.json"
     path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -218,8 +229,8 @@ def apply(manifest_path: Path, output: Path) -> None:
     applied = Counter()
     source = Path(manifest["working_docx"])
     output.parent.mkdir(parents=True, exist_ok=True)
-    if source.resolve() == output.resolve():
-        raise ValueError("input and output paths must be different")
+    if output.resolve() in {source.resolve(), Path(manifest["source"]).resolve()}:
+        raise ValueError("output must not overwrite the original source or working copy")
     descriptor, temporary_name = tempfile.mkstemp(prefix=f".{output.name}.", suffix=".tmp", dir=output.parent)
     os.close(descriptor)
     temporary = Path(temporary_name)
@@ -268,6 +279,18 @@ def validate(candidate: Path, manifest_path: Path, word_native: bool = False) ->
     missing_targets = [unit["id"] for unit in manifest["units"] if unit["target"] not in candidate_texts]
     if missing_targets:
         failures.append(f"missing target text for units: {missing_targets}")
+    # Older jobs recover their occurrence baseline from the untouched working
+    # copy. New jobs reuse the prepare inventory without another source scan.
+    baseline = manifest if "occurrences" in manifest and "media_sha256" in manifest else analyze(Path(manifest["working_docx"]))
+    translations = {unit["source"]: unit["target"] for unit in manifest["units"]}
+    expected_occurrences = {(item["part"], item["paragraph"]): translations[item["text"]]
+                            for item in baseline["occurrences"]}
+    actual_occurrences = {(item["part"], item["paragraph"]): item["text"]
+                          for item in report["occurrences"]}
+    if expected_occurrences != actual_occurrences:
+        failures.append("translated occurrence missing, moved or changed")
+    if report["media_sha256"] != baseline["media_sha256"]:
+        failures.append("media content changed")
     target_texts = {unit["target"] for unit in manifest["units"]}
     unsafe_layout = [item for item in report.get("text_layout_risks", []) if item.get("text") in target_texts]
     if unsafe_layout:

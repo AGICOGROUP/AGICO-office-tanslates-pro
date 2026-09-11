@@ -15,7 +15,7 @@ and quality-control contract; it does not depend on another Office translation s
 
 ## Start from the original
 
-Hash and preserve the source. Work from a copy and create a separate translated output. Never overwrite the uploaded file.
+Hash and preserve the source. Work from a copy and create a separate translated output. Never overwrite the uploaded file; `apply` rejects both original-source and working-copy output paths before writing.
 
 Use `scripts/word_pipeline.py` for the complete workflow. For `.doc`, its conversion stage opens visible Microsoft Word and immediately saves an immutable working `.docx`; do not inventory, repaginate, or run statistics before conversion.
 
@@ -27,7 +27,7 @@ Read `../../references/水泥专业名词中英对照.md` before translation. Re
 2. Fill every manifest target in stable source order after applying the glossary and protected-token rules.
 3. Run `apply`; the program uses `lxml`, preserves ZIP parts and namespace mappings, keeps whitespace-only runs from carrying translated words, preserves visible boundary spaces, and removes CJK-only character compression from Latin-script translations without rebuilding OOXML with the standard XML library.
 4. Review embedded image text and record any unsafe region for manual review.
-5. Run `validate` once. Its static checks for source hash, translated strings, structure, media, and protected tokens are the required delivery gate. Parameter checks follow each source unit and accept full-width symbols, unit spacing and listed equivalent unit spellings. Keep normal engineering notation; do not spell numbers out or edit the source baseline just to satisfy a check. Changed or missing technical values and model codes still block delivery.
+5. Run `validate` once. It checks the source hash, every translated paragraph at its original location, structure, unchanged media bytes, and protected tokens. Parameter checks retain bare values, signs and repeated occurrences; they accept full-width symbols, unit spacing and listed equivalent spellings while distinguishing SI prefix case. New jobs reuse the prepared occurrence/media inventory; older manifests recover it from the working copy. Keep normal engineering notation; do not spell numbers out or edit the source baseline just to satisfy a check. Changed or missing technical values and model codes still block delivery.
 6. Use `validate --word-native` only when a Word-native opening or pagination diagnostic is specifically useful. This check is optional and non-blocking; failure or timeout is recorded as a warning and never prevents delivery.
 
 ## Delivery gate
