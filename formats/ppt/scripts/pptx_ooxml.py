@@ -8,12 +8,16 @@ import copy
 import html
 import io
 import json
+import math
+import os
 from pathlib import Path
 import re
 import sys
+import tempfile
 import zipfile
 import xml.etree.ElementTree as ET
 from xml.sax.saxutils import escape
+from lxml import etree as LET
 
 
 P_NS = "http://schemas.openxmlformats.org/presentationml/2006/main"
@@ -227,7 +231,12 @@ def apply_items_to_slide(xml_bytes: bytes, items: list[dict]) -> bytes:
             + xml_text[shape_match.end() :]
         )
 
-    return xml_text.encode("utf-8")
+    result = xml_text.encode("utf-8")
+    try:
+        ET.fromstring(result)
+    except ET.ParseError as exc:
+        raise OoxmlError(f"translation produced invalid slide XML: {exc}") from exc
+    return result
 
 
 def load_manifest(path: Path) -> dict:
@@ -244,6 +253,128 @@ def load_manifest(path: Path) -> dict:
     return manifest
 
 
+def overlay_shape(root: ET.Element, overlay: dict, shape_id: int) -> bytes:
+    """Create one editable shape without serializing or modifying its host."""
+    label = f"overlay {overlay.get('id', '<missing>')}"
+    try:
+        if not overlay.get("id") or overlay.get("kind") != "office_overlay":
+            raise ValueError("requires an id and kind office_overlay")
+        if overlay.get("localization_mode") != "bilingual_below":
+            raise ValueError("requires bilingual_below localization")
+        if overlay.get("background", {}).get("mode") != "transparent":
+            raise ValueError("bilingual overlays require a transparent background")
+        translation = overlay.get("translation", "")
+        if not isinstance(translation, str) or not translation.strip():
+            raise ValueError("translation is empty")
+        host_id = int(overlay["location"]["host_shape_id"])
+        host = find_shape(root, host_id)
+        if host is None:
+            raise ValueError(f"host shape {host_id} not found; choose an existing image shape")
+        parents = {child: parent for parent in root.iter() for child in parent}
+        if parents.get(host) is None or parents[host].tag != f"{{{P_NS}}}spTree":
+            raise ValueError("grouped hosts are unsupported; use an ungrouped image host")
+        if host.find(f".//{{{A_NS}}}blip") is None:
+            raise ValueError("host contains no image")
+        transform = host.find(f"./{{{P_NS}}}spPr/{{{A_NS}}}xfrm")
+        if transform is None:
+            raise ValueError("host has no explicit image transform; provide an ungrouped image")
+        if int(transform.get("rot", "0")) % 21600000:
+            raise ValueError("rotated host is unsupported; use an unrotated image")
+        if any(transform.get(key, "0") not in {"0", "false"} for key in ("flipH", "flipV")):
+            raise ValueError("flipped host is unsupported; use an unflipped image")
+        offset, extent = transform.find(f"{{{A_NS}}}off"), transform.find(f"{{{A_NS}}}ext")
+        if offset is None or extent is None:
+            raise ValueError("host has incomplete geometry")
+        host_x, host_y = int(offset.get("x")), int(offset.get("y"))
+        host_w, host_h = int(extent.get("cx")), int(extent.get("cy"))
+        if min(host_w, host_h) <= 0:
+            raise ValueError("host has nonpositive dimensions")
+        regions = {}
+        for region_name in ("source_region", "region"):
+            region = overlay[region_name]
+            values = [region[key] for key in ("x", "y", "w", "h")]
+            if not all(type(value) in (int, float) and math.isfinite(value) for value in values):
+                raise ValueError(f"{region_name} must contain finite normalized coordinates")
+            x, y, w, h = values
+            if x < 0 or y < 0 or min(w, h) <= 0 or x + w > 1.000000001 or y + h > 1.000000001:
+                raise ValueError(f"{region_name} lies outside its host; adjust the region")
+            regions[region_name] = values
+        sx, sy, sw, sh = regions["source_region"]
+        x, y, w, h = regions["region"]
+        if y < sy + sh - 1e-9:
+            raise ValueError("translation region must be below the source label")
+        style = overlay["style"]
+        size = style["font_size_pt"]
+        if type(size) not in (int, float) or not math.isfinite(size) or not 1 <= size <= 4000:
+            raise ValueError("font_size_pt must be between 1 and 4000")
+        if not isinstance(style.get("bold"), bool) or not str(style.get("font_name", "")).strip():
+            raise ValueError("font_name and boolean bold are required")
+        color = style["text_rgb"]
+        if not isinstance(color, str) or not re.fullmatch(r"[0-9A-Fa-f]{6}", color):
+            raise ValueError("text_rgb must be a six-digit RGB value")
+        align = {"left": "l", "center": "ctr", "right": "r"}[style["align"]]
+
+        def child(parent, namespace, tag, **attributes):
+            return LET.SubElement(parent, f"{{{namespace}}}{tag}", {key: str(value) for key, value in attributes.items()})
+
+        shape = LET.Element(f"{{{P_NS}}}sp", nsmap={"p": P_NS, "a": A_NS})
+        nv = child(shape, P_NS, "nvSpPr")
+        child(nv, P_NS, "cNvPr", id=shape_id, name="office-translate-overlay:" + overlay["id"])
+        child(nv, P_NS, "cNvSpPr", txBox="1")
+        child(nv, P_NS, "nvPr")
+        properties = child(shape, P_NS, "spPr")
+        transform = child(properties, A_NS, "xfrm")
+        child(transform, A_NS, "off", x=round(host_x + x * host_w), y=round(host_y + y * host_h))
+        child(transform, A_NS, "ext", cx=max(1, round(w * host_w)), cy=max(1, round(h * host_h)))
+        child(child(properties, A_NS, "prstGeom", prst="rect"), A_NS, "avLst")
+        child(properties, A_NS, "noFill")
+        child(child(properties, A_NS, "ln"), A_NS, "noFill")
+        body = child(shape, P_NS, "txBody")
+        body_properties = child(body, A_NS, "bodyPr", wrap="square", lIns=0, tIns=0, rIns=0, bIns=0, anchor="t")
+        child(body_properties, A_NS, "noAutofit")
+        child(body, A_NS, "lstStyle")
+        for line in re.split(r"\r\n|\r|\n|\v", translation):
+            paragraph = child(body, A_NS, "p")
+            child(paragraph, A_NS, "pPr", algn=align)
+            run = child(paragraph, A_NS, "r")
+            run_properties = child(run, A_NS, "rPr", sz=round(size * 100), b=int(style["bold"]))
+            child(child(run_properties, A_NS, "solidFill"), A_NS, "srgbClr", val=color.upper())
+            for script in ("latin", "ea", "cs"):
+                child(run_properties, A_NS, script, typeface=style["font_name"])
+            node = child(run, A_NS, "t")
+            node.text = line
+            if line[:1].isspace() or line[-1:].isspace():
+                node.set(f"{{{XML_NS}}}space", "preserve")
+        return LET.tostring(shape, encoding="utf-8")
+    except (KeyError, TypeError, ValueError) as exc:
+        raise OoxmlError(f"{label}: {exc}") from exc
+
+
+def apply_overlays_to_slide(xml_bytes: bytes, overlays: list[dict]) -> bytes:
+    root = ET.fromstring(xml_bytes)
+    next_id = max((int(node.get("id", "0")) for node in root.iter(f"{{{P_NS}}}cNvPr")), default=0) + 1
+    existing_names = {node.get("name") for node in root.iter(f"{{{P_NS}}}cNvPr")}
+    shapes = []
+    for overlay in overlays:
+        if "office-translate-overlay:" + str(overlay.get("id")) in existing_names:
+            raise OoxmlError(f"overlay {overlay['id']}: already exists; apply to the working source")
+        shapes.append(overlay_shape(root, overlay, next_id))
+        next_id += 1
+    # Insert before the tree's extension list, which OOXML requires to be last.
+    match = re.search(rb"<p:spTree\b[^>]*>(.*?)</p:spTree\s*>", xml_bytes, re.DOTALL)
+    if match is None:
+        raise OoxmlError("overlay slide requires a p:spTree element")
+    tree = LET.fromstring(xml_bytes).find(f".//{{{P_NS}}}spTree")
+    insertion = match.end(1)
+    if tree is not None and len(tree) and tree[-1].tag == f"{{{P_NS}}}extLst":
+        insertion = xml_bytes.rfind(b"<p:extLst", match.start(1), insertion)
+        if insertion < 0:
+            raise OoxmlError("cannot locate slide shape-tree extension list")
+    result = xml_bytes[:insertion] + b"".join(shapes) + xml_bytes[insertion:]
+    ET.fromstring(result)
+    return result
+
+
 def apply_manifest(input_path: Path, manifest_path: Path, output_path: Path) -> dict:
     if input_path.resolve() == output_path.resolve():
         raise OoxmlError("refusing to overwrite the source presentation")
@@ -251,6 +382,14 @@ def apply_manifest(input_path: Path, manifest_path: Path, output_path: Path) -> 
         raise OoxmlError(f"input file not found: {input_path}")
 
     manifest = load_manifest(manifest_path)
+    protected_paths = [manifest_path]
+    for key in ("source_path", "working_source_path"):
+        if manifest.get(key):
+            protected_paths.append(Path(manifest[key]))
+    if any(output_path.resolve() == path.resolve() or
+           (output_path.exists() and path.exists() and os.path.samefile(output_path, path))
+           for path in [input_path, *protected_paths]):
+        raise OoxmlError("refusing to overwrite the source, working source, or manifest")
     units: dict[str, dict] = {}
     for unit in manifest["translation_units"]:
         unit_id = str(unit.get("id", ""))
@@ -277,35 +416,59 @@ def apply_manifest(input_path: Path, manifest_path: Path, output_path: Path) -> 
         resolved["translation"] = unit["translation"]
         items_by_slide.setdefault(int(resolved["slide_index"]), []).append(resolved)
 
+    overlays_by_slide: dict[int, list[dict]] = {}
+    overlay_ids = set()
+    for overlay in manifest.get("overlays", []):
+        label = overlay.get("id", "<missing>")
+        if label in overlay_ids:
+            raise OoxmlError(f"overlay {label}: duplicate id")
+        overlay_ids.add(label)
+        try:
+            slide_index = int(overlay["location"]["page_or_slide"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise OoxmlError(f"overlay {label}: invalid slide location") from exc
+        overlays_by_slide.setdefault(slide_index, []).append(overlay)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     replaced = 0
     with zipfile.ZipFile(input_path, "r") as source:
         source_entries = source.infolist()
         source_names = {entry.filename for entry in source_entries}
         expected_slides = {
-            f"ppt/slides/slide{slide_index}.xml" for slide_index in items_by_slide
+            f"ppt/slides/slide{slide_index}.xml" for slide_index in items_by_slide.keys() | overlays_by_slide.keys()
         }
         missing_slides = sorted(expected_slides - source_names)
         if missing_slides:
             raise OoxmlError(f"missing slide XML: {', '.join(missing_slides)}")
 
-        with zipfile.ZipFile(output_path, "w", allowZip64=True) as target:
-            target.comment = source.comment
-            for entry in source_entries:
-                payload = source.read(entry.filename)
-                match = re.fullmatch(r"ppt/slides/slide(\d+)\.xml", entry.filename)
-                if match:
-                    slide_index = int(match.group(1))
-                    slide_items = items_by_slide.get(slide_index)
-                    if slide_items:
-                        payload = apply_items_to_slide(payload, slide_items)
-                        replaced += len(slide_items)
-                target.writestr(copy.copy(entry), payload)
+        fd, temporary_name = tempfile.mkstemp(prefix=f".{output_path.name}.", suffix=".tmp", dir=output_path.parent)
+        os.close(fd)
+        temporary = Path(temporary_name)
+        try:
+            with zipfile.ZipFile(temporary, "w", allowZip64=True) as target:
+                target.comment = source.comment
+                for entry in source_entries:
+                    payload = source.read(entry.filename)
+                    match = re.fullmatch(r"ppt/slides/slide(\d+)\.xml", entry.filename)
+                    if match:
+                        slide_index = int(match.group(1))
+                        slide_items = items_by_slide.get(slide_index)
+                        if slide_items:
+                            payload = apply_items_to_slide(payload, slide_items)
+                            replaced += len(slide_items)
+                        slide_overlays = overlays_by_slide.get(slide_index)
+                        if slide_overlays:
+                            payload = apply_overlays_to_slide(payload, slide_overlays)
+                    target.writestr(copy.copy(entry), payload)
+            temporary.replace(output_path)
+        finally:
+            temporary.unlink(missing_ok=True)
 
     return {
         "occurrences": len(manifest["occurrences"]),
         "translation_units": len(manifest["translation_units"]),
         "replaced": replaced,
+        "image_overlays": sum(map(len, overlays_by_slide.values())),
+        "preserved_parts": manifest.get("preserved_parts", []),
     }
 
 
@@ -320,7 +483,7 @@ def main() -> int:
 
     try:
         summary = apply_manifest(args.input, args.manifest, args.output)
-    except (OoxmlError, zipfile.BadZipFile, ET.ParseError) as exc:
+    except (OoxmlError, OSError, zipfile.BadZipFile, ET.ParseError) as exc:
         print(f"OOXML error: {exc}", file=sys.stderr)
         return 2
 

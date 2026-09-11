@@ -9,6 +9,11 @@ from pathlib import Path
 import sys
 from typing import Any
 
+REPOSITORY_SCRIPTS = str(Path(__file__).resolve().parents[3] / "scripts")
+if REPOSITORY_SCRIPTS not in sys.path:
+    sys.path.append(REPOSITORY_SCRIPTS)
+from translation_quality import technical_mismatch
+
 
 class ManifestError(ValueError):
     pass
@@ -94,9 +99,8 @@ def validate_manifest(path: str | Path, require_translations: bool = False) -> d
         if require_translations and not unit["translation"].strip():
             raise ManifestError(f"{label}: empty translation: {unit_id}")
         if unit["translation"].strip():
-            for token in tokens:
-                if require_translations and token not in unit["translation"]:
-                    raise ManifestError(f"{label}: protected token missing from translation: {token}")
+            if require_translations and technical_mismatch(unit["source_text"], unit["translation"], tokens):
+                raise ManifestError(f"{label}: protected token missing or technical parameter changed in translation")
             translated += 1
         units[unit_id] = unit
 

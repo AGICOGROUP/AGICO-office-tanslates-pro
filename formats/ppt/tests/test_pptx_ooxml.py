@@ -127,7 +127,7 @@ class OoxmlApplyTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(
-            {"occurrences": 2, "translation_units": 1, "replaced": 2},
+            {"occurrences": 2, "translation_units": 1, "replaced": 2, "image_overlays": 0, "preserved_parts": []},
             json.loads(result.stdout),
         )
 

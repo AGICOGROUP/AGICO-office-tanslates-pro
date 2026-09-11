@@ -6,15 +6,17 @@ from __future__ import annotations
 import argparse
 from hashlib import sha256
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
 import sys
 from typing import Any
+from zipfile import ZipFile
 
 from inspect_pptx_package import InspectionError, inspect_package, sha256_file
 from pptx_ooxml import OoxmlError, apply_manifest
-from validate_manifest import ManifestError, validate_manifest
+from validate_manifest import ManifestError, validate_manifest, technical_mismatch
 from resolve_repo_glossary import lookup_terms
 
 
@@ -96,6 +98,8 @@ def build_translation_manifest(
         "source_file": inventory["source_file"],
         "source_path": inventory.get("source_path", ""),
         "source_sha256": inventory["source_sha256"],
+        "working_source_path": inventory.get("working_source_path", inventory.get("source_path", "")),
+        "working_source_sha256": inventory.get("working_source_sha256", inventory["source_sha256"]),
         "source_language": source_language,
         "target_language": target_language,
         "format": "powerpoint",
@@ -103,6 +107,8 @@ def build_translation_manifest(
         "translation_units": list(units_by_key.values()),
         "image_groups": image_groups,
         "embedded_objects": embedded_objects,
+        "preserved_parts": inventory.get("preserved_parts", []),
+        "warnings": inventory.get("warnings", []),
         "overlays": [],
     }
 
@@ -254,6 +260,7 @@ def command_inspect(args: argparse.Namespace) -> int:
         raise PipelineError("PowerPoint pipeline supports only .ppt and .pptx")
 
     inventory = inspect_package(working_source)
+    inventory["working_source_sha256"] = inventory["source_sha256"]
     inventory["source_file"] = source.name
     inventory["source_path"] = str(source)
     if legacy_converted:
@@ -313,42 +320,24 @@ def command_apply(args: argparse.Namespace) -> int:
     mutation_source = Path(inventory.get("working_source_path", str(source))).resolve()
     if not mutation_source.is_file():
         raise PipelineError(f"working source not found: {mutation_source}")
+    if output == mutation_source or (output.exists() and os.path.samefile(output, mutation_source)):
+        raise PipelineError("refusing to overwrite the working source presentation")
+    if inventory.get("source_path") and source != Path(inventory["source_path"]).resolve():
+        raise PipelineError("source path differs from the inspected source")
+    source_hash = sha256_file(source)
+    if source_hash != inventory["source_sha256"]:
+        raise PipelineError("source hash changed; inspect the source again before applying")
+    working_hash = source_hash if mutation_source == source else sha256_file(mutation_source)
+    expected_working_hash = inventory.get("working_source_sha256")
+    if expected_working_hash is None and mutation_source != source:
+        raise PipelineError("working source hash is missing; inspect the legacy source again")
+    if working_hash != (expected_working_hash or source_hash):
+        raise PipelineError("working source hash changed; inspect the source again before applying")
     mark_stage(state, "translate", str(manifest_path))
     mark_stage(state, "validate", str(manifest_path))
 
-    if int(validation.get("overlay_images", 0)) == 0:
-        apply_report = apply_manifest(mutation_source, manifest_path, output)
-        apply_report["engine"] = "ooxml"
-    else:
-        powershell = shutil.which("powershell.exe")
-        if not powershell:
-            raise PipelineError("Microsoft PowerPoint COM requires powershell.exe")
-        command = [
-            powershell,
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            str(Path(__file__).with_name("ppt_com.ps1")),
-            "-Command",
-            "apply",
-            "-InputPath",
-            str(mutation_source),
-            "-OutputPath",
-            str(output),
-            "-ManifestPath",
-            str(manifest_path),
-        ]
-        completed = subprocess.run(command, capture_output=True, text=True, encoding="utf-8")
-        if completed.returncode != 0:
-            raise PipelineError(completed.stderr.strip() or "PowerPoint COM apply failed")
-        try:
-            apply_report = json.loads(completed.stdout)
-        except json.JSONDecodeError as exc:
-            raise PipelineError("PowerPoint COM apply returned invalid JSON") from exc
-        apply_report["engine"] = "powerpoint-com"
-        state["metrics"]["powerpoint_starts"] += 1
-        state["metrics"]["presentation_opens"] += 2
+    apply_report = apply_manifest(mutation_source, manifest_path, output)
+    apply_report["engine"] = "ooxml"
 
     apply_report["manifest_validation"] = validation
     report_path = args.job_dir / "apply-report.json"
@@ -370,6 +359,19 @@ def command_verify(args: argparse.Namespace) -> int:
     if sha256_file(source) != inventory["source_sha256"]:
         errors.append({"code": "source-hash-mismatch"})
     output_inventory = inspect_package(output)
+    # Read metadata from the original inventory, never from editable decisions.
+    with ZipFile(output) as package:
+        for item in inventory.get("preserved_parts", []):
+            if item["part"] not in package.namelist() or sha256(package.read(item["part"])).hexdigest() != item["sha256"]:
+                errors.append({"code": "preserved-part-changed", "part": item["part"]})
+    working_source = Path(inventory.get("working_source_path", str(source)))
+    with ZipFile(working_source) as original, ZipFile(output) as translated:
+        output_names = set(translated.namelist())
+        for name in original.namelist():
+            if name.startswith("ppt/slides/slide") and name.endswith(".xml"):
+                continue
+            if name not in output_names or original.read(name) != translated.read(name):
+                errors.append({"code": "package-part-changed", "part": name})
     errors.extend(verify_localized_image_hashes(manifest, output_inventory))
     errors.extend(verify_required_overlays(manifest, output_inventory))
     if len(output_inventory["slides"]) != len(inventory["slides"]):
@@ -398,11 +400,8 @@ def command_verify(args: argparse.Namespace) -> int:
                     "actual": actual_text,
                 }
             )
-        for token in occurrence.get("protected_tokens", []):
-            if token not in actual_text:
-                errors.append(
-                    {"code": "protected-token-missing", "id": occurrence["id"], "token": token}
-                )
+        if technical_mismatch(occurrence["source_text"], actual_text, occurrence.get("protected_tokens", [])):
+            errors.append({"code": "technical-parameter-mismatch", "id": occurrence["id"]})
     passed = not errors
     report = {
         "passed": passed,
@@ -414,6 +413,8 @@ def command_verify(args: argparse.Namespace) -> int:
         "occurrences_verified": len(manifest["occurrences"])
         - sum(1 for error in errors if error["code"] in {"missing-occurrence", "translation-mismatch"}),
         "errors": errors,
+        "preserved_parts": inventory.get("preserved_parts", []),
+        "warnings": inventory.get("warnings", []),
     }
     report_path = args.job_dir / "verification.json"
     write_json(report_path, report)
@@ -527,8 +528,12 @@ def command_deliver(args: argparse.Namespace) -> int:
     )
     write_json(state_path, state)
     warning = state.get("render_warning")
+    warnings = list(verification.get("warnings", []))
+    if warning:
+        warnings.append(warning["message"])
     print(json.dumps({"delivered": str(output),
-                      "warnings": [warning["message"]] if warning else []}, ensure_ascii=False))
+                      "warnings": warnings,
+                      "preserved_parts": verification.get("preserved_parts", [])}, ensure_ascii=False))
     return 0
 
 

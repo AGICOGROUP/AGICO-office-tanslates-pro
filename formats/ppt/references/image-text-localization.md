@@ -23,3 +23,8 @@ Screen all readable source labels in actual static diagrams, flowcharts, and scr
 For `overlay`, preserve all original pixels, crop, geometry, arrows, lines, equipment, numbers,
 units, models, symbols, and flow direction. Never erase, cover, patch, regenerate, redraw, or
 replace image content.
+
+The native writer supports ungrouped image hosts with explicit geometry and no rotation or flip.
+An unsupported transform returns the affected overlay ID and repair guidance before replacing any
+generated output. Keep `source_region` and the below-label `region` normalized to the displayed host;
+provide transparent background, font name and point size, bold flag, text RGB, and alignment.

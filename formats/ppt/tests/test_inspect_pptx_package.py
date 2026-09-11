@@ -130,7 +130,7 @@ class PowerPointPackageInspectorTests(unittest.TestCase):
         self.assertNotIn("risk_plan", report)
         self.assertEqual(1, len(report["slides"]))
 
-    def test_rejects_human_text_in_unsupported_editable_parts(self):
+    def test_preserves_and_discloses_human_text_in_complex_parts(self):
         samples = {
             "ppt/charts/chart1.xml": '<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:v>Sales</c:v></c:chartSpace>',
             "ppt/diagrams/data1.xml": '<dgm:dataModel xmlns:dgm="http://schemas.openxmlformats.org/drawingml/2006/diagram" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:t>Process</a:t></dgm:dataModel>',
@@ -142,8 +142,16 @@ class PowerPointPackageInspectorTests(unittest.TestCase):
                 deck = self.make_deck(directory, texts=("Title",))
                 with ZipFile(deck, "a", ZIP_DEFLATED) as archive:
                     archive.writestr(part_name, payload)
-                with self.assertRaisesRegex(InspectionError, "unsupported editable text"):
-                    inspect_package(deck)
+                report = inspect_package(deck)
+                self.assertEqual(part_name, report["preserved_parts"][0]["part"])
+                self.assertEqual("preserved_untranslated", report["preserved_parts"][0]["status"])
+                self.assertEqual(part_name, report["warnings"][0]["part"])
+                self.assertEqual(["Title"], [item["source_text"] for item in report["occurrences"]])
+
+    def test_custom_master_placeholder_text_is_disclosed(self):
+        from inspect_pptx_package import xml_contains_human_text
+        payload = '<p:sldMaster xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:sp><p:nvSpPr><p:nvPr><p:ph type="title"/></p:nvPr></p:nvSpPr><p:txBody><a:p><a:r><a:t>Company confidential</a:t></a:r></a:p></p:txBody></p:sp></p:sldMaster>'
+        self.assertTrue(xml_contains_human_text(payload.encode(), template=True))
 
     def test_rejects_macro_package_renamed_to_pptx(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -20,7 +20,12 @@ Embedded objects default to `preserved_untranslated`: retain their binary conten
 report warnings, and continue. Set `pending_native_handler` only for an explicit request to translate
 inside an embedded object; validation then blocks delivery until its status becomes `translated`.
 
-The source hash is calculated during `inspect` and compared during `verify`. `render` uses the PPT
+`apply` uses native OOXML for paragraph translations and editable image overlays; PowerPoint COM is
+needed for legacy `.ppt` conversion and final rendering. The source and converted working copy are
+hashed during `inspect` and checked before `apply`; source integrity is rechecked during `verify`.
+Writes replace only the generated output after the ZIP closes successfully, preserving any prior
+output on failure. Complex untranslated parts are listed in `preserved_parts` and delivery warnings.
+`render` uses the PPT
 module's hidden PowerPoint session to create one low-resolution image for every final slide, with no
 external PDF conversion gate. Rendering has a 60-second timeout. If native rendering is unavailable,
 the pipeline records a warning; review any available slide images and disclose unreviewed pages.

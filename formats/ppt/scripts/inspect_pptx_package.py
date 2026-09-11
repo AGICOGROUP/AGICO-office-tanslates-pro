@@ -50,15 +50,18 @@ def local_name(tag: str) -> str:
 def xml_contains_human_text(payload: bytes, *, template: bool = False) -> bool:
     root = ET.fromstring(payload)
     if template:
-        # Template title/body/object text is an editing prompt. Footer/date text
-        # and ordinary shapes can be visible and must remain in the inventory gate.
+        # Suppress only known editing prompts, not arbitrary custom placeholder text.
         for parent in list(root.iter()):
             for shape in list(parent):
                 if shape.tag != f"{{{P_NS}}}sp":
                     continue
                 placeholder = shape.find(f"./{{{P_NS}}}nvSpPr/{{{P_NS}}}nvPr/{{{P_NS}}}ph")
                 if placeholder is not None and placeholder.get("type", "obj") in {"title", "ctrTitle", "subTitle", "body", "obj"}:
-                    parent.remove(shape)
+                    texts = [(node.text or "").strip() for node in shape.iter(f"{{{A_NS}}}t")]
+                    prompts = {"", "Click to edit Master title style", "Click to edit Master subtitle style",
+                               "Click to edit Master text styles", "Second level", "Third level", "Fourth level", "Fifth level"}
+                    if all(text in prompts for text in texts):
+                        parent.remove(shape)
     return any(
         node.text and any(character.isalpha() for character in node.text)
         for node in root.iter()
@@ -324,10 +327,17 @@ def inspect_package(input_path: str | Path) -> dict:
                 and name.startswith(UNSUPPORTED_TEXT_PARTS)
                 and xml_contains_human_text(package.read(name), template=name.startswith(("ppt/slideMasters/", "ppt/slideLayouts/")))
             )
-            if unsupported_text:
-                raise InspectionError(
-                    "unsupported editable text parts: " + ", ".join(unsupported_text)
-                )
+            preserved_parts = [
+                {"part": name, "sha256": sha256(package.read(name)).hexdigest(),
+                 "status": "preserved_untranslated",
+                 "reason": "Complex text outside editable slide paragraphs is preserved untranslated."}
+                for name in unsupported_text
+            ]
+            warnings = [
+                {"code": "preserved-untranslated-part", "part": item["part"],
+                 "message": item["part"] + ": " + item["reason"]}
+                for item in preserved_parts
+            ]
             occurrences: list[dict] = []
             image_by_hash: dict[str, dict] = {}
             embedded_objects: list[dict] = []
@@ -365,6 +375,8 @@ def inspect_package(input_path: str | Path) -> dict:
         "occurrences": occurrences,
         "image_groups": list(image_by_hash.values()),
         "embedded_objects": embedded_objects,
+        "preserved_parts": preserved_parts,
+        "warnings": warnings,
         "metrics": {
             "package_passes": 1,
             "slide_count": len(slide_entries),

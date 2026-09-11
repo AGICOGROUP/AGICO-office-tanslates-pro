@@ -384,14 +384,12 @@ class PipelineStateTests(unittest.TestCase):
         output["occurrences"][0]["geometry"]["y"] = 100000
         self.assertTrue(verify_required_overlays(manifest, output))
 
-    def test_source_hash_is_not_recomputed_during_apply(self):
-        source = PIPELINE_SCRIPT.read_text(encoding="utf-8")
-        apply_body = source.split("def command_apply", 1)[1].split(
-            "def command_verify", 1
-        )[0]
-
-        self.assertNotIn("sha256_file(", apply_body)
-        self.assertNotIn("working_source_sha256", source)
+    def test_manifest_retains_inspected_working_source_identity(self):
+        prepared_inventory = inventory([occurrence("item-1")])
+        prepared_inventory.update(working_source_path="working-source.pptx", working_source_sha256="b" * 64)
+        manifest = build_translation_manifest(prepared_inventory, "en")
+        self.assertEqual("working-source.pptx", manifest["working_source_path"])
+        self.assertEqual("b" * 64, manifest["working_source_sha256"])
 
     def test_verification_rejects_a_changed_localized_image(self):
         manifest = {
