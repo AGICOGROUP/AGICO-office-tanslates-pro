@@ -97,6 +97,93 @@ class NativeWorkbookTests(unittest.TestCase):
         self.assertTrue(any("chart1.xml" in w for w in report["warnings"]))
         self.assertTrue(any("comment1.xml" in w for w in report["warnings"]))
 
+    def formula_fixture(self, formula, shared=False):
+        parts = fixture(self.source)
+        root = ET.fromstring(parts["xl/worksheets/sheet1.xml"].encode())
+        node = root.find(f'.//{{{NS}}}f')
+        node.text = formula
+        cell = root.find(f'.//{{{NS}}}c[@r="C1"]')
+        cell.set("t", "inlineStr")
+        cell.clear(keep_tail=True)
+        cell.set("r", "C1")
+        cell.set("t", "inlineStr")
+        ET.SubElement(ET.SubElement(cell, f"{{{NS}}}is"), f"{{{NS}}}t").text = "输入"
+        if shared:
+            node.set("t", "shared")
+            node.set("si", "0")
+            node.set("ref", "B2:B3")
+            follower = ET.SubElement(root.find(f'.//{{{NS}}}row[@r="3"]'), f"{{{NS}}}c", r="B3")
+            ET.SubElement(follower, f"{{{NS}}}f", t="shared", si="0")
+        parts["xl/worksheets/sheet1.xml"] = ET.tostring(root)
+        with ZipFile(self.source, "w", ZIP_DEFLATED) as archive:
+            for name, content in parts.items():
+                archive.writestr(name, content)
+
+    def test_literal_indirect_retains_only_referenced_input(self):
+        self.formula_fixture('SUM(INDIRECT("C1"))')
+        report = self.run_native("inspect")
+        self.assertEqual({c["address"] for c in report["occurrences"] if c["formula_dependency"]}, {"C1"})
+
+    def test_indirect_explicit_a1_mode_and_quoted_sheet(self):
+        self.formula_fixture('SUM(INDIRECT("\'Plant\'!C1",1))')
+        report = self.run_native("inspect")
+        self.assertEqual({c["address"] for c in report["occurrences"] if c["formula_dependency"]}, {"C1"})
+
+    def test_print_area_does_not_mark_display_labels_as_formula_inputs(self):
+        parts = fixture(self.source)
+        parts["xl/workbook.xml"] = parts["xl/workbook.xml"].replace(
+            '</workbook>', '<definedNames><definedName name="_xlnm.Print_Area">Plant!$A$1:$C$3</definedName>'
+            '<definedName name="_xlnm.Print_Titles">Plant!$1:$3</definedName></definedNames></workbook>')
+        with ZipFile(self.source, "w", ZIP_DEFLATED) as archive:
+            for name, content in parts.items():
+                archive.writestr(name, content)
+        report = self.run_native("inspect")
+        self.assertEqual({c["address"] for c in report["occurrences"] if c["formula_dependency"]}, {"A2"})
+
+    def test_static_offset_and_whole_ranges_are_bounded(self):
+        for formula, expected in [('SUM(OFFSET(B1,0,1))', {"B1", "C1"}),
+                                  ('SUM(C:C)', {"C1"}), ('SUM(3:3)', {"A3"})]:
+            with self.subTest(formula=formula):
+                self.formula_fixture(formula)
+                report = self.run_native("inspect")
+                self.assertEqual({c["address"] for c in report["occurrences"] if c["formula_dependency"]}, expected)
+
+    def test_shared_formula_relative_inputs_are_expanded(self):
+        self.formula_fixture('A2', shared=True)
+        report = self.run_native("inspect")
+        self.assertEqual({c["address"] for c in report["occurrences"] if c["formula_dependency"]}, {"A2", "A3"})
+
+    def test_unresolved_references_fail_explicitly_without_replacing_output(self):
+        for formula in ['SUM(INDIRECT(A1))', 'SUM(OFFSET(A1,B1,0))', 'SUM(Table1[Label])',
+                        'SUM(_xlfn.INDIRECT("C1"))', 'SUM(_xlfn.OFFSET(A1,0,2))']:
+            with self.subTest(formula=formula):
+                self.formula_fixture(formula)
+                self.output.write_bytes(b"previous deliverable")
+                result = self.run_native("apply", ok=False)
+                self.assertIn("unresolved formula reference", result.stdout)
+                self.assertIn("Plant", result.stdout)
+                self.assertEqual(self.output.read_bytes(), b"previous deliverable")
+
+    def test_rich_text_inherited_namespaces_pass_but_real_font_change_fails(self):
+        # Shared strings and worksheets can have different namespace declarations.
+        with ZipFile(self.source) as archive:
+            entries = [(entry, archive.read(entry.filename)) for entry in archive.infolist()]
+        with ZipFile(self.source, "w") as archive:
+            for entry, data in entries:
+                if entry.filename == "xl/worksheets/sheet1.xml":
+                    data = data.replace(b"<worksheet ", b'<worksheet xmlns:etc="http://www.wps.cn/officeDocument/2017/etCustomData" ')
+                archive.writestr(entry, data)
+        self.run_native("apply")
+        self.assertTrue(self.run_native("verify")["passed"])
+        with ZipFile(self.output) as archive:
+            entries = [(entry, archive.read(entry.filename)) for entry in archive.infolist()]
+        with ZipFile(self.output, "w") as archive:
+            for entry, data in entries:
+                if entry.filename == "xl/worksheets/sheet1.xml":
+                    data = data.replace(b"<b/>", b'<sz val="30"/>', 1)
+                archive.writestr(entry, data)
+        self.assertIn("rich-format-change", self.run_native("verify", ok=False).stdout)
+
     def test_xml_comments_survive_inspect_apply_and_verify(self):
         comment = b"<!-- Generated by reporting tool -->"
         with ZipFile(self.source) as archive:

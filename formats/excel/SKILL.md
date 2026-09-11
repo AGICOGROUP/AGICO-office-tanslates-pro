@@ -23,7 +23,7 @@ Use `--output-mode bilingual` for paired translation rows. Read
 Fill `translation` in the supplied worklist and merge completed subsets. For a small batch, fill the
 default worklist and call finalize directly; it performs merge itself. When using explicit merge,
 continue to finalize only when its JSON says `ready: true`; exit code 0 alone does not mean ready.
-Repair only rejected items from the refreshed worklist. Accepted work persists. Repeated
+Repair only missing or invalid items from the refreshed worklist. Accepted work persists. Repeated
 prepare/finalize resumes work; use status only to recover uncertain or interrupted state.
 
 Existing jobs can still use `scripts/excel_fast_pipeline.py prepare` and
@@ -44,6 +44,10 @@ remain local to each cell, including rich text. Original formulas, typed values,
 charts, comments, drawings, media, relationships and unknown package parts are preserved. Unsupported
 complex-object text remains untranslated with explicit warnings. Formula-dependent source labels may
 be retained to preserve calculation; disclose this limitation rather than claiming complete translation.
+Literal A1 `INDIRECT`, fixed numeric `OFFSET`, whole-row/column ranges and shared formulas protect
+only their identified inputs. Print areas and print titles are layout metadata. An unresolved dynamic,
+structured or external formula reference reports the affected formula for repair; never mark all
+workbook text retained as a substitute for resolving it.
 
 Bilingual paired blue rows use a separate reconstruction writer for grid-safe workbooks. Read
 `references/bilingual-row-layout.md` for this mode. Unsupported objects and row-sensitive formulas

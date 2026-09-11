@@ -100,7 +100,8 @@ class Package:
                 if formula is not None:
                     self.formulas.append((name, formula.text or ""))
         # Defined names, validations and conditional formatting can also consume strings.
-        self.formulas.extend((None, node.text or "") for node in workbook.findall(f"{Q('definedNames')}/{Q('definedName')}"))
+        self.formulas.extend((None, node.text or "") for node in workbook.findall(f"{Q('definedNames')}/{Q('definedName')}")
+                             if node.get("name") not in {"_xlnm.Print_Area", "_xlnm.Print_Titles"})
         for sheet in self.sheets:
             for node in sheet["root"].iter():
                 if isinstance(node.tag, str) and ET.QName(node).localname in {"formula", "formula1", "formula2"}:
@@ -132,29 +133,103 @@ def operational_cells(package):
     literals = set()
     refs = set()
     ranges = []
-    unknown = False
-    ref_pattern = re.compile(r"(?<![\w.])(?:(?:'((?:[^']|'')+)'|([\w.]+))!)?(\$?[A-Z]{1,3}\$?\d+)(?::(\$?[A-Z]{1,3}\$?\d+))?(?![\w(])", re.I)
-    for current_sheet, formula in package.formulas:
+    qualifier = r"(?:(?:'((?:[^']|'')+)'|([\w.]+))!)?"
+    cell_ref = r"\$?[A-Z]{1,3}\$?\d+"
+    reference = qualifier + rf"({cell_ref})(?::({cell_ref}))?"
+    ref_pattern = re.compile(r"(?<![\w.])" + reference + r"(?![\w(])", re.I)
+    whole_pattern = re.compile(r"(?<![\w.])" + qualifier + r"(\$?[A-Z]{1,3}:\$?[A-Z]{1,3}|\$?\d+:\$?\d+)(?![\w])", re.I)
+
+    def unresolved(sheet, formula):
+        raise ValueError(f"unresolved formula reference in {sheet or 'defined name'}: {formula}; "
+                         "replace dynamic or unsupported references with explicit sheet-qualified A1 ranges before translation")
+
+    formulas = list(package.formulas)
+    shared = {}
+    for (sheet, address), cell in package.cells.items():
+        node = cell.find(Q("f"))
+        if node is not None and node.get("t") == "shared" and node.text:
+            shared[(sheet, node.get("si"))] = (address, node.text)
+    for (sheet, address), cell in package.cells.items():
+        node = cell.find(Q("f"))
+        if node is None:
+            continue
+        if node.get("t") == "dataTable":
+            unresolved(sheet, f"{address} (dataTable)")
+        if node.get("t") == "shared" and not node.text:
+            from openpyxl.formula.translate import Translator
+            master = shared.get((sheet, node.get("si")))
+            if master is None:
+                unresolved(sheet, f"{address} (missing shared formula master)")
+            try:
+                formulas.append((sheet, Translator("=" + master[1], origin=master[0]).translate_formula(address)[1:]))
+            except Exception as exc:
+                raise ValueError(f"unresolved formula reference in {sheet}!{address}: shared formula expansion failed") from exc
+
+    for current_sheet, formula in formulas:
         for match in re.finditer(r'"((?:""|[^"])*)"', formula):
             literals.add(re.sub(r"^[<>=]+", "", match[1].replace('""', '"')))
+        # Tokenization keeps function-like text inside string literals opaque.
+        if re.search(r"\b(?:INDIRECT|OFFSET)\s*\(", formula, re.I):
+            from openpyxl.formula import Tokenizer
+            from openpyxl.utils.cell import get_column_letter
+
+            tokens = [t for t in Tokenizer("=" + formula.lstrip("=")).items if t.type != "WHITE-SPACE"]
+            for i in range(len(tokens) - 1, -1, -1):
+                token = tokens[i]
+                if token.type != "FUNC" or token.subtype != "OPEN":
+                    continue
+                function = token.value[:-1].upper()
+                if function not in {"INDIRECT", "OFFSET"}:
+                    continue
+                end = i + 1
+                while end < len(tokens) and not (tokens[end].type == "FUNC" and tokens[end].subtype == "CLOSE"):
+                    end += 1
+                values = [t.value for t in tokens[i + 1:end]]
+                args = "".join(values).split(",")
+                resolved = None
+                if function == "INDIRECT":
+                    # Only a literal address and optional A1 mode are statically known.
+                    argument = re.fullmatch(r'("(?:""|[^"])*")(?:,(?:TRUE|1))?', "".join(values), re.I)
+                    if argument:
+                        resolved = argument[1][1:-1].replace('""', '"')
+                        if not (re.fullmatch(reference, resolved, re.I) or whole_pattern.fullmatch(resolved)):
+                            resolved = None
+                elif function == "OFFSET" and 3 <= len(args) <= 5:
+                    base = re.fullmatch(reference, args[0], re.I)
+                    if base and all(re.fullmatch(r"[+-]?\d+", arg) for arg in args[1:]):
+                        a, b = coordinates(base[3]), coordinates(base[4] or base[3])
+                        col, row = a[0] + int(args[2]), a[1] + int(args[1])
+                        height = int(args[3]) if len(args) >= 4 else b[1] - a[1] + 1
+                        width = int(args[4]) if len(args) == 5 else b[0] - a[0] + 1
+                        if min(col, row, height, width) > 0 and col + width - 1 <= 16384 and row + height - 1 <= 1048576:
+                            prefix = args[0][:base.start(3)]
+                            target = f"{prefix}{get_column_letter(col)}{row}:{get_column_letter(col + width - 1)}{row + height - 1}"
+                            resolved = f"({args[0]},{target})"
+                if resolved is None or end == len(tokens):
+                    unresolved(current_sheet, formula)
+                token.value = resolved
+                token.type, token.subtype = "OPERAND", "RANGE"
+                del tokens[i + 1:end + 1]
+            formula = "".join(t.value for t in tokens)
         clean = re.sub(r'"(?:""|[^"])*"', '""', formula)
-        # Dynamic references, structured references and shared/array formulas cannot
-        # reliably identify a bounded input set without an Excel calculation engine.
-        if re.search(r"\b(?:INDIRECT|OFFSET)\s*\(|\[|\$?[A-Z]{1,3}:\$?[A-Z]{1,3}|\$?\d+:\$?\d+", clean, re.I):
-            unknown = True
+        if "[" in clean or re.search(r"\b(?:INDIRECT|OFFSET)\s*\(", clean, re.I):
+            unresolved(current_sheet, formula)
+        for match in whole_pattern.finditer(clean):
+            sheet = match[1] or match[2] or current_sheet
+            if sheet is None:
+                unresolved(current_sheet, formula)
+            a, b = match[3].replace("$", "").split(":")
+            bounds = ((column_number(a), 1), (column_number(b), 1048576)) if a.isalpha() else ((1, int(a)), (16384, int(b)))
+            ranges.append((sheet.replace("''", "'").casefold(), *bounds))
         for match in ref_pattern.finditer(clean):
             sheet = (match[1] or match[2] or current_sheet)
             if sheet is None:
-                unknown = True
-                continue
+                unresolved(current_sheet, formula)
             sheet = sheet.replace("''", "'")
             if match[4]:
                 ranges.append((sheet.casefold(), coordinates(match[3]), coordinates(match[4])))
             else:
                 refs.add((sheet.casefold(), match[3].replace("$", "").upper()))
-    if any(cell.find(Q("f")) is not None and cell.find(Q("f")).get("t") in {"shared", "array", "dataTable"}
-           for cell in package.cells.values()):
-        unknown = True
     patterns = []
     for literal in literals:
         tokens = re.findall(r"~[~*?]|.", literal, flags=re.S)
@@ -165,7 +240,7 @@ def operational_cells(package):
     for key, value in texts.items():
         sheet, address = key
         col, row = coordinates(address)
-        if (unknown or (sheet.casefold(), address) in refs
+        if ((sheet.casefold(), address) in refs
                 or any(s == sheet.casefold() and min(a[0], b[0]) <= col <= max(a[0], b[0])
                        and min(a[1], b[1]) <= row <= max(a[1], b[1]) for s, a, b in ranges)
                 or any(pattern.fullmatch(value) for pattern in patterns)):
@@ -435,8 +510,17 @@ def verify(source, output, manifest):
             source_rich, output_rich = before.rich(cell), after.rich(actual)
             source_runs = source_rich.findall(Q("r")) if source_rich is not None else []
             output_runs = output_rich.findall(Q("r")) if output_rich is not None else []
+            def semantic_properties(node):
+                if node is None:
+                    return None
+                return (
+                    node.tag,
+                    tuple(sorted(node.attrib.items())),
+                    node.text,
+                    tuple(semantic_properties(child) for child in node),
+                )
             def run_properties(runs):
-                return [canonical(r.find(Q("rPr"))) if r.find(Q("rPr")) is not None else None for r in runs]
+                return [semantic_properties(r.find(Q("rPr"))) for r in runs]
             if run_properties(source_runs) != run_properties(output_runs):
                 errors.append(f"rich-format-change:{key[0]}!{key[1]}")
             if before.styles is not None and after.styles is not None:
