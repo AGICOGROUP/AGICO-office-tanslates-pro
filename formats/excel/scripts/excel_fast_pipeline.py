@@ -232,6 +232,7 @@ def prepare_job(args: argparse.Namespace) -> dict[str, Any]:
     route_text = timed(stages, "route", lambda: run_process([sys.executable, str(ROUTER), str(source)]))
     route = json.loads(route_text)
     timed(stages, "glossary", lambda: run_process([sys.executable, str(GLOSSARY_RESOLVER)]))
+    original_source = {"path": str(source), "sha256": sha256_file(source)} if route.get("requires_conversion") else None
 
     working_source = source
     if route.get("requires_conversion"):
@@ -248,6 +249,11 @@ def prepare_job(args: argparse.Namespace) -> dict[str, Any]:
         node, str(PIPELINE), "inspect", "--input", str(working_source), "--job-dir", str(job_dir),
         "--target-language", args.target_language, "--output-mode", args.output_mode,
     ], env=env))
+    if original_source:
+        state_path = job_dir / "job-state.json"
+        state = read_json(state_path)
+        state["originalSource"] = original_source
+        write_json(state_path, state)
     timed(stages, "prepare", lambda: run_process([
         node, str(PIPELINE), "prepare", "--job-dir", str(job_dir),
     ], allowed={0, 3}, env=env))
@@ -282,6 +288,13 @@ def finalize_job(args: argparse.Namespace) -> dict[str, Any]:
     state = read_json(state_path)
     source = Path(state["outputPaths"]["source"]).resolve()
     plan = finalize_stage_plan(state.get("completedStages", []))
+    if not source.is_file() or sha256_file(source) != state["sourceSha256"]:
+        raise RuntimeError("source workbook changed since preparation")
+    original = state.get("originalSource")
+    if output == source or original and output == Path(original["path"]).resolve():
+        raise RuntimeError("output must not overwrite the original source or working workbook")
+    if original and (not Path(original["path"]).is_file() or sha256_file(Path(original["path"])) != original["sha256"]):
+        raise RuntimeError("original legacy workbook changed since preparation")
 
     def merge_decisions() -> None:
         write_json(manifest_path, apply_worklist(read_json(manifest_path), read_json(worklist_path)))
@@ -290,6 +303,18 @@ def finalize_job(args: argparse.Namespace) -> dict[str, Any]:
         recorded_output = Path(state.get("outputPaths", {}).get("output", "")).resolve()
         if recorded_output != output or not output.is_file():
             raise RuntimeError("resume output does not match the completed apply stage")
+        manifest_hash = state.get("stageArtifacts", {}).get("validate", {}).get("manifest")
+        if manifest_hash and sha256_file(manifest_path) != manifest_hash:
+            raise RuntimeError("translation manifest changed after apply; reapply the edited decisions")
+        if "verify" not in plan:
+            verification = read_json(job_dir / "verification.json")
+            if not verification.get("passed") or sha256_file(output) != verification.get("output_sha256"):
+                # Recheck only the changed output; retain the completed write.
+                stale = {"verify", "office-validate", "deliver"}
+                state["completedStages"] = [stage for stage in state["completedStages"] if stage not in stale]
+                state["stageArtifacts"] = {stage: value for stage, value in state.get("stageArtifacts", {}).items() if stage not in stale}
+                write_json(state_path, state)
+                plan = finalize_stage_plan(state["completedStages"])
     if "merge-decisions" in plan:
         timed(stages, "merge-decisions", merge_decisions)
     if "validate" in plan:
@@ -312,13 +337,14 @@ def finalize_job(args: argparse.Namespace) -> dict[str, Any]:
     report = merge_timing_report(existing, stages)
     write_json(timing_path, report)
     office_report = read_json(job_dir / "office-validation.json")
+    manifest_warnings = read_json(manifest_path).get("warnings", [])
     return {
         "next_stage": "deliver",
         "output": str(output),
         "output_sha256": sha256_file(output),
         "timings_ms": stages,
         "total_pipeline_ms": report["total_ms"],
-        "warnings": office_report.get("warnings", []),
+        "warnings": list(dict.fromkeys(office_report.get("warnings", []) + manifest_warnings)),
     }
 
 

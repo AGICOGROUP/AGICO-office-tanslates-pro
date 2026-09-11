@@ -536,7 +536,12 @@ test("office validation completes delivery without creating a visual gate", asyn
     }
     state.outputPaths.source = path.join(directory, "source.xlsx");
     await fs.writeFile(path.join(jobDir, "job-state.json"), JSON.stringify(state));
-    await fs.writeFile(path.join(jobDir, "verification.json"), JSON.stringify({ passed: true }));
+    const output = path.join(directory, "output.xlsx");
+    await fs.writeFile(output, "verified output");
+    const {createHash} = await import("node:crypto");
+    await fs.writeFile(path.join(jobDir, "verification.json"), JSON.stringify({
+      passed: true, output_sha256: createHash("sha256").update("verified output").digest("hex"),
+    }));
     await fs.writeFile(path.join(jobDir, "inventory.json"), JSON.stringify({
       output_mode: "monolingual", features: {}, images: [], image_uncertain: false,
       sheets: [{ name: "S1", used: true }],
@@ -549,6 +554,37 @@ test("office validation completes delivery without creating a visual gate", asyn
     await assert.rejects(fs.access(path.join(jobDir, "visual-review.json")));
   } finally {
     await fs.rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("bilingual mapping handles row ranges and preserves quoted sheet names", () => {
+  assert.equal(mapFormulaToSourceRows("=SUM(1:3)"), "=SUM(1:5)");
+  assert.equal(mapFormulaToSourceRows("=SUM($2:$3)"), "=SUM($3:$5)");
+  assert.equal(mapFormulaToSourceRows("='A2'!B2"), "='A2'!B3");
+  for (const formula of ['=ROWS(A1:A3)', '=COUNTA(A1:A3)', '=OFFSET(A1,1,0)', '=COUNTIF(A1:A3,"Valve")']) {
+    assert.throws(() => mapFormulaToSourceRows(formula), /bilingual formula/);
+  }
+});
+
+test("monolingual preparation retains text used as a formula criterion", async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "excel-formula-text-"));
+  try {
+    const source = path.join(directory, "source.xlsx");
+    const workbook = Workbook.create();
+    const sheet = workbook.worksheets.add("S1");
+    sheet.getRange("A1:A2").values = [["阀门"], ["设备名称"]];
+    sheet.getRange("B1").formulas = [['=COUNTIF(A1:A2,"阀门")']];
+    await (await SpreadsheetFile.exportXlsx(workbook)).save(source);
+    await inspectWorkbook({input: source, "job-dir": directory, "target-language": "en", "output-mode": "monolingual"});
+    await prepareManifest({"job-dir": directory});
+    const manifest = JSON.parse(await fs.readFile(path.join(directory, "translation-manifest.json"), "utf8"));
+    const criterion = manifest.translation_units.find(unit => unit.source === "阀门");
+    assert.equal(criterion.status, "retain");
+    assert.equal(criterion.translation, "阀门");
+    assert.match(criterion.reason, /formula/);
+    assert.ok(manifest.warnings.some(warning => warning.includes("阀门")));
+  } finally {
+    await fs.rm(directory, {recursive: true, force: true});
   }
 });
 
@@ -585,6 +621,7 @@ test("Office environment failures warn; real validation failures and stale files
     await saveState();
     await fs.writeFile(output, "changed output");
     await assert.rejects(officeValidateOutput(options, unavailable), /output changed/);
+    await assert.rejects(officeValidateOutput(options, () => ({passed: true})), /output changed/);
   } finally {
     await fs.rm(directory, { recursive: true, force: true });
   }

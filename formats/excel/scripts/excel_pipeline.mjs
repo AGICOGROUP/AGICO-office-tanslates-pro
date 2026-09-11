@@ -48,6 +48,7 @@ function translationUnitId(reuseKey) {
 
 
 function parameterizedOccurrence(input) {
+  if (input.formula_dependency) return input;
   const match = /^\s*([^：:\n]{1,16})([：:])\s*(.+?)\s*$/.exec(String(input.source));
   if (!match) return input;
   const [, label, separator, suffix] = match;
@@ -459,13 +460,21 @@ function splitCellAddress(address) {
 
 
 export function mapFormulaToSourceRows(formula) {
+  const quoted = /"(?:""|[^"])*"|'(?:''|[^'])*'/gu;
+  const code = String(formula).replace(quoted, "");
+  // Inserting translation rows changes these functions' meaning even when
+  // their references remain syntactically valid. Stop before translating.
+  const sensitive = /\b(?:ROW|ROWS|COLUMN|COLUMNS|OFFSET|INDIRECT|ADDRESS|CELL|COUNTA|COUNTBLANK|COUNTIFS?|SUMIFS?|AVERAGEIFS?|SUMPRODUCT|INDEX|MATCH|XMATCH|XLOOKUP|VLOOKUP|HLOOKUP|FILTER|SORT|UNIQUE|SEQUENCE)\s*\(/iu.exec(code);
+  if (sensitive) throw new Error(`unsupported bilingual formula function: ${sensitive[0]}`);
   const mapReferences = (segment) => segment.replace(
+    /(?<![A-Z0-9_.])(\$?)(\d+)\s*:\s*(\$?)(\d+)(?![A-Z0-9_.])/giu,
+    (_, left, first, right, last) => `${left}${Number(first) * 2 - 1}:${right}${Number(last) * 2 - 1}`,
+  ).replace(
     /(?<![A-Z0-9_.])(\$?[A-Z]{1,3})(\$?)(\d+)(?![A-Z0-9_.]|\s*\()/giu,
     (_, column, absolute, row) => `${column}${absolute}${Number(row) * 2 - 1}`,
   );
   let result = "";
   let cursor = 0;
-  const quoted = /"(?:""|[^"])*"/gu;
   for (const match of String(formula).matchAll(quoted)) {
     result += mapReferences(formula.slice(cursor, match.index));
     result += match[0];
@@ -582,6 +591,18 @@ export async function inspectWorkbook(options) {
   const workbook = await SpreadsheetFile.importXlsx(await FileBlob.load(input));
   const sheets = [];
   const occurrences = [];
+  const formulaCriteria = new Set();
+  for (const sheet of workbook.worksheets.items) {
+    for (const row of sheet.getUsedRange()?.formulas ?? []) {
+      for (const formula of row) {
+        if (typeof formula !== "string" || !formula) continue;
+        if (config.outputMode === "bilingual") mapFormulaToSourceRows(formula);
+        for (const literal of formula.matchAll(/"((?:""|[^"])*)"/gu)) {
+          formulaCriteria.add(literal[1].replaceAll('""', '"').replace(/^[<>=]+/u, "").toLowerCase());
+        }
+      }
+    }
+  }
   for (const sheet of workbook.worksheets.items) {
     const used = sheet.getUsedRange();
     if (!used?.address) {
@@ -603,6 +624,7 @@ export async function inspectWorkbook(options) {
           sheet: sheet.name,
           address,
           source,
+          formula_dependency: config.outputMode === "monolingual" && formulaCriteria.has(source.toLowerCase()),
           context_key: contextForCell(values, row, column),
           protected_tokens: protectedTokens(source),
         });
@@ -640,6 +662,18 @@ export async function prepareManifest(options) {
   const inventory = JSON.parse(await fs.readFile(path.join(jobDir, "inventory.json"), "utf8"));
   const built = buildTranslationUnits(inventory.occurrences);
   const autofill = applySafeAutofill(built.translation_units, inventory.target_language);
+  const warnings = [];
+  const formulaUnits = new Set(built.occurrences.filter(item => item.formula_dependency).map(item => item.translation_unit_id));
+  for (const unit of built.translation_units) {
+    if (!formulaUnits.has(unit.id)) continue;
+    unit.status = "retain";
+    unit.translation = unit.source;
+    unit.reason = "formula-dependent text retained to preserve calculation";
+    warnings.push(`Formula-dependent text preserved without translation: ${unit.source}`);
+  }
+  autofill.pending = built.translation_units.filter(unit => unit.status === "pending").length;
+  autofill.retained = built.translation_units.filter(unit => unit.status === "retain").length;
+  autofill.fixed = built.translation_units.filter(unit => unit.status === "translated").length;
   const manifest = {
     schema_version: 2,
     source_file: inventory.source_file,
@@ -655,6 +689,7 @@ export async function prepareManifest(options) {
       status: "manual-review",
       reason_code: "manual-review",
     })),
+    warnings,
   };
   const manifestPath = path.join(jobDir, "translation-manifest.json");
   await writeJson(manifestPath, manifest);
@@ -697,6 +732,9 @@ function validateTranslatedManifest(manifest, state) {
   for (const occurrence of manifest.occurrences ?? []) {
     const unit = units.get(occurrence.translation_unit_id);
     if (!unit) throw new Error(`occurrence ${occurrence.id} references an unknown translation unit`);
+    if (occurrence.formula_dependency && unit.translation !== occurrence.source) {
+      throw new Error(`formula-dependent text must be retained: ${occurrence.id}`);
+    }
     for (const field of ["source", "context_key", "protected_tokens"]) {
       if (JSON.stringify(occurrence[field]) !== JSON.stringify(unit[field])) {
         throw new Error(`occurrence ${occurrence.id} does not match translation unit ${unit.id}`);
@@ -1038,15 +1076,14 @@ export async function officeValidateOutput(options, officeRunner = runExcelOffic
   }
   const verification = JSON.parse(await fs.readFile(path.join(jobDir, "verification.json"), "utf8"));
   if (!verification.passed) throw new Error("office-validate requires a passing verification report");
+  if (!verification.output_sha256 || await sha256File(outputPath) !== verification.output_sha256) {
+    throw new Error("output changed since verification");
+  }
   const sourcePath = path.resolve(state.outputPaths.source);
   const report = await officeRunner(sourcePath, outputPath, state.outputMode);
   const unavailable = report?.status === "unavailable" && report.code === "office-unavailable";
   if (!report?.passed && !unavailable) throw new Error("Microsoft Excel validation did not pass");
   if (unavailable) {
-    // A warning can only accompany the exact file that passed static verification.
-    if (!verification.output_sha256 || await sha256File(outputPath) !== verification.output_sha256) {
-      throw new Error("output changed since verification");
-    }
     report.warnings = [report.message || "Excel native check unavailable; static verification passed"];
   }
   const reportPath = path.join(jobDir, "office-validation.json");

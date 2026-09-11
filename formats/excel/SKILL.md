@@ -54,7 +54,9 @@ Use `references/pipeline-cli.md` only for troubleshooting. Read
   check waits at most 60 seconds. Missing PowerShell, unavailable Excel or a timeout may finish
   with a disclosed warning only for the unchanged output that passed `verify`; this does not mean
   native validation passed. Workbook opening/check failures and new error cells still block.
-- `finalize` resumes after the last completed gate in `job-state.json`. Stage durations are written
+- `finalize` resumes after the last completed gate in `job-state.json`, checking saved source,
+  decision and output hashes before trusting completed stages. Legacy `.xls` jobs separately retain
+  the original file identity. Changed files cannot inherit an earlier passing verification. Stage durations are written
   to `stage-timings.json`; do not recreate task-specific scripts.
 - Ordinary translations use prepare, the compact worklist and finalize. Repository regression
   tests, full Skill audits, installation and glossary synchronization belong to development/setup,
@@ -80,6 +82,10 @@ Use `references/pipeline-cli.md` only for troubleshooting. Read
   rejects decorative drawings with `drawing-anchor-rebuild` until their anchors can be retained;
   never silently discard objects to produce bilingual rows.
 - Bilingual output defaults to paired blue translation rows and is limited to grid-safe workbooks.
+  Formula mapping supports cell references and whole-row ranges and preserves quoted sheet names.
+  Row-sensitive counting, lookup and positional functions are rejected during preparation because
+  inserted translation rows alter their meaning. In monolingual output, source labels used as
+  literal formula conditions are retained with a delivery warning to preserve calculation.
 - Do not export PDF or use LibreOffice. Only when the user explicitly requests strict layout
   inspection, perform a separate visual review after `office-validate`.
 - Fixed English translations are exact matches only; ambiguous equipment terminology stays pending.

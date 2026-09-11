@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import argparse
 import importlib.util
 from pathlib import Path
 import os
@@ -25,6 +26,46 @@ def load_runner():
 
 
 class ExcelFastPipelineTests(unittest.TestCase):
+    def test_finalize_resume_requires_unchanged_sources_output_and_decisions(self):
+        runner = load_runner()
+        for changed in (None, "source", "original", "output", "manifest"):
+            with self.subTest(changed=changed), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                paths = {key: root / name for key, name in {
+                    "source": "working.xlsx", "original": "original.xls",
+                    "output": "output.xlsx", "manifest": "translation-manifest.json",
+                }.items()}
+                for key, file in paths.items():
+                    file.write_bytes(key.encode())
+                runner.write_json(paths["manifest"], {"warnings": []})
+                state = {
+                    "sourceSha256": runner.sha256_file(paths["source"]),
+                    "originalSource": {"path": str(paths["original"]), "sha256": runner.sha256_file(paths["original"])},
+                    "outputPaths": {"source": str(paths["source"]), "output": str(paths["output"])},
+                    "completedStages": ["apply", "verify", "office-validate"],
+                    "stageArtifacts": {"validate": {"manifest": runner.sha256_file(paths["manifest"])}},
+                }
+                runner.write_json(root / "job-state.json", state)
+                runner.write_json(root / "verification.json", {"passed": True, "output_sha256": runner.sha256_file(paths["output"])})
+                runner.write_json(root / "office-validation.json", {"passed": True})
+                if changed:
+                    paths[changed].write_bytes(b"changed after verification")
+                args = argparse.Namespace(job_dir=str(root), output=str(paths["output"]), node_path=None, node_modules=None, worklist=None)
+                with patch.object(runner, "resolve_executable", return_value=runner.sys.executable), patch.object(runner, "node_environment", return_value={}), patch.object(runner, "run_process") as run:
+                    if changed == "output":
+                        run.side_effect = RuntimeError("changed output failed verification")
+                    if changed:
+                        with self.assertRaisesRegex(RuntimeError, "changed"):
+                            runner.finalize_job(args)
+                    else:
+                        self.assertEqual("deliver", runner.finalize_job(args)["next_stage"])
+                    if changed == "output":
+                        run.assert_called_once()
+                        self.assertIn("verify", run.call_args.args[0])
+                        self.assertNotIn("verify", runner.read_json(root / "job-state.json")["completedStages"])
+                    else:
+                        run.assert_not_called()
+
     def test_node_environment_supplies_python_modules_and_modern_powershell(self):
         runner = load_runner()
         with tempfile.TemporaryDirectory() as directory:
