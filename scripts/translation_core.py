@@ -64,8 +64,13 @@ def untranslated_natural_language(source: str, target: str, target_language: str
     """
     if not str(target_language or "").lower().startswith("zh"):
         return False
-    for segment in re.split(r"[\t\r\n]+", target):
+    source_segments = re.split(r"[\t\r\n]+", source)
+    for index, segment in enumerate(re.split(r"[\t\r\n]+", target)):
         if re.search(r"[\u3400-\u9fff]", segment):
+            continue
+        stripped = segment.strip()
+        if (index < len(source_segments) and stripped == source_segments[index].strip()
+                and re.fullmatch(r"[ivxlcdm]+[.)]?", stripped)):
             continue
         segment = re.sub(r"https?://\S+|www\.\S+", "", segment)
         segment = re.sub(r"\b(?:ISO|IEC|EN|DIN|ASTM|ASME|ANSI|BS|GB)\s*[-/]?\s*[A-Z]*\d[\w:./-]*", "", segment)

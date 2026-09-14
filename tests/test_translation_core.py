@@ -4,10 +4,24 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-from translation_core import build_worklist, merge_decisions
+from translation_core import build_worklist, merge_decisions, untranslated_natural_language
 
 
 class TranslationCoreTests(unittest.TestCase):
+    def test_chinese_toc_allows_roman_numeral_page_segment(self):
+        self.assertFalse(untranslated_natural_language(
+            "1.2\tCodes and standards\txiii",
+            "1.2\t规范和标准\txiii",
+            "zh-CN",
+        ))
+
+    def test_chinese_numbered_field_allows_roman_enumerator_segment(self):
+        self.assertFalse(untranslated_natural_language(
+            "ii)\tMCC\t: \t220V AC",
+            "ii)\t电动机控制中心 MCC\t：\t控制电压 220V AC",
+            "zh-CN",
+        ))
+
     def manifest(self):
         return {"source_sha256": "a" * 64, "target_language": "en", "units": [
             {"id": 1, "source": "功率45kW", "target": "", "context": "Main motor"},
