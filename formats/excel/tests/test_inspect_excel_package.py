@@ -47,8 +47,13 @@ class ExcelPackageInspectorTests(unittest.TestCase):
             Image.new("RGB", (16, 16), "black").save(replacement)
             workbook = Workbook()
             workbook.active["A1"] = "设备"
-            for cell in ("A3", "D3"):
-                workbook.active.add_image(ExcelImage(io.BytesIO(original.read_bytes())), cell)
+            original_bytes = []
+            for cell, color in zip(("A3", "D3", "G3", "J3", "M3"),
+                                   ("white", "red", "green", "blue", "yellow")):
+                data = io.BytesIO()
+                Image.new("RGB", (16, 16), color).save(data, format="PNG")
+                original_bytes.append(data.getvalue())
+                workbook.active.add_image(ExcelImage(io.BytesIO(data.getvalue())), cell)
             source, output, job = root / "source.xlsx", root / "output.xlsx", root / "job"
             workbook.save(source)
             node = Path(sys.executable).parent.parent / "node" / "bin" / "node.exe"
@@ -62,12 +67,27 @@ class ExcelPackageInspectorTests(unittest.TestCase):
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             for unit in manifest["translation_units"]:
                 unit.update(status="translated", translation="Equipment")
+            localized_hashes = {hashlib.sha256(data).hexdigest() for data in original_bytes[:2]}
             for image in manifest["images"]:
-                image.update(status="localized", replacement_path=str(replacement), replacement_sha256=hashlib.sha256(replacement.read_bytes()).hexdigest())
+                if image["sha256"] in localized_hashes:
+                    image.update(status="localized", replacement_path=str(replacement), replacement_sha256=hashlib.sha256(replacement.read_bytes()).hexdigest())
+                else:
+                    image.update(status="retain", reason_code="photograph")
+            from inspect_excel_package import verify_image_manifest
+            # A localized status alone must not validate an unchanged workbook.
+            with self.assertRaisesRegex(ValueError, "image"):
+                verify_image_manifest(inspect_package(source), manifest)
             manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
             run("apply", "--input", source, "--job-dir", job, "--output", output)
             run("verify", "--source", source, "--job-dir", job, "--output", output)
             self.assertTrue(json.loads((job / "verification.json").read_text(encoding="utf-8"))["passed"])
+            with ZipFile(source) as before, ZipFile(output) as after:
+                media = [name for name in before.namelist() if name.startswith("xl/media/")]
+                self.assertEqual(len(media), 5)
+                for name in media:
+                    data = before.read(name)
+                    expected = replacement.read_bytes() if hashlib.sha256(data).hexdigest() in localized_hashes else data
+                    self.assertEqual(after.read(name), expected, name)
 
     def test_localized_image_writes_every_copy_and_preserves_other_parts(self):
         import inspect_excel_package as inspector

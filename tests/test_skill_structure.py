@@ -132,6 +132,16 @@ class WordAdapterStructureTests(unittest.TestCase):
         self.assertIn("optional and non-blocking", text)
         self.assertNotIn("Deliver only after that one Word-native validation passes", text)
 
+    def test_flexible_pagination_is_word_only(self):
+        wording = "Preserve the document formatting; pagination may change"
+        word_skill = (ROOT / "formats" / "word" / "SKILL.md").read_text(encoding="utf-8")
+        excel_skill = (ROOT / "formats" / "excel" / "SKILL.md").read_text(encoding="utf-8")
+        ppt_skill = (ROOT / "formats" / "ppt" / "SKILL.md").read_text(encoding="utf-8")
+
+        self.assertIn(wording, word_skill)
+        self.assertNotIn(wording, excel_skill)
+        self.assertNotIn(wording, ppt_skill)
+
     def test_word_ui_metadata_exists(self):
         metadata = ROOT / "formats" / "word" / "agents" / "openai.yaml"
         self.assertTrue(metadata.is_file())
