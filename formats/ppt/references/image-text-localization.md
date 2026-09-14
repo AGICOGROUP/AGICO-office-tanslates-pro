@@ -1,30 +1,18 @@
-# PowerPoint image translation
+# PowerPoint image-text translation
 
-This path is only for static graphics whose text is not selectable or copyable. An embedded object,
-chart, SmartArt item, or other selectable or copyable content is not an image. Its preview image
-must never be translated as a substitute for the editable object. Preserve an embedded object's
-binary content and preview image unchanged with status `preserved_untranslated`, record a warning,
-and continue. Only route it to a native editable-content handler when the user explicitly requests
-translation inside that object; use `pending_native_handler` and stop if the handler is unavailable.
+Follow [the shared GPT image-editing workflow](../../../references/image-translation.md).
+GPT image editing is the only method. Native text-box overlays and external legends must not be
+used to translate image text, whether the requested output is monolingual or bilingual.
 
-Use one single-pass screen for each unique image. Do not retry OCR or enlarge unclear text for repeated recognition.
-Apply exactly one decision:
+Inspect each unique image once. Translate every readable label with the current model and matched
+terminology. Send the original image, exact translations and preservation constraints to GPT image
+editing. Review the actual result using the shared accepted quality criteria; reuse it for matching
+occurrences within the job. Insert the generated image at its original position, preserving size,
+crop, rotation, group membership and surrounding content. Verify the saved image and slide appearance.
 
-- `skip_target`: all readable source labels already have an equivalent target-language translation.
-  Partial target-language text does not skip the whole image; overlay every uncovered readable label.
-- `skip_unclear`: no source label can be read confidently at normal useful resolution. Small but readable
-  text is not unclear and must be translated. If some labels are readable, use `overlay` for those labels.
-- `overlay`: at least one source label is readable and still lacks the target language. Preserve the original image and add each
-  translation as a transparent, editable PowerPoint text box immediately below its source label
-  using `bilingual_below`.
-
-Screen all readable source labels in actual static diagrams, flowcharts, and screenshots.
-
-For `overlay`, preserve all original pixels, crop, geometry, arrows, lines, equipment, numbers,
-units, models, symbols, and flow direction. Never erase, cover, patch, regenerate, redraw, or
-replace image content.
-
-The native writer supports ungrouped image hosts with explicit geometry and no rotation or flip.
-An unsupported transform returns the affected overlay ID and repair guidance before replacing any
-generated output. Keep `source_region` and the below-label `region` normalized to the displayed host;
-provide transparent background, font name and point size, bold flag, text RGB, and alignment.
+The existing low-level overlay writer is not a replacement writer. Implement and verify replacement
+support before claiming integrated delivery. Do not mark an unmodified image as translated.
+Retain only logos/identifiers, already translated labels or genuinely unreadable source content with
+a specific reason. Partial existing translations do not justify skipping other readable labels.
+Editable charts, SmartArt and embedded objects are native content; their previews must not substitute
+for translation inside those objects.

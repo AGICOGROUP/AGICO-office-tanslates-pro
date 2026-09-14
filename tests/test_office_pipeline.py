@@ -163,7 +163,7 @@ class OfficePipelineTests(unittest.TestCase):
             self.assertEqual(calls.count("apply"), 1)
             self.assertEqual(calls.count("render"), 1)
 
-    def test_failed_native_overlay_returns_only_affected_image_for_repair(self):
+    def test_retired_native_overlay_stays_pending_before_output_write(self):
         from io import BytesIO
         from PIL import Image
         from pptx import Presentation
@@ -188,15 +188,12 @@ class OfficePipelineTests(unittest.TestCase):
                 "region": {"x": .1, "y": .2, "w": .5, "h": .1},
                 "style": {"font_name": "Arial", "font_size_pt": 0, "bold": False, "text_rgb": "000000", "align": "left"}}])
             workpath.write_text(json.dumps(work), encoding="utf-8")
-            with self.assertRaisesRegex(RuntimeError, "bad-font"):
-                office.finalize_job(job, root / "out.pptx")
+            result = office.finalize_job(job, root / "out.pptx")
+            self.assertEqual(result['next_stage'], 'translate')
+            self.assertFalse((root / 'out.pptx').exists())
             retry = self.read(workpath)
             self.assertEqual(len(retry["images"]), 1)
-            self.assertIn("font_size_pt", retry["images"][0]["decision_error"])
-            self.assertEqual(retry["images"][0]["overlays"][0]["id"], "bad-font")
-            retry["images"][0]["overlays"][0]["style"]["font_size_pt"] = 12
-            workpath.write_text(json.dumps(retry), encoding="utf-8")
-            self.assertTrue(office.merge_job(job)["ready"])
+            self.assertIn("GPT image editing", retry["images"][0]["decision_error"])
 
 
 if __name__ == "__main__":

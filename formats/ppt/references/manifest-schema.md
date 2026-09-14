@@ -1,18 +1,17 @@
 # PowerPoint lightweight manifest schema
 
 The UTF-8 manifest stores source identity, target language, native text occurrences, reusable
-translation units, unique image groups, and editable overlays.
+translation units, unique image groups.
 
 Every native occurrence retains its source text, translation-unit ID, slide, shape, paragraph,
 role, context, and protected tokens. Every translation unit retains source text, translation,
 context, protected tokens, and occurrence count.
 
-Each unique image group uses exactly one `decision`:
-
-- `skip_target`: target-language text is already visible; `overlay_ids` must be empty.
-- `skip_unclear`: text is unclear; `overlay_ids` must be empty.
-- `overlay`: clear single-language text; `overlay_ids` must reference editable
-  `bilingual_below` overlays and `preserve_source_image` must be true.
+Image text follows only [GPT image editing](../../../references/image-translation.md).
+Historical overlay records are not accepted as a method for new translations. Preserve source
+identity and record actual generated-image paths/hashes using the replacement writer schema.
+Do not invent a successful decision before that writer is implemented. Readable untranslated
+labels stay pending until edited and inserted; retention needs a specific reason.
 
 Each embedded object uses one `status`:
 

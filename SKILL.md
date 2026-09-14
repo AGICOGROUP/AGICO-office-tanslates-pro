@@ -7,6 +7,12 @@ description: Use when translating uploaded Word (.doc/.docx), Excel (.xls/.xlsx)
 
 Route each uploaded file to exactly one format adapter.
 
+For embedded image text, all adapters follow [the shared in-image translation rule](references/image-translation.md).
+Translate at the original label locations according to the user's language and mode requirements.
+GPT image editing is the only method; verify preservation of non-text meaning and appearance
+using the accepted quality criteria in that shared rule, without requiring pixel identity.
+External legends and review flags never replace actual in-image translation.
+
 All adapters share `references/水泥专业名词中英对照.md`; do not copy, reinstall or validate the
 whole repository during an ordinary translation. Read the selected adapter and the references it
 requires. The selected adapter's workflow and linked translation-decision rules are required for all

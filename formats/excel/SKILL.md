@@ -55,9 +55,11 @@ need a supported layout choice; never silently discard objects or substitute mon
 
 ## Images and delivery
 
-Read `references/image-text-localization.md` only when images exist. Review each unique image once;
+Read `references/image-text-localization.md` only when images exist. GPT image editing is the only
+method for translating image text; apply the shared accepted quality criteria. Review each unique image once;
 choose `reviewed`, `retain` or `localized`. Localization requires an absolute `replacement_path` to
-an edited PNG/JPEG of the original format and dimensions. Start required image editing after reading
+an edited PNG/JPEG that preserves aspect ratio without cropping and is not lower-resolution than the
+source, as defined by the shared rule. Start required image editing after reading
 its labels, then use asynchronous generation time to translate/review/merge cells. Do not leave the
 text batch untouched while repeatedly waiting for images. The writer replaces every matching part
 and verifies actual bytes; status alone is not translation. Disclose labels left untranslated.

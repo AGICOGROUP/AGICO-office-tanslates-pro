@@ -206,6 +206,8 @@ def finalize_job(job_dir, output, decisions=None, visual_review_passed=False):
         stage("apply", lambda: run_adapter("word", "apply", manifest_path, "--output", output))
         stage("verify", lambda: run_adapter("word", "validate", output, "--manifest", manifest_path))
         warnings.extend(read_json(job / "qa-report.json").get("warnings", []))
+        from word_image_replacements import apply_word_image_replacements
+        stage("image_replacements", lambda: apply_word_image_replacements(output, manifest))
     elif format_name == "excel":
         native_state_path = job / "job-state.json"
         native_state = read_json(native_state_path)

@@ -12,15 +12,16 @@ python scripts/ppt_pipeline.py render --source <source> --job-dir <job> --output
 python scripts/ppt_pipeline.py deliver --job-dir <job> --output <output.pptx> --visual-review-passed
 ```
 
-`prepare` pauses with exit code `3`. Fill all native translation units and assign each unique image
-exactly one decision: `skip_target`, `skip_unclear`, or `overlay`. Use `bilingual_below` for editable
-overlays. Do not rerun OCR for unclear images.
+`prepare` pauses with exit code `3`. Complete native text and use only
+[GPT image editing](../../../references/image-translation.md) for image text, followed by
+verified image replacement. Old overlay decisions are not an allowed processing method.
+Do not bypass missing replacement support.
 
 Embedded objects default to `preserved_untranslated`: retain their binary content and preview images,
 report warnings, and continue. Set `pending_native_handler` only for an explicit request to translate
 inside an embedded object; validation then blocks delivery until its status becomes `translated`.
 
-`apply` uses native OOXML for paragraph translations and editable image overlays; PowerPoint COM is
+`apply` uses native OOXML for paragraph translations; image replacement requires a verified writer; PowerPoint COM is
 needed for legacy `.ppt` conversion and final rendering. The source and converted working copy are
 hashed during `inspect` and checked before `apply`; source integrity is rechecked during `verify`.
 Writes replace only the generated output after the ZIP closes successfully, preserving any prior

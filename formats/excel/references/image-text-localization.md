@@ -1,5 +1,9 @@
 # Excel image-text localization
 
+Follow [the shared in-image translation rule](../../../references/image-translation.md).
+GPT image editing is the only method to replace text or add bilingual text at the original locations,
+according to the user's requested mode, with high-fidelity verification of all non-text details.
+
 Review each unique image byte sequence once, grouped by SHA-256, within the current job. Reuse its
 decision and final replacement for every worksheet occurrence. A fresh test starts a new job and
 does not reuse translations or generated images from earlier jobs.
@@ -7,13 +11,13 @@ does not reuse translations or generated images from earlier jobs.
 - If the workbook contains no images, skip image review completely.
 - If no clear translatable text exists, record `retain` and preserve the image bytes at every
   occurrence. Optional notes such as `no-source-text`, `logo-or-brand`, or `photograph` help explain
-  the decision but their absence or wording must not block delivery.
+  the decision. Readable untranslated labels must never be retained for convenience.
 - Use `localized` only after the unique PNG/JPEG has been edited and checked at native resolution.
   Keep the supplied image `id` and `sha256`, and set `replacement_path` to the absolute edited-image
   path in the worklist; the runner records the replacement SHA-256. An omitted redundant source
   hash can be resolved from a known current-job ID; an explicit conflicting hash is rejected.
   The compact worklist includes `source_image` for the extracted original. Replacement
-  must retain the original format and pixel dimensions. `apply` replaces all matching image parts
+  must follow the shared aspect-ratio and minimum-pixel rules. `apply` replaces all matching image parts
   atomically after workbook export; `verify` checks their resulting hashes and occurrence counts.
 - Use `manual-review` only when text presence or safe localization remains uncertain; inspect the
   affected labels rather than repeating review of all workbook images.
@@ -29,8 +33,10 @@ does not reuse translations or generated images from earlier jobs.
 
 Use the active image-editing tool's supported workflow. Prepare the exact translated labels once,
 reusing reviewed cell wording only when the screenshot has the same content and context. Specify
-the current replacement/bilingual mode, all labels, source dimensions and preserved regions in the
+the user's requested replacement or bilingual mode, all labels, source dimensions and preserved regions in the
 first call. Treat each unique image as one edit target, not a request for several visual variants.
+Choose either mode only when the user permits that flexibility. Translate all readable labels;
+partial existing translations do not justify skipping the remaining labels.
 
 Keep one in-flight request per image and mode. When a call returns a running ID, retain it and
 continue cell translation, terminology review or merging; wait on that same ID when the independent
@@ -41,8 +47,8 @@ backend request was cancelled; do not repeatedly restart it.
 
 Inspect the returned file before requesting a correction. For a real defect, describe its exact
 region and exact replacement text, retaining the usable image. Normally use one targeted correction;
-if it does not improve the defect, change the repair approach supported by the active tools instead
-of repeating an equivalent whole-image prompt. Extra calls require a specific unresolved content
+if it does not improve the defect, refine the affected region and exact wording in the GPT
+edit request rather than switching methods. Extra calls require a specific unresolved content
 or readability defect, not font taste, white margins or a desire for another version. A minor,
 unambiguous spelling imperfection can be disclosed with usable output; wrong units, missing labels
 or ambiguous technical meaning still require repair.

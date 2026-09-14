@@ -1,12 +1,5 @@
-# PowerPoint editable image overlay
+# Retired image overlay protocol
 
-An `overlay` image decision references one or more editable PowerPoint overlays. Each overlay uses:
-
-- unique `id` and `kind: office_overlay`;
-- `localization_mode: bilingual_below`;
-- non-empty `source_text` and `translation`;
-- normalized `source_region` and a non-overlapping target `region` immediately below it;
-- `background.mode: transparent`;
-- slide number, host shape ID, stable region ID, and readable text styling.
-
-The host image stays unchanged. `skip_target` and `skip_unclear` create no overlays.
+Image text is translated only through [GPT image editing](../../../references/image-translation.md).
+The previous native text-box overlay protocol is retired and must not be used for new translations.
+Its presence in historical code or jobs does not make it an allowed processing method.

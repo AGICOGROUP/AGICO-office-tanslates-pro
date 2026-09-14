@@ -37,7 +37,8 @@ def prepare_assets(manifest, format_name, working, job_dir):
 def pending_assets(manifest, format_name):
     pending = []
     field = "decision" if format_name == "ppt" else "status"
-    accepted = {"skip_target", "skip_unclear", "overlay"} if format_name == "ppt" else {"reviewed", "localized", "retain"}
+    accepted = ({"skip_target", "skip_unclear"} if format_name == "ppt" else
+                {"reviewed", "localized", "retain"})
     for group in manifest.get(asset_field(format_name), []):
         if group.get(field) not in accepted or group.get("decision_error"):
             record = deepcopy(group)
@@ -88,18 +89,30 @@ def merge_assets(manifest, decisions, format_name):
                 raise ValueError("image identity changed")
             field = "decision" if format_name == "ppt" else "status"
             value = decision.get(field)
+            if value in {"overlay", "bilingual"}:
+                raise ValueError("Use only GPT image editing; native overlays and external legends are retired")
             if value in {None, "pending", "manual-review"}:
                 continue
-            allowed = ({"skip_target", "skip_unclear", "overlay"} if format_name == "ppt" else
-                       {"reviewed", "localized", "retain"} if format_name == "excel" else {"reviewed", "retain"})
+            allowed = ({"skip_target", "skip_unclear"} if format_name == "ppt" else
+                       {"reviewed", "localized", "retain"})
             if value not in allowed:
                 raise ValueError(f"use one of {', '.join(sorted(allowed))}")
             updates = {field: value}
+            if value == "bilingual":
+                raise ValueError("External image legends do not translate in-image text; use verified in-image editing")
             if value == "localized":
                 replacement = Path(decision.get("replacement_path", ""))
                 if not replacement.is_absolute() or not replacement.is_file():
                     raise ValueError("localized image needs an absolute replacement_path")
                 updates.update(replacement_path=str(replacement), replacement_sha256=file_hash(replacement))
+                if format_name == "word":
+                    width = decision.get("source_pixel_width")
+                    height = decision.get("source_pixel_height")
+                    if type(width) is not int or type(height) is not int or width < 1 or height < 1:
+                        raise ValueError("localized Word image needs positive source pixel dimensions")
+                    from normalize_generated_image import verify
+                    verify(width, height, replacement)
+                    updates.update(source_pixel_width=width, source_pixel_height=height)
             if value == "overlay":
                 overlays = decision.get("overlays", [])
                 if not isinstance(overlays, list) or not overlays:

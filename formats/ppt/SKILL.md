@@ -36,17 +36,14 @@ Preserve numbers, units, models, standards, formulas and meaningful line breaks.
 spacing is allowed; changed values, prefixes and identifiers are not. Preserve boundary spaces and
 remove unsafe inherited negative spacing from Latin translations.
 
-Screen every unique image once. PowerPoint embedded images only use:
-
-- `skip_target`: every readable source label already has its target-language equivalent.
-- `skip_unclear`: no source label is readable with confidence; small but readable labels count.
-- `overlay`: readable labels need translation. Preserve the original image and add editable text
-  immediately below each label using `bilingual_below`.
-
-For overlays read `references/image-text-localization.md` and `references/overlay-schema.md`. Put
-editable objects in the image decision's `overlays` array. Native transparent text boxes are written
-in the same atomic OOXML pass as text, without starting Office. Images are never erased, regenerated
-or replaced. Grouped, rotated or flipped hosts need supported placement; correct the affected decision.
+Screen every unique image once and follow [the shared in-image translation rule](../../references/image-translation.md).
+Use only GPT image editing and read `references/image-text-localization.md` when images exist.
+Translate all readable labels in the image and replace it at its original slide position.
+Use the shared accepted quality criteria. Native text-box overlays and external legends are
+not image translation methods. The current low-level writer needs verified image-replacement
+support before integrated delivery; do not bypass this by using old overlay support.
+Require the original aspect ratio, no cropping, and equal-or-higher pixel dimensions; verify actual
+dimensions before insertion and never stretch width and height independently.
 
 Charts, SmartArt, notes, actual master/layout text and embedded objects without a native translator
 are preserved byte-for-byte with exact warnings. Do not claim they were translated or translate an
@@ -56,7 +53,7 @@ slide translation. Geometry, themes, relationships and animations remain intact.
 ## Verification and delivery
 
 Never overwrite the source or working presentation. Verify source identity, translated locations,
-technical values, untouched parts, image bytes and overlay text/geometry. Failed writes leave the
+technical values, untouched parts, intended image replacements and placement. Failed writes leave the
 previous output intact. Changed decisions invalidate dependent completed work.
 
 Microsoft PowerPoint renders final slides once in a hidden session with a bounded timeout. When

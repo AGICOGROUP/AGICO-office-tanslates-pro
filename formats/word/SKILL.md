@@ -40,11 +40,24 @@ standards, meaningful line breaks and tabs. Protected tokens accept equivalent s
 symbols while retaining SI prefix case and repeated values. Retain source text only when appropriate
 in the requested output; do not hide untranslated sentences behind a retention decision.
 
-Review unique embedded image text once. The worklist extracts images and accepts `reviewed` or
-`retain`; Word preserves their bytes. Disclose readable image labels left untranslated. A review
-status does not translate image pixels.
+Review each unique embedded image text once, including WMF/EMF diagrams, following
+[the shared in-image translation rule](../../references/image-translation.md).
+Use GPT image editing as the only method; replace text or add bilingual text at its original location
+as requested. Inspect the result using the shared accepted quality criteria; cosmetic redraw
+differences alone do not require another generation. Insert the translated image back into the file.
+Record and verify source/output pixel dimensions and exact aspect ratio. Never crop, truncate,
+downsample or independently stretch the generated image; use equal-size output or proportional
+upscaling, with blank padding when necessary to restore the source ratio.
+External bilingual legends do not meet this requirement and must not be used as the translation
+result. The Word pipeline replaces GPT-localized main-story inline images while preserving their
+display dimensions and verifies the resulting package. Unsupported image hosts remain pending;
+do not claim that review/retention translates an image or that a standalone trial updated the file.
 
 ## Preservation and delivery
+
+Preserve the document formatting; pagination may change. Keep styles, tables, editable objects,
+section relationships and the overall visual structure, but allow translation-driven page reflow.
+Do not treat pagination differences alone as damage or a reason to block delivery.
 
 Hash and preserve the source. Never overwrite it. `.doc` conversion uses Microsoft Word once to
 create a working `.docx`. The writer preserves styles, tables, editable text, namespace mappings and

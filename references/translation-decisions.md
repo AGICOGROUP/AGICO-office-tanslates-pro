@@ -76,5 +76,9 @@ mixed-language omissions, and does not validate technical meaning. Other languag
 the same model review. `ready`/`deliver`, native opening and zero heuristic findings establish only
 their respective checks; never describe them as proof of zero omissions or professional accuracy.
 
+Image review follows [the shared in-image translation rule](image-translation.md).
+Translate at each label's original location according to the user's requirements; GPT image editing
+is allowed with non-text fidelity checks. External legends never count as image translation.
+
 Report limitations actually found, and distinguish translated units, retained identifiers, image/object
 text and paragraph occurrences. Do not convert a flagged-unit count into a percentage of pages or text.
