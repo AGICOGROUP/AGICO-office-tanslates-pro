@@ -816,6 +816,8 @@ test("bilingual apply creates paired blue rows and keeps data only on source row
     const sheet = workbook.worksheets.add("Data");
     sheet.getRange("A1:B1").values = [["设备表", null]];
     sheet.getRange("A1:B1").merge();
+    sheet.getRange("A1:B1").format.fill = "#FFD966";
+    sheet.getRange("A1:B1").format.font.bold = true;
     sheet.getRange("A2:C2").values = [["001", 3, null]];
     sheet.getRange("C2").formulas = [["=B2*2"]];
     await (await SpreadsheetFile.exportXlsx(workbook)).save(source);
@@ -830,8 +832,8 @@ test("bilingual apply creates paired blue rows and keeps data only on source row
     const manifestPath = path.join(jobDir, "translation-manifest.json");
     const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
     for (const unit of manifest.translation_units) {
-      unit.translation = unit.source === "设备表" ? "Equipment List" : "Identifier";
-      unit.status = "translated";
+      unit.translation = unit.source === "设备表" ? "Equipment List" : unit.source;
+      unit.status = unit.source === "设备表" ? "translated" : "retain";
     }
     await fs.writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
     await applyTranslations({ input: source, "job-dir": jobDir, output });
@@ -842,10 +844,12 @@ test("bilingual apply creates paired blue rows and keeps data only on source row
       ["设备表", null, null],
       ["Equipment List", null, null],
       ["001", 3, 6],
-      ["Identifier", null, null],
+      [null, null, null],
     ]);
     assert.equal(resultSheet.getRange("C3").formulas[0][0], "=B3*2");
     assert.equal(resultSheet.getRange("C4").formulas[0][0], "");
+    assert.equal(resultSheet.getRange("A1").format.fill.color.value, "#FFD966");
+    assert.equal(resultSheet.getRange("A1").format.font.bold, true);
     assert.deepEqual(
       resultSheet.__getMergedCells().map((merge) => `${merge.startAddress}:${merge.endAddress}`),
       ["A1:B1", "A2:B2"],

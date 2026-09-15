@@ -49,7 +49,8 @@ only their identified inputs. Print areas and print titles are layout metadata. 
 structured or external formula reference reports the affected formula for repair; never mark all
 workbook text retained as a substitute for resolving it.
 
-Bilingual paired blue rows use a separate reconstruction writer for grid-safe workbooks. Read
+Bilingual paired blue rows expand the original OOXML grid while retaining source cell styles,
+number formats, shared-formula calculations and sheet layout metadata. Read
 `references/bilingual-row-layout.md` for this mode. Unsupported objects and row-sensitive formulas
 need a supported layout choice; never silently discard objects or substitute monolingual output.
 

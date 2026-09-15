@@ -81,7 +81,10 @@ remain byte-identical, including charts, comments, drawings, relationships and u
 Their complex text is preserved without translation and disclosed by part name in the manifest and
 verification report. Formula input text is retained with cell counts and examples.
 
-Bilingual paired-row reconstruction remains limited to simple grids and rejects unsupported complex
+Bilingual paired rows use `excel_bilingual_ooxml.py` through the same native commands. Original styles,
+shared-formula followers, column widths and print metadata survive; translated rows derive blue styles
+and measured wrapping heights. Verification reads raw formula and style records, avoiding the former
+workbook importer's blind spots. This path remains limited to simple grids and rejects unsupported complex
 features. Macro/VBA content (including renamed `.xlsx` packages), unsafe legacy conversion and repair
 requirements still fail. Unresolved image decisions still require review. Localized image replacement
 joins the monolingual atomic write and must preserve format, dimensions and verified replacement hash.

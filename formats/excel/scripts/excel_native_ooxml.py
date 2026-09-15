@@ -652,19 +652,26 @@ def main():
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("inspect", "apply", "verify"))
+    parser.add_argument("action", choices=("inspect", "inspect-bilingual", "apply", "verify"))
     parser.add_argument("--source", required=True, type=Path)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--manifest", type=Path)
     args = parser.parse_args()
     try:
-        if args.action == "inspect":
+        if args.action in {"inspect", "inspect-bilingual"}:
+            if args.action == "inspect-bilingual":
+                from excel_bilingual_ooxml import check_source
+                check_source(Package(args.source))
             report = inspect(args.source)
         else:
             if args.output is None or args.manifest is None:
                 raise ValueError("apply/verify require --output and --manifest")
             manifest = json.loads(args.manifest.read_text(encoding="utf-8-sig"))
-            report = (apply if args.action == "apply" else verify)(args.source, args.output, manifest)
+            if manifest.get("output_mode") == "bilingual":
+                from excel_bilingual_ooxml import apply as bilingual_apply, verify as bilingual_verify
+                report = (bilingual_apply if args.action == "apply" else bilingual_verify)(args.source, args.output, manifest)
+            else:
+                report = (apply if args.action == "apply" else verify)(args.source, args.output, manifest)
         print(json.dumps(report, ensure_ascii=False))
         return 0 if report.get("passed", True) else 2
     except Exception as exc:

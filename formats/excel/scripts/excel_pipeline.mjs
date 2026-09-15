@@ -7,11 +7,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-// The preservation path does not import/export the workbook through a document model.
-let FileBlob, SpreadsheetFile, Workbook;
-async function loadBilingualRuntime() {
-  if (!SpreadsheetFile) ({ FileBlob, SpreadsheetFile, Workbook } = await import("./artifact_runtime.mjs"));
-}
+// Both output modes preserve native OOXML without a workbook-model round trip.
 
 const FIXED_ENGLISH_TRANSLATIONS = JSON.parse(readFileSync(
   new URL("../references/fixed-translations.en.json", import.meta.url), "utf8",
@@ -168,6 +164,10 @@ export function estimateTranslatedRowHeight({ text, columnWidth, currentHeight =
   return Math.max(currentHeight, Math.min(60, lines * 15 + 3));
 }
 
+function blank(value) {
+  return value === null || value === undefined || value === "";
+}
+
 export function findCompressibleBlankRows(values, formulas, startRow = 1) {
   const blankRows = values.map((row, index) => {
     const formulaRow = formulas[index] ?? [];
@@ -273,7 +273,7 @@ export function assertSupportedWorkbookRisk(meta = {}) {
 export function classifyBilingualGrid(meta = {}) {
   const features = meta.features ?? {};
   const checks = [
-    // Paired rows rebuild a new workbook and cannot yet remap shape anchors.
+    // The paired-row writer does not yet remap drawing anchors.
     [features.decorative_drawing_count > 0, "drawing-anchor-rebuild"],
     [features.has_vba, "macro"],
     [features.table_count > 0, "table"],
@@ -438,23 +438,6 @@ function columnLabel(number) {
 }
 
 
-function rangeOrigin(address) {
-  const match = /^\$?([A-Z]+)\$?(\d+)/i.exec(address ?? "");
-  if (!match) throw new Error(`cannot parse used range address: ${address}`);
-  return { column: columnNumber(match[1].toUpperCase()), row: Number(match[2]) };
-}
-
-
-function rangeBounds(address) {
-  const match = /^\$?([A-Z]+)\$?(\d+)(?::\$?([A-Z]+)\$?(\d+))?$/i.exec(address ?? "");
-  if (!match) throw new Error(`cannot parse range address: ${address}`);
-  return {
-    startColumn: columnNumber(match[1].toUpperCase()),
-    startRow: Number(match[2]),
-    endColumn: columnNumber((match[3] ?? match[1]).toUpperCase()),
-    endRow: Number(match[4] ?? match[2]),
-  };
-}
 
 
 function splitCellAddress(address) {
@@ -489,19 +472,6 @@ export function mapFormulaToSourceRows(formula) {
 }
 
 
-function formulaCriterionPattern(criterion) {
-  let pattern = "";
-  const escape = character => character.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
-  for (let index = 0; index < criterion.length; index += 1) {
-    const character = criterion[index];
-    if (character === "~" && /[~*?]/u.test(criterion[index + 1] ?? "")) {
-      pattern += escape(criterion[++index]);
-    } else {
-      pattern += character === "*" ? ".*" : character === "?" ? "." : escape(character);
-    }
-  }
-  return new RegExp(`^${pattern}$`, "isu");
-}
 
 
 function protectedTokens(text) {
@@ -510,15 +480,6 @@ function protectedTokens(text) {
 }
 
 
-function contextForCell(values, rowIndex, columnIndex) {
-  for (let row = rowIndex - 1; row >= 0; row -= 1) {
-    const candidate = values[row]?.[columnIndex];
-    if (typeof candidate === "string" && candidate.trim()) {
-      return `cell:column:${candidate.trim()}`;
-    }
-  }
-  return "unknown";
-}
 
 
 async function loadState(jobDir) {
@@ -635,57 +596,11 @@ export async function inspectWorkbook(options) {
   const occurrences = [];
   let nativeWarnings = [];
   let externalData = false;
-  if (config.outputMode === "monolingual") {
-    const native = runNativeOperation("inspect", input);
-    sheets.push(...native.sheets);
-    occurrences.push(...native.occurrences.map(item => ({ ...item, protected_tokens: protectedTokens(item.source) })));
-    nativeWarnings = native.warnings;
-    externalData = native.external_data;
-  } else {
-  await loadBilingualRuntime();
-  const workbook = await SpreadsheetFile.importXlsx(await FileBlob.load(input));
-  const formulaCriteria = new Set();
-  for (const sheet of workbook.worksheets.items) {
-    for (const row of sheet.getUsedRange()?.formulas ?? []) {
-      for (const formula of row) {
-        if (typeof formula !== "string" || !formula) continue;
-        if (config.outputMode === "bilingual") mapFormulaToSourceRows(formula);
-        for (const literal of formula.matchAll(/"((?:""|[^"])*)"/gu)) {
-          formulaCriteria.add(literal[1].replaceAll('""', '"').replace(/^[<>=]+/u, "").toLowerCase());
-        }
-      }
-    }
-  }
-  const criterionPatterns = [...formulaCriteria].map(formulaCriterionPattern);
-  for (const sheet of workbook.worksheets.items) {
-    const used = sheet.getUsedRange();
-    if (!used?.address) {
-      sheets.push({ name: sheet.name, visible: true, used: false });
-      continue;
-    }
-    const values = used.values ?? [];
-    const formulas = used.formulas ?? [];
-    const origin = rangeOrigin(used.address);
-    sheets.push({ name: sheet.name, visible: true, used: true, range: used.address });
-    for (let row = 0; row < values.length; row += 1) {
-      for (let column = 0; column < (values[row]?.length ?? 0); column += 1) {
-        const source = values[row][column];
-        if (typeof source !== "string" || !source.trim() || formulas[row]?.[column]) continue;
-        const address = `${columnLabel(origin.column + column)}${origin.row + row}`;
-        occurrences.push({
-          id: `${sheet.name}!${address}`,
-          kind: "cell",
-          sheet: sheet.name,
-          address,
-          source,
-          formula_dependency: config.outputMode === "monolingual" && criterionPatterns.some(pattern => pattern.test(source)),
-          context_key: contextForCell(values, row, column),
-          protected_tokens: protectedTokens(source),
-        });
-      }
-    }
-  }
-  }
+  const native = runNativeOperation(config.outputMode === "bilingual" ? "inspect-bilingual" : "inspect", input);
+  sheets.push(...native.sheets);
+  occurrences.push(...native.occurrences.map(item => ({ ...item, protected_tokens: protectedTokens(item.source) })));
+  nativeWarnings = native.warnings;
+  externalData = native.external_data;
   const inventory = {
     schema_version: 1,
     source_file: input,
@@ -805,80 +720,7 @@ function validateTranslatedManifest(manifest, state) {
 }
 
 
-async function buildBilingualWorkbook(sourceWorkbook, manifest, units) {
-  const outputWorkbook = Workbook.create();
-  const occurrencesBySheet = new Map();
-  for (const occurrence of manifest.occurrences) {
-    if (occurrence.kind !== "cell") continue;
-    if (!occurrencesBySheet.has(occurrence.sheet)) occurrencesBySheet.set(occurrence.sheet, []);
-    occurrencesBySheet.get(occurrence.sheet).push(occurrence);
-  }
 
-  for (const source of sourceWorkbook.worksheets.items) {
-    const target = outputWorkbook.worksheets.add(source.name);
-    const used = source.getUsedRange();
-    if (!used?.address) continue;
-    const bounds = rangeBounds(used.address);
-    for (let column = bounds.startColumn; column <= bounds.endColumn; column += 1) {
-      const label = columnLabel(column);
-      const width = source.getRange(`${label}:${label}`).format.columnWidth;
-      if (typeof width === "number" && Number.isFinite(width)) {
-        target.getRange(`${label}:${label}`).format.columnWidth = width;
-      }
-    }
-    for (let row = bounds.startRow; row <= bounds.endRow; row += 1) {
-      const sourceRow = row * 2 - 1;
-      const translationRow = row * 2;
-      const first = columnLabel(bounds.startColumn);
-      const last = columnLabel(bounds.endColumn);
-      const original = source.getRange(`${first}${row}:${last}${row}`);
-      const sourceTarget = target.getRange(`${first}${sourceRow}:${last}${sourceRow}`);
-      const translationTarget = target.getRange(`${first}${translationRow}:${last}${translationRow}`);
-      sourceTarget.copyFrom(original, "all");
-      translationTarget.copyFrom(original, "all");
-      translationTarget.clear({ applyTo: "contents" });
-      const height = original.format.rowHeight;
-      if (typeof height === "number" && Number.isFinite(height)) {
-        sourceTarget.format.rowHeight = height;
-        translationTarget.format.rowHeight = Math.max(height, 18);
-      }
-      translationTarget.format.fill = "#EAF2F8";
-      translationTarget.format.font.name = "Arial";
-      translationTarget.format.font.color = "#1F4E78";
-      translationTarget.format.font.italic = true;
-      translationTarget.format.wrapText = true;
-      for (let column = bounds.startColumn; column <= bounds.endColumn; column += 1) {
-        const offset = column - bounds.startColumn;
-        const formula = original.formulas?.[0]?.[offset];
-        if (typeof formula === "string" && formula) {
-          target.getRange(`${columnLabel(column)}${sourceRow}`).formulas = [[mapFormulaToSourceRows(formula)]];
-        }
-      }
-    }
-
-    const merges = typeof source.__getMergedCells === "function" ? source.__getMergedCells() : [];
-    for (const merge of merges) {
-      const start = splitCellAddress(merge.startAddress);
-      const end = splitCellAddress(merge.endAddress);
-      if (start.row !== end.row) {
-        throw new Error(`bilingual fast path does not support vertical merge ${merge.startAddress}:${merge.endAddress}`);
-      }
-      const sourceRow = start.row * 2 - 1;
-      const translationRow = start.row * 2;
-      target.getRange(`${start.column}${sourceRow}:${end.column}${sourceRow}`).merge();
-      target.getRange(`${start.column}${translationRow}:${end.column}${translationRow}`).merge();
-    }
-
-    for (const occurrence of occurrencesBySheet.get(source.name) ?? []) {
-      const cell = splitCellAddress(occurrence.address);
-      const translation = renderOccurrenceTranslation(
-        occurrence, units.get(occurrence.translation_unit_id),
-      );
-      target.getRange(`${cell.column}${cell.row * 2}`).values = [[translation]];
-    }
-  }
-  return outputWorkbook;
-}
 
 
 export function assertImageDecisionsComplete(manifest = {}) {
@@ -890,42 +732,6 @@ export function assertImageDecisionsComplete(manifest = {}) {
   }
 }
 
-function normalizedMerges(sheet) {
-  if (typeof sheet.__getMergedCells !== "function") return [];
-  return sheet.__getMergedCells()
-    .map((merge) => `${merge.startAddress}:${merge.endAddress}`)
-    .sort();
-}
-
-
-function cellContent(sheet, address) {
-  const range = sheet.getRange(address);
-  return {
-    value: range.values?.[0]?.[0],
-    formula: range.formulas?.[0]?.[0],
-  };
-}
-
-
-function blank(value) {
-  return value === null || value === undefined || value === "";
-}
-
-
-function expectedBilingualMerges(sourceSheet, errors) {
-  const expected = [];
-  for (const merge of sourceSheet.__getMergedCells?.() ?? []) {
-    const start = splitCellAddress(merge.startAddress);
-    const end = splitCellAddress(merge.endAddress);
-    if (start.row !== end.row) {
-      errors.push(`unsupported-vertical-merge:${sourceSheet.name}!${merge.startAddress}:${merge.endAddress}`);
-      continue;
-    }
-    expected.push(`${start.column}${start.row * 2 - 1}:${end.column}${end.row * 2 - 1}`);
-    expected.push(`${start.column}${start.row * 2}:${end.column}${end.row * 2}`);
-  }
-  return expected.sort();
-}
 
 
 export async function verifyTranslations(options) {
@@ -942,88 +748,11 @@ export async function verifyTranslations(options) {
     try { runImageOperation(outputPath, path.join(jobDir, "translation-manifest.json"), "verify"); }
     catch (error) { errors.push(error.message); }
   }
-  let sourceWorkbook;
-  let outputWorkbook;
   let nativeReport;
-  if (state.outputMode === "monolingual") {
-    try {
-      nativeReport = runNativeOperation("verify", sourcePath, path.join(jobDir, "translation-manifest.json"), outputPath);
-      errors.push(...nativeReport.errors);
-    } catch (error) { errors.push(`output-open-failure:${error.message}`); }
-  } else {
   try {
-    await loadBilingualRuntime();
-    sourceWorkbook = await SpreadsheetFile.importXlsx(await FileBlob.load(sourcePath));
-    outputWorkbook = await SpreadsheetFile.importXlsx(await FileBlob.load(outputPath));
-  } catch (error) {
-    errors.push(`output-open-failure:${error.message}`);
-  }
-  }
-
-  if (sourceWorkbook && outputWorkbook) {
-    const sourceNames = sourceWorkbook.worksheets.items.map((sheet) => sheet.name);
-    const outputNames = outputWorkbook.worksheets.items.map((sheet) => sheet.name);
-    if (JSON.stringify(sourceNames) !== JSON.stringify(outputNames)) errors.push("sheet-order-change");
-    const outputSheets = new Map(outputWorkbook.worksheets.items.map((sheet) => [sheet.name, sheet]));
-    const units = new Map(manifest.translation_units.map((unit) => [unit.id, unit]));
-    for (const sourceSheet of sourceWorkbook.worksheets.items) {
-      const outputSheet = outputSheets.get(sourceSheet.name);
-      if (!outputSheet) {
-        errors.push(`missing-sheet:${sourceSheet.name}`);
-        continue;
-      }
-      const expectedMerges = state.outputMode === "bilingual"
-        ? expectedBilingualMerges(sourceSheet, errors)
-        : normalizedMerges(sourceSheet);
-      if (JSON.stringify(expectedMerges) !== JSON.stringify(normalizedMerges(outputSheet))) {
-        errors.push(`merge-change:${sourceSheet.name}`);
-      }
-      const used = sourceSheet.getUsedRange();
-      if (!used?.address) continue;
-      const bounds = rangeBounds(used.address);
-      for (let row = bounds.startRow; row <= bounds.endRow; row += 1) {
-        for (let column = bounds.startColumn; column <= bounds.endColumn; column += 1) {
-          const address = `${columnLabel(column)}${row}`;
-          const sourceCell = cellContent(sourceSheet, address);
-          const targetAddress = state.outputMode === "bilingual"
-            ? `${columnLabel(column)}${row * 2 - 1}` : address;
-          const outputCell = cellContent(outputSheet, targetAddress);
-          if (!blank(sourceCell.formula)) {
-            const expected = state.outputMode === "bilingual"
-              ? mapFormulaToSourceRows(sourceCell.formula) : sourceCell.formula;
-            if (outputCell.formula !== expected) errors.push(`formula-change:${sourceSheet.name}!${address}`);
-          } else if (typeof sourceCell.value !== "string" && sourceCell.value !== outputCell.value) {
-            errors.push(`non-text-change:${sourceSheet.name}!${address}`);
-          } else if (state.outputMode === "bilingual" && typeof sourceCell.value === "string"
-            && sourceCell.value !== outputCell.value) {
-            errors.push(`source-text-change:${sourceSheet.name}!${address}`);
-          }
-          if (state.outputMode === "bilingual") {
-            const translationCell = cellContent(outputSheet, `${columnLabel(column)}${row * 2}`);
-            if ((typeof sourceCell.value !== "string" || !blank(sourceCell.formula))
-              && (!blank(translationCell.value) || !blank(translationCell.formula))) {
-              errors.push(`bilingual-nontext-duplicate:${sourceSheet.name}!${address}`);
-            }
-          }
-        }
-      }
-    }
-    for (const occurrence of manifest.occurrences) {
-      const outputSheet = outputSheets.get(occurrence.sheet);
-      if (!outputSheet) continue;
-      const unit = units.get(occurrence.translation_unit_id);
-      const sourceCell = splitCellAddress(occurrence.address);
-      const targetAddress = state.outputMode === "bilingual"
-        ? `${sourceCell.column}${sourceCell.row * 2}` : occurrence.address;
-      const actual = cellContent(outputSheet, targetAddress).value;
-      if (actual !== renderOccurrenceTranslation(occurrence, unit)) {
-        errors.push(`missing-translation:${occurrence.id}`);
-      }
-      for (const token of occurrence.original_protected_tokens ?? unit.protected_tokens ?? []) {
-        if (!String(actual ?? "").includes(token)) errors.push(`protected-token-change:${occurrence.id}:${token}`);
-      }
-    }
-  }
+    nativeReport = runNativeOperation("verify", sourcePath, path.join(jobDir, "translation-manifest.json"), outputPath);
+    errors.push(...nativeReport.errors);
+  } catch (error) { errors.push(`output-open-failure:${error.message}`); }
 
   const report = {
     passed: errors.length === 0,
@@ -1111,7 +840,7 @@ export async function applyTranslations(options) {
   assertSupportedWorkbookRisk({ extension: path.extname(input), features: inventory.features, outputMode: state.outputMode });
   const manifestPath = path.join(jobDir, "translation-manifest.json");
   const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
-  const units = validateTranslatedManifest(manifest, state);
+  validateTranslatedManifest(manifest, state);
   state = completeStage(state, "translate", { manifest: await sha256File(manifestPath) });
   state = completeStage(state, "validate", { manifest: await sha256File(manifestPath) });
 
@@ -1120,19 +849,10 @@ export async function applyTranslations(options) {
   if (state.outputMode === "bilingual") {
     const safety = classifyBilingualGrid(inventory);
     if (!safety.safe) throw new Error(`bilingual strict fallback required: ${safety.reasons.join(", ")}`);
-    await loadBilingualRuntime();
-    const workbook = await SpreadsheetFile.importXlsx(await FileBlob.load(input));
-    const outputWorkbook = await buildBilingualWorkbook(workbook, manifest, units);
-    for (const occurrence of manifest.occurrences) changedSheets.add(occurrence.sheet);
-    await fs.mkdir(path.dirname(output), { recursive: true });
-    const blob = await SpreadsheetFile.exportXlsx(outputWorkbook);
-    await blob.save(output);
-    if (manifest.images?.some(image => image.status === "localized")) runImageOperation(output, manifestPath, "apply");
-  } else {
-    const native = runNativeOperation("apply", input, manifestPath, output);
-    for (const sheet of native.changed_sheets) changedSheets.add(sheet);
-    layoutRepairs = native;
   }
+  const native = runNativeOperation("apply", input, manifestPath, output);
+  for (const sheet of native.changed_sheets) changedSheets.add(sheet);
+  layoutRepairs = native;
   state = completeStage(state, "apply", { output: await sha256File(output) });
   state.outputPaths = { ...state.outputPaths, output };
   state.counts = {
