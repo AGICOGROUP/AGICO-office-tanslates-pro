@@ -1,5 +1,5 @@
 ---
-name: translate-word-professionally
+name: office-translate-pro-word
 description: Use when translating uploaded Word documents (.doc or .docx), especially technical tables, quotations and specifications whose terminology, editable text, styles, images and layout must be preserved.
 ---
 

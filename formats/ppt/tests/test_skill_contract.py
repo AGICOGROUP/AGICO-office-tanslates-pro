@@ -29,7 +29,7 @@ class PowerPointOnlySkillContract(unittest.TestCase):
 
     def test_metadata_is_powerpoint_only(self):
         skill = (ROOT / "SKILL.md").read_text(encoding="utf-8")
-        self.assertIn("name: translate-powerpoint-professionally", skill)
+        self.assertIn("name: office-translate-pro-ppt", skill)
         self.assertIn("PowerPoint", skill)
         self.assertIn(".ppt", skill)
         self.assertIn(".pptx", skill)

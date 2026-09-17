@@ -146,7 +146,16 @@ class WordAdapterStructureTests(unittest.TestCase):
         metadata = ROOT / "formats" / "word" / "agents" / "openai.yaml"
         self.assertTrue(metadata.is_file())
         text = metadata.read_text(encoding="utf-8")
-        self.assertIn('$translate-word-professionally', text)
+        self.assertIn('$office-translate-pro-word', text)
+
+    def test_office_adapter_names_share_parent_prefix(self):
+        for format_name in ("word", "excel", "ppt"):
+            with self.subTest(format=format_name):
+                skill = (ROOT / "formats" / format_name / "SKILL.md").read_text(encoding="utf-8")
+                metadata = (ROOT / "formats" / format_name / "agents" / "openai.yaml").read_text(encoding="utf-8")
+                name = f"office-translate-pro-{format_name}"
+                self.assertIn(f"name: {name}", skill)
+                self.assertIn(f"${name}", metadata)
 
 if __name__ == "__main__":
     unittest.main()

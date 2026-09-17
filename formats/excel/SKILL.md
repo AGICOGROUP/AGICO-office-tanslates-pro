@@ -1,5 +1,5 @@
 ---
-name: translate-excel-professionally
+name: office-translate-pro-excel
 description: Use when translating monolingual or bilingual Excel workbooks (.xls or .xlsx), especially technical tables whose formulas, layout, images and editable structure must be preserved.
 ---
 

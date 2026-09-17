@@ -1,4 +1,4 @@
 interface:
-  display_name: "Excel Professional Translation"
+  display_name: "Office Translate Pro - Excel"
   short_description: "Professional monolingual and bilingual Excel translation"
-  default_prompt: "Use $translate-excel-professionally to translate this Excel workbook with the project cement glossary, preserve its structure, and use the paired-row blue layout when bilingual output is requested."
+  default_prompt: "Use $office-translate-pro-excel to translate this Excel workbook with the project cement glossary, preserve its structure, and use the paired-row blue layout when bilingual output is requested."

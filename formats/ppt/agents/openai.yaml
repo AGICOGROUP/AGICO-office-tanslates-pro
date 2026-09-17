@@ -1,4 +1,4 @@
 interface:
-  display_name: "Professional PowerPoint Translation"
+  display_name: "Office Translate Pro - PowerPoint"
   short_description: "Translate PPT files while preserving editable layout"
-  default_prompt: "Use $translate-powerpoint-professionally to translate this presentation while preserving editable text, layout, and engineering graphics."
+  default_prompt: "Use $office-translate-pro-ppt to translate this presentation while preserving editable text, layout, and engineering graphics."

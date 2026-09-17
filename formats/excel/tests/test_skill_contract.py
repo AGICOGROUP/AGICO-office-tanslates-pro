@@ -118,7 +118,7 @@ class ExcelSkillContractTests(unittest.TestCase):
     def test_skill_is_excel_only_and_complete(self):
         skill = (ROOT / "SKILL.md").read_text(encoding="utf-8")
         required = [
-            "translate-excel-professionally",
+            "office-translate-pro-excel",
             "office_pipeline.py prepare",
             ".xls",
             ".xlsx",

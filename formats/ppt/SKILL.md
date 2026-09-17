@@ -1,5 +1,5 @@
 ---
-name: translate-powerpoint-professionally
+name: office-translate-pro-ppt
 description: Use when translating PowerPoint presentations (.ppt or .pptx) while preserving editable native text, technical tokens, images and layout with Microsoft PowerPoint verification.
 ---
 

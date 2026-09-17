@@ -37,7 +37,7 @@ def validate(repo_root: str | Path | None = None) -> dict:
     skill_path = ROOT / "SKILL.md"
     if skill_path.is_file():
         skill = skill_path.read_text(encoding="utf-8")
-        if "name: translate-powerpoint-professionally" not in skill:
+        if "name: office-translate-pro-ppt" not in skill:
             errors.append("wrong skill name")
         if "scripts/ppt_pipeline.py" not in skill:
             errors.append("single pipeline entry is not documented")
@@ -50,7 +50,7 @@ def validate(repo_root: str | Path | None = None) -> dict:
 
     return {
         "passed": not errors,
-        "skill": "translate-powerpoint-professionally",
+        "skill": "office-translate-pro-ppt",
         "required_files": len(REQUIRED),
         "repository_glossary": glossary,
         "errors": errors,
