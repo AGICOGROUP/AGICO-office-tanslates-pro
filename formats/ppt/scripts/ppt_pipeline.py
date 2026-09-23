@@ -15,6 +15,7 @@ from typing import Any
 from zipfile import ZipFile
 
 from inspect_pptx_package import InspectionError, inspect_package, sha256_file
+from ppt_image_replacements import localized_parts, verify_replacements
 from pptx_ooxml import OoxmlError, apply_manifest
 from validate_manifest import ManifestError, validate_manifest, technical_mismatch
 from resolve_repo_glossary import lookup_terms
@@ -364,15 +365,25 @@ def command_verify(args: argparse.Namespace) -> int:
         for item in inventory.get("preserved_parts", []):
             if item["part"] not in package.namelist() or sha256(package.read(item["part"])).hexdigest() != item["sha256"]:
                 errors.append({"code": "preserved-part-changed", "part": item["part"]})
+    try:
+        localized_media = localized_parts(manifest)
+    except RuntimeError as exc:
+        errors.append({"code": "localized-image-invalid", "message": str(exc)})
+        localized_media = {}
     working_source = Path(inventory.get("working_source_path", str(source)))
     with ZipFile(working_source) as original, ZipFile(output) as translated:
         output_names = set(translated.namelist())
         for name in original.namelist():
             if name.startswith("ppt/slides/slide") and name.endswith(".xml"):
                 continue
-            if name not in output_names or original.read(name) != translated.read(name):
-                errors.append({"code": "package-part-changed", "part": name})
+            if name in output_names and original.read(name) == translated.read(name):
+                continue
+            # A declared localized replacement is the only intentional part change.
+            if name in output_names and localized_media.get(name) == sha256(translated.read(name)).hexdigest():
+                continue
+            errors.append({"code": "package-part-changed", "part": name})
     errors.extend(verify_localized_image_hashes(manifest, output_inventory))
+    errors.extend(verify_replacements(manifest, output))
     errors.extend(verify_required_overlays(manifest, output_inventory))
     if len(output_inventory["slides"]) != len(inventory["slides"]):
         errors.append(

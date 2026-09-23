@@ -42,14 +42,16 @@ in the requested output; do not hide untranslated sentences behind a retention d
 
 Review each unique embedded image text once, including WMF/EMF diagrams, following
 [the shared in-image translation rule](../../references/image-translation.md).
-Use GPT image editing as the only method; replace text or add bilingual text at its original location
+Pick one of its two methods per image: the native `image_edit` tool for renders, photos and sketches,
+or deterministic erase + refill (`scripts/inimage_erase_refill.py`) for technical line drawings whose
+linework must survive unchanged. Replace text or add bilingual text at its original location
 as requested. Inspect the result using the shared accepted quality criteria; cosmetic redraw
 differences alone do not require another generation. Insert the translated image back into the file.
 Record and verify source/output pixel dimensions and exact aspect ratio. Never crop, truncate,
-downsample or independently stretch the generated image; use equal-size output or proportional
+downsample or independently stretch the replacement image; use equal-size output or proportional
 upscaling, with blank padding when necessary to restore the source ratio.
 External bilingual legends do not meet this requirement and must not be used as the translation
-result. The Word pipeline replaces GPT-localized main-story inline images while preserving their
+result. The Word pipeline replaces localized main-story inline images while preserving their
 display dimensions and verifies the resulting package. Unsupported image hosts remain pending;
 do not claim that review/retention translates an image or that a standalone trial updated the file.
 

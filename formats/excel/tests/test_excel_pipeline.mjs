@@ -7,6 +7,7 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 import { FileBlob, SpreadsheetFile, Workbook } from "../scripts/artifact_runtime.mjs";
+import { resolvePython } from "../../../scripts/runtime_paths.mjs";
 
 import {
   buildImageReviewPlan,
@@ -435,7 +436,7 @@ test("inspect prepare and apply translate text while preserving numbers and form
     const sourceBlob = await SpreadsheetFile.exportXlsx(workbook);
     await sourceBlob.save(source);
     const fixture = fileURLToPath(new URL("./invisible_drawing_fixture.py", import.meta.url));
-    const python = process.env.CODEX_PYTHON || path.resolve(path.dirname(process.execPath), "..", "..", "python", "python.exe");
+    const python = resolvePython();
     const drawingCommand = (command, file) => {
       const result = spawnSync(python, [fixture, command, file], { encoding: "utf8", windowsHide: true, maxBuffer: 4 * 1024 * 1024 });
       assert.equal(result.status, 0, result.stderr);
@@ -576,7 +577,7 @@ test("production monolingual path preserves complex parts and discloses their un
     const source = path.join(directory, "source.xlsx");
     const output = path.join(directory, "output.xlsx");
     const fixtureDirectory = fileURLToPath(new URL(".", import.meta.url));
-    const python = process.env.CODEX_PYTHON || path.resolve(path.dirname(process.execPath), "..", "..", "python", "python.exe");
+    const python = resolvePython();
     const fixture = spawnSync(python, ["-c", "import sys; from pathlib import Path; sys.path.insert(0,sys.argv[1]); from test_excel_native_ooxml import fixture; fixture(Path(sys.argv[2]))", fixtureDirectory, source], { encoding: "utf8", windowsHide: true });
     assert.equal(fixture.status, 0, fixture.stderr);
     await inspectWorkbook({ input: source, "job-dir": directory, "target-language": "en", "output-mode": "monolingual" });

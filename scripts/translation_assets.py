@@ -7,6 +7,16 @@ from zipfile import ZipFile
 from translation_core import file_hash
 
 
+# ``localized`` means the image was edited in place with GPT image editing and
+# is re-inserted at its original host; PowerPoint supports it through
+# ``formats/ppt/scripts/ppt_image_replacements.py``.
+ACCEPTED_IMAGE_DECISIONS = {
+    "word": {"reviewed", "localized", "retain"},
+    "excel": {"reviewed", "localized", "retain"},
+    "ppt": {"skip_target", "skip_unclear", "localized"},
+}
+
+
 def asset_field(format_name):
     return {"word": "image_reviews", "excel": "images", "ppt": "image_groups"}[format_name]
 
@@ -37,8 +47,7 @@ def prepare_assets(manifest, format_name, working, job_dir):
 def pending_assets(manifest, format_name):
     pending = []
     field = "decision" if format_name == "ppt" else "status"
-    accepted = ({"skip_target", "skip_unclear"} if format_name == "ppt" else
-                {"reviewed", "localized", "retain"})
+    accepted = ACCEPTED_IMAGE_DECISIONS[format_name]
     for group in manifest.get(asset_field(format_name), []):
         if group.get(field) not in accepted or group.get("decision_error"):
             record = deepcopy(group)
@@ -93,8 +102,7 @@ def merge_assets(manifest, decisions, format_name):
                 raise ValueError("Use only GPT image editing; native overlays and external legends are retired")
             if value in {None, "pending", "manual-review"}:
                 continue
-            allowed = ({"skip_target", "skip_unclear"} if format_name == "ppt" else
-                       {"reviewed", "localized", "retain"})
+            allowed = ACCEPTED_IMAGE_DECISIONS[format_name]
             if value not in allowed:
                 raise ValueError(f"use one of {', '.join(sorted(allowed))}")
             updates = {field: value}
@@ -104,8 +112,28 @@ def merge_assets(manifest, decisions, format_name):
                 replacement = Path(decision.get("replacement_path", ""))
                 if not replacement.is_absolute() or not replacement.is_file():
                     raise ValueError("localized image needs an absolute replacement_path")
-                updates.update(replacement_path=str(replacement), replacement_sha256=file_hash(replacement))
-                if format_name == "word":
+                updates["replacement_path"] = str(replacement)
+                if format_name == "ppt":
+                    # A picture shape fixes its extent and crop outside the image
+                    # bytes, so the replacement is fitted to the source pixel
+                    # dimensions before it is recorded.
+                    from normalize_generated_image import fit
+                    from PIL import Image
+                    source_image = Path(str(group.get("source_image", "")))
+                    if not source_image.is_file():
+                        raise ValueError("localized PowerPoint image needs its extracted source image")
+                    media_parts = list(group.get("media_paths") or [])
+                    if not media_parts:
+                        raise ValueError("localized PowerPoint image has no package media part")
+                    if Path(media_parts[0]).suffix.lower() != replacement.suffix.lower():
+                        raise ValueError("replacement format must match the package media part")
+                    with Image.open(source_image) as picture:
+                        width, height = picture.size
+                    fitted = replacement.with_name(f"{replacement.stem}.fitted{replacement.suffix}")
+                    fit(width, height, replacement, fitted)
+                    updates.update(generated_image=str(replacement), replacement_path=str(fitted),
+                                   source_pixel_width=width, source_pixel_height=height)
+                else:
                     width = decision.get("source_pixel_width")
                     height = decision.get("source_pixel_height")
                     if type(width) is not int or type(height) is not int or width < 1 or height < 1:
@@ -113,6 +141,7 @@ def merge_assets(manifest, decisions, format_name):
                     from normalize_generated_image import verify
                     verify(width, height, replacement)
                     updates.update(source_pixel_width=width, source_pixel_height=height)
+                updates["replacement_sha256"] = file_hash(Path(updates["replacement_path"]))
             if value == "overlay":
                 overlays = decision.get("overlays", [])
                 if not isinstance(overlays, list) or not overlays:

@@ -75,7 +75,11 @@ class ExcelFastPipelineTests(unittest.TestCase):
             powershell = bundle / 'native' / 'powershell' / 'pwsh.exe'
             powershell.parent.mkdir(parents=True)
             powershell.touch()
-            with patch.dict(os.environ, {}, clear=True), patch.object(runner, 'bundled_dependencies', return_value=bundle):
+            # Layout probing now lives in the shared resolver, so the seam is the root list rather
+            # than an adapter-local helper.
+            import runtime_paths
+            with patch.dict(os.environ, {}, clear=True), \
+                    patch.object(runtime_paths, 'runtime_roots', return_value=[bundle]):
                 env = runner.node_environment(None)
             self.assertEqual(str(modules), env['NODE_PATH'])
             self.assertEqual(runner.sys.executable, env['CODEX_PYTHON'])

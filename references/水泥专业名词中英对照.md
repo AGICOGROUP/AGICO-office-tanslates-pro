@@ -870,7 +870,8 @@
 | 钢板 | Plate |
 | 槽钢 | Channel |
 | 蓝图 | Blue-print |
-| 研磨剂（材料）Abrasive弯矩 | Moment |
+| 研磨剂（材料） | Abrasive |
+| 弯矩 | Moment |
 | 尺寸 | Dimension |
 | 岩棉 | Rock Wool |
 | 凡士林 | Vaseline |

@@ -9,9 +9,16 @@ Route each uploaded file to exactly one format adapter.
 
 For embedded image text, all adapters follow [the shared in-image translation rule](references/image-translation.md).
 Translate at the original label locations according to the user's language and mode requirements.
-GPT image editing is the only method; verify preservation of non-text meaning and appearance
-using the accepted quality criteria in that shared rule, without requiring pixel identity.
-External legends and review flags never replace actual in-image translation.
+Two methods are accepted, selected per image by that shared rule: generative editing with the native
+`image_edit` tool, and deterministic erase + refill with `scripts/inimage_erase_refill.py`, which
+rewrites only label pixels and leaves every other pixel identical to the source. Pixel identity
+outside the label boxes is required for the second method and measured; it is not required for the
+first. Verify preservation of non-text meaning and appearance using the accepted quality criteria in
+that shared rule. External legends and review flags never replace actual in-image translation.
+
+An image that carries nothing but a logo or brand mark is **not** translatable content: retain it and
+leave its bytes untouched. Never process a logo-only image with either method, because rebuilding brand
+artwork breaks brand identity while adding no translated text.
 
 All adapters share `references/水泥专业名词中英对照.md`; do not copy, reinstall or validate the
 whole repository during an ordinary translation. Read the selected adapter and the references it

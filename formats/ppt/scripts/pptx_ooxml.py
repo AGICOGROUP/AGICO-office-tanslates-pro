@@ -19,6 +19,8 @@ import xml.etree.ElementTree as ET
 from xml.sax.saxutils import escape
 from lxml import etree as LET
 
+from ppt_image_replacements import replacement_payloads
+
 
 P_NS = "http://schemas.openxmlformats.org/presentationml/2006/main"
 A_NS = "http://schemas.openxmlformats.org/drawingml/2006/main"
@@ -439,6 +441,12 @@ def apply_manifest(input_path: Path, manifest_path: Path, output_path: Path) -> 
         missing_slides = sorted(expected_slides - source_names)
         if missing_slides:
             raise OoxmlError(f"missing slide XML: {', '.join(missing_slides)}")
+        try:
+            # Localized pictures keep their shape and geometry; only the media
+            # bytes they reference are exchanged.
+            localized_media = replacement_payloads(manifest, source)
+        except RuntimeError as exc:
+            raise OoxmlError(str(exc)) from exc
 
         fd, temporary_name = tempfile.mkstemp(prefix=f".{output_path.name}.", suffix=".tmp", dir=output_path.parent)
         os.close(fd)
@@ -447,7 +455,9 @@ def apply_manifest(input_path: Path, manifest_path: Path, output_path: Path) -> 
             with zipfile.ZipFile(temporary, "w", allowZip64=True) as target:
                 target.comment = source.comment
                 for entry in source_entries:
-                    payload = source.read(entry.filename)
+                    payload = localized_media.get(entry.filename)
+                    if payload is None:
+                        payload = source.read(entry.filename)
                     match = re.fullmatch(r"ppt/slides/slide(\d+)\.xml", entry.filename)
                     if match:
                         slide_index = int(match.group(1))
@@ -468,6 +478,7 @@ def apply_manifest(input_path: Path, manifest_path: Path, output_path: Path) -> 
         "translation_units": len(manifest["translation_units"]),
         "replaced": replaced,
         "image_overlays": sum(map(len, overlays_by_slide.values())),
+        "image_replacements": len(localized_media),
         "preserved_parts": manifest.get("preserved_parts", []),
     }
 

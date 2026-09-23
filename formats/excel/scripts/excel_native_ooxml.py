@@ -138,6 +138,14 @@ def operational_cells(package):
     reference = qualifier + rf"({cell_ref})(?::({cell_ref}))?"
     ref_pattern = re.compile(r"(?<![\w.])" + reference + r"(?![\w(])", re.I)
     whole_pattern = re.compile(r"(?<![\w.])" + qualifier + r"(\$?[A-Z]{1,3}:\$?[A-Z]{1,3}|\$?\d+:\$?\d+)(?![\w])", re.I)
+    # An external-workbook operand resolves inside another file, so it can never make a local cell a
+    # formula input. Strip those operands before local reference extraction instead of refusing the
+    # whole workbook; inspect() already reports them through external_data and skips recalculation.
+    external_pattern = re.compile(
+        r"(?:'[^']*\[\d+\][^']*'|\[\d+\][^'!()]*)!"
+        r"(?:\$?[A-Z]{1,3}\$?\d+(?::\$?[A-Z]{1,3}\$?\d+)?|[A-Za-z_][\w.]*)",
+        re.I,
+    )
 
     def unresolved(sheet, formula):
         raise ValueError(f"unresolved formula reference in {sheet or 'defined name'}: {formula}; "
@@ -212,6 +220,7 @@ def operational_cells(package):
                 del tokens[i + 1:end + 1]
             formula = "".join(t.value for t in tokens)
         clean = re.sub(r'"(?:""|[^"])*"', '""', formula)
+        clean = external_pattern.sub(" ", clean)
         if "[" in clean or re.search(r"\b(?:INDIRECT|OFFSET)\s*\(", clean, re.I):
             unresolved(current_sheet, formula)
         for match in whole_pattern.finditer(clean):
@@ -407,7 +416,6 @@ def layout_geometry(root, address):
 def expand_layout(package, changes):
     expanded = set()
     styles_changed = False
-    clones = {}
     for sheet in package.sheets:
         root = sheet["root"]
         columns = root.findall(f"{Q('cols')}/{Q('col')}")
@@ -418,6 +426,18 @@ def expand_layout(package, changes):
         rows = {int(row.get("r")): row for row in root.findall(f"{Q('sheetData')}/{Q('row')}")}
         for (name, address), target in changes.items():
             if name != sheet["name"]:
+                continue
+            cell = package.cells[(name, address)]
+            xfs = package.styles.find(Q("cellXfs")) if package.styles is not None else None
+            if xfs is None:
+                continue
+            align = xfs[int(cell.get("s", "0"))].find(Q("alignment"))
+            # Grow only geometry the source author already chose to grow. Turning on wrapText for a
+            # cell that never wrapped destroys Excel's spill-over into empty neighbouring cells,
+            # which is how engineering data sheets display long labels, and injects visual line
+            # breaks plus taller rows into the translation. Such cells keep their original style and
+            # row height verbatim.
+            if align is None or align.get("wrapText") not in {"1", "true"}:
                 continue
             col, row_number = coordinates(address)
             start = end = col
@@ -442,29 +462,6 @@ def expand_layout(package, changes):
                 row.set("ht", str(needed))
                 row.set("customHeight", "1")
                 expanded.add((name, row_number))
-            cell = package.cells[(name, address)]
-            xfs = package.styles.find(Q("cellXfs")) if package.styles is not None else None
-            if xfs is None:
-                continue
-            style = int(cell.get("s", "0"))
-            xf = xfs[style]
-            align = xf.find(Q("alignment"))
-            if align is not None and align.get("wrapText") in {"1", "true"}:
-                continue
-            if style not in clones:
-                clone = deepcopy(xf)
-                alignment = clone.find(Q("alignment"))
-                if alignment is None:
-                    alignment = ET.Element(Q("alignment"))
-                    # alignment precedes protection/extLst in CT_Xf.
-                    clone.insert(next((i for i, n in enumerate(clone) if n.tag in {Q("protection"), Q("extLst")}), len(clone)), alignment)
-                alignment.set("wrapText", "1")
-                clone.set("applyAlignment", "1")
-                clones[style] = len(xfs)
-                xfs.append(clone)
-                xfs.set("count", str(len(xfs)))
-                styles_changed = True
-            cell.set("s", str(clones[style]))
     return expanded, styles_changed
 
 
@@ -532,12 +529,18 @@ def verify(source, output, manifest):
                     else:
                         a, b = deepcopy(source_xfs[source_style]), deepcopy(output_xfs[output_style])
                         align = b.find(Q("alignment"))
-                        root = next(s["root"] for s in before.sheets if s["name"] == key[0])
-                        width, vertical = layout_geometry(root, key[1])
-                        row = cell.getparent()
-                        if not vertical and row.get("hidden") != "1" and wrapped_lines(expected[key], width) > 1:
-                            if align is None or align.get("wrapText") not in {"1", "true"}:
-                                errors.append(f"style-change:missing-wrap:{key}")
+                        source_align = a.find(Q("alignment"))
+                        source_wraps = source_align is not None and source_align.get("wrapText") in {"1", "true"}
+                        output_wraps = align is not None and align.get("wrapText") in {"1", "true"}
+                        # The invariant is source fidelity, not forced wrapping. Excel lets an
+                        # unwrapped cell spill into empty neighbours, which is how long labels on
+                        # engineering data sheets are laid out; injecting wrapText destroys that
+                        # spill and adds visual line breaks the author never asked for, while
+                        # dropping an existing wrap clips the text.
+                        if source_wraps and not output_wraps:
+                            errors.append(f"style-change:lost-wrap:{key}")
+                        if output_wraps and not source_wraps:
+                            errors.append(f"style-change:injected-wrap:{key}")
                         for style in (a, b):
                             style.attrib.pop("applyAlignment", None)
                             alignment = style.find(Q("alignment"))
@@ -549,7 +552,21 @@ def verify(source, output, manifest):
                             errors.append(f"style-change:cell-format:{key}")
     # Independently compare structural XML after masking permitted text/style/row edits.
     out_sheets = {s["name"]: s for s in after.sheets}
-    changed_rows = {(name, coordinates(address)[1]) for name, address in changed}
+    # Row height may only change where the author already wrapped: a wrapped cell legitimately needs
+    # more lines for a longer translation, but an unwrapped cell spills into empty neighbouring cells
+    # and must keep its original height. Masking every touched row let the writer inflate heights
+    # freely, which is what made translated rows look taller and multi-lined.
+    growable_rows = set()
+    source_row_xfs = before.styles.find(Q("cellXfs")) if before.styles is not None else None
+    if source_row_xfs is not None:
+        for sheet in before.sheets:
+            for row in sheet["root"].findall(f"{Q('sheetData')}/{Q('row')}"):
+                for cell in row.findall(Q("c")):
+                    if (sheet["name"], cell.get("r")) not in changed:
+                        continue
+                    alignment = source_row_xfs[int(cell.get("s", "0"))].find(Q("alignment"))
+                    if alignment is not None and alignment.get("wrapText") in {"1", "true"}:
+                        growable_rows.add((sheet["name"], int(row.get("r"))))
     for sheet in before.sheets:
         other = out_sheets.get(sheet["name"])
         if other is None:
@@ -562,7 +579,7 @@ def verify(source, output, manifest):
             errors.append(f"merge-change:{sheet['name']}")
         for root in (a, b):
             for row in root.findall(f"{Q('sheetData')}/{Q('row')}"):
-                if (sheet["name"], int(row.get("r"))) in changed_rows:
+                if (sheet["name"], int(row.get("r"))) in growable_rows:
                     for attribute in ("ht", "customHeight"):
                         row.attrib.pop(attribute, None)
                 for cell in row.findall(Q("c")):

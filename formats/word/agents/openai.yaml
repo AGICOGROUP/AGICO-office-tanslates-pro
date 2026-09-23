@@ -1,4 +1,4 @@
 interface:
-  display_name: "Office Translate Pro - Word"
+  display_name: "Fast Professional Word Translation"
   short_description: "流水式翻译 Word；默认高效处理，复杂文档自动升级检查"
   default_prompt: "Use $office-translate-pro-word to translate my Word document efficiently, preserving editable content and its overall visual hierarchy while applying stricter checks only when needed."

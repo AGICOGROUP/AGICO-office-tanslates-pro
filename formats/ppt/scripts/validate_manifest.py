@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from hashlib import sha256
 import json
 from pathlib import Path
 import sys
@@ -135,7 +136,7 @@ def validate_manifest(path: str | Path, require_translations: bool = False) -> d
             raise ManifestError(f"{label}: occurrence does not match translation unit {unit_id}")
 
     seen_hashes: set[str] = set()
-    overlay_images = skipped_target_images = skipped_unclear_images = 0
+    overlay_images = skipped_target_images = skipped_unclear_images = localized_images = 0
     for index, group in enumerate(data["image_groups"], start=1):
         label = f"image_groups[{index}]"
         if not isinstance(group, dict):
@@ -149,7 +150,7 @@ def validate_manifest(path: str | Path, require_translations: bool = False) -> d
         decision = non_empty_string(group.get("decision"), f"{label}.decision")
         if decision == "pending" and require_translations:
             raise ManifestError(f"{label}: image decision is still pending")
-        if decision not in {"pending", "skip_target", "skip_unclear", "overlay"}:
+        if decision not in {"pending", "skip_target", "skip_unclear", "overlay", "localized"}:
             raise ManifestError(f"{label}.decision: unsupported decision: {decision}")
         overlay_ids = string_list(group.get("overlay_ids", []), f"{label}.overlay_ids")
         if decision in {"skip_target", "skip_unclear"}:
@@ -157,6 +158,23 @@ def validate_manifest(path: str | Path, require_translations: bool = False) -> d
                 raise ManifestError(f"{label}.overlay_ids: skipped images cannot have overlays")
             skipped_target_images += decision == "skip_target"
             skipped_unclear_images += decision == "skip_unclear"
+        elif decision == "localized":
+            if overlay_ids:
+                raise ManifestError(f"{label}.overlay_ids: localized images cannot have overlays")
+            media_parts = string_list(group.get("media_paths", []), f"{label}.media_paths")
+            if not media_parts:
+                raise ManifestError(f"{label}.media_paths: localized image needs a package media part")
+            replacement = group.get("replacement_path")
+            if not isinstance(replacement, str) or not Path(replacement).is_absolute() or not Path(replacement).is_file():
+                raise ManifestError(f"{label}.replacement_path: expected an absolute path to an existing file")
+            if Path(replacement).suffix.lower() != Path(media_parts[0]).suffix.lower():
+                raise ManifestError(f"{label}.replacement_path: replacement format must match the media part")
+            recorded = non_empty_string(group.get("replacement_sha256"), f"{label}.replacement_sha256")
+            if sha256(Path(replacement).read_bytes()).hexdigest() != recorded:
+                raise ManifestError(f"{label}.replacement_sha256: does not match the replacement file")
+            for field in ("source_pixel_width", "source_pixel_height"):
+                positive_int(group.get(field), f"{label}.{field}")
+            localized_images += 1
         elif decision == "overlay":
             if group.get("preserve_source_image") is not True:
                 raise ManifestError(f"{label}.preserve_source_image: expected true")
@@ -201,6 +219,7 @@ def validate_manifest(path: str | Path, require_translations: bool = False) -> d
         "translation_units": len(units),
         "image_groups": len(data["image_groups"]),
         "overlay_images": overlay_images,
+        "localized_images": localized_images,
         "skipped_target_images": skipped_target_images,
         "skipped_unclear_images": skipped_unclear_images,
         "translated": translated,

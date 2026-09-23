@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import shutil
 import subprocess
 from pathlib import Path
 import sys
@@ -15,6 +16,28 @@ from zipfile import ZipFile
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 from inspect_excel_package import inspect_package, _is_invisible_rectangle  # noqa: E402
+
+
+def _resolve_node():
+    """Resolve Node from PATH or the managed runtime layout.
+
+    A location derived from one machine's interpreter path breaks every other install, so the
+    runtime is probed rather than assumed, and the caller skips when it is genuinely absent.
+    """
+    found = shutil.which("node") or shutil.which("node.exe")
+    if found:
+        return Path(found)
+    base = Path(sys.executable).parent
+    for candidate in (
+        base / "node.exe",
+        base / "node",
+        base.parent / "node" / "bin" / "node.exe",
+        base.parent / "node" / "node.exe",
+    ):
+        if candidate.is_file():
+            return candidate
+    return None
+
 
 
 WORKBOOK_XML = """<?xml version="1.0" encoding="UTF-8"?>
@@ -56,7 +79,9 @@ class ExcelPackageInspectorTests(unittest.TestCase):
                 workbook.active.add_image(ExcelImage(io.BytesIO(data.getvalue())), cell)
             source, output, job = root / "source.xlsx", root / "output.xlsx", root / "job"
             workbook.save(source)
-            node = Path(sys.executable).parent.parent / "node" / "bin" / "node.exe"
+            node = _resolve_node()
+            if node is None:
+                self.skipTest("Node runtime is not resolvable from PATH or the managed layout")
             pipeline = ROOT / "scripts" / "excel_pipeline.mjs"
             def run(*args):
                 result = subprocess.run([str(node), str(pipeline), *map(str, args)], capture_output=True, text=True, encoding="utf-8")

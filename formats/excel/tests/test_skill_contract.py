@@ -171,13 +171,27 @@ class ExcelSkillContractTests(unittest.TestCase):
                 text = path.read_text(encoding="utf-8", errors="ignore")
                 if "TODO" in text or "[TODO" in text:
                     placeholders.append(str(relative))
-        tracked = subprocess.run(
+        result = subprocess.run(
             ["git", "ls-files", "-z", "formats/excel"],
             cwd=ROOT.parents[1],
-            check=True,
             capture_output=True,
             text=True,
-        ).stdout.split("\0")
+        )
+        if result.returncode == 0:
+            tracked = [name for name in result.stdout.split("\0") if name]
+        else:
+            # An installed skill directory is not a git worktree, so there is no tracked set.
+            # Enumerate the adapter tree instead, but keep git's semantics: .gitignore already
+            # declares __pycache__/, *.pyc and .pytest_cache/ as non-package content, and the
+            # suite itself regenerates them. Only a cache that would actually ship is a violation.
+            ignored = {"__pycache__", ".pytest_cache"}
+            tracked = [
+                path.relative_to(ROOT).as_posix()
+                for path in ROOT.rglob("*")
+                if path.is_file()
+                and not ignored.intersection(path.parts)
+                and path.suffix != ".pyc"
+            ]
         caches = sorted(
             path for path in tracked if "__pycache__" in Path(path).parts or path.endswith(".pyc")
         )

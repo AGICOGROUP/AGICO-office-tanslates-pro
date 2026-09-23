@@ -56,8 +56,10 @@ need a supported layout choice; never silently discard objects or substitute mon
 
 ## Images and delivery
 
-Read `references/image-text-localization.md` only when images exist. GPT image editing is the only
-method for translating image text; apply the shared accepted quality criteria. Review each unique image once;
+Read `references/image-text-localization.md` only when images exist. Two methods are accepted and
+selected per image by the shared rule: generative `image_edit`, and deterministic erase + refill
+(`../../scripts/inimage_erase_refill.py`) for technical line drawings whose linework must survive
+unchanged. Apply the shared accepted quality criteria. Review each unique image once;
 choose `reviewed`, `retain` or `localized`. Localization requires an absolute `replacement_path` to
 an edited PNG/JPEG that preserves aspect ratio without cropping and is not lower-resolution than the
 source, as defined by the shared rule. Start required image editing after reading

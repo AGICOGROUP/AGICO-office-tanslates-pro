@@ -26,6 +26,30 @@ def normalize(source_width: int, source_height: int, generated: Path, output: Pa
     return target
 
 
+def fit(source_width: int, source_height: int, generated: Path, output: Path) -> tuple[int, int]:
+    """Resample a generated image to the exact source pixel dimensions.
+
+    Picture hosts that fix their extent and crop outside the image bytes (a
+    PowerPoint picture shape, for example) render identically only when the
+    replacement carries the source image's exact pixel dimensions. Downscaling
+    by a fraction of a percent is preferred over stretching, because it keeps
+    the extent, crop and rotation mappings exact.
+    """
+    if source_width < 1 or source_height < 1:
+        raise ValueError("source dimensions must be positive")
+    with Image.open(generated) as image:
+        image.load()
+        width, height = image.size
+        if width < source_width or height < source_height:
+            raise ValueError("generated image dimensions must not be smaller than the source")
+        result = image if (width, height) == (source_width, source_height) else image.resize(
+            (source_width, source_height), Image.LANCZOS)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        result.save(output)
+    verify(source_width, source_height, output)
+    return source_width, source_height
+
+
 def verify(source_width: int, source_height: int, candidate: Path) -> tuple[int, int]:
     with Image.open(candidate) as image:
         width, height = image.size

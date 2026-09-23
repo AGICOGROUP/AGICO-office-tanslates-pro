@@ -5,19 +5,33 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { performance } from "node:perf_hooks";
+import { resolvePython } from "../../../scripts/runtime_paths.mjs";
 
 const scriptDir = fileURLToPath(new URL("../scripts/", import.meta.url));
 const revision = process.argv[2] || "3e433e27fe43cb6b3f6895bfb03e16d875b69db9";
 const directory = await fs.mkdtemp(path.join(os.tmpdir(), "excel-native-benchmark-"));
 const baselinePath = path.join(scriptDir, `.benchmark-baseline-${process.pid}.mjs`);
-const python = process.env.CODEX_PYTHON || path.resolve(path.dirname(process.execPath), "..", "..", "python", "python.exe");
+const python = resolvePython();
 const run = (cmd, args, options = {}) => {
   const result = spawnSync(cmd, args, { encoding: "utf8", windowsHide: true, maxBuffer: 16 * 1024 * 1024, ...options });
   if (result.status !== 0) throw new Error(result.stderr || result.stdout || result.error?.message);
   return result.stdout;
 };
+
+const repoRoot = path.resolve(scriptDir, "..", "..", "..");
+const worktree = spawnSync("git", ["rev-parse", "--is-inside-work-tree"], {
+  cwd: repoRoot, encoding: "utf8", windowsHide: true,
+});
+if (worktree.status !== 0) {
+  // An installed skill directory is not a git worktree, so no baseline revision exists to compare
+  // against. Skip instead of throwing: Node's runner collects every file under tests/, and a
+  // throughput benchmark is not a correctness test.
+  console.log("SKIP excel native benchmark: no git worktree provides the comparison baseline");
+  process.exit(0);
+}
+
 try {
-  await fs.writeFile(baselinePath, run("git", ["show", `${revision}:formats/excel/scripts/excel_pipeline.mjs`], { cwd: path.resolve(scriptDir, "../../..") }));
+  await fs.writeFile(baselinePath, run("git", ["show", `${revision}:formats/excel/scripts/excel_pipeline.mjs`], { cwd: repoRoot }));
   const source = path.join(directory, "source.xlsx");
   run(python, ["-c", `from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill

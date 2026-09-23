@@ -15,13 +15,22 @@ python scripts/ppt_pipeline.py deliver --job-dir <job> --output <output.pptx> --
 `prepare` pauses with exit code `3`. Complete native text and use only
 [GPT image editing](../../../references/image-translation.md) for image text, followed by
 verified image replacement. Old overlay decisions are not an allowed processing method.
-Do not bypass missing replacement support.
+Declared `localized` replacements are written by `scripts/ppt_image_replacements.py`.
 
 Embedded objects default to `preserved_untranslated`: retain their binary content and preview images,
 report warnings, and continue. Set `pending_native_handler` only for an explicit request to translate
 inside an embedded object; validation then blocks delivery until its status becomes `translated`.
 
-`apply` uses native OOXML for paragraph translations; image replacement requires a verified writer; PowerPoint COM is
+The one case where an object is removed instead of preserved is a legacy preview that paints
+source-language artwork over an already translated slide: `scripts/ppt_repairs.py strip-ole-preview`,
+then drop that object from `embedded_objects` and run `scripts/ppt_repairs.py amend-baseline`. The
+amendment exists because verification compares all non-slide parts against
+`inventory.working_source_path` byte-for-byte, tolerating only `ppt/slides/slide*.xml` (a slide's
+`_rels` part is not exempt) and declared `localized` media. `scripts/ppt_repairs.py fit-text` is the
+supported way to tighten paragraph leading when translated text lands on the slide's frame.
+
+`apply` uses native OOXML for paragraph translations and swaps each declared localized picture's
+media part in the same package write; PowerPoint COM is
 needed for legacy `.ppt` conversion and final rendering. The source and converted working copy are
 hashed during `inspect` and checked before `apply`; source integrity is rechecked during `verify`.
 Writes replace only the generated output after the ZIP closes successfully, preserving any prior

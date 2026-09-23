@@ -6,6 +6,7 @@ import { readFileSync } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { resolvePython, spawnFailure } from "../../../scripts/runtime_paths.mjs";
 
 // Both output modes preserve native OOXML without a workbook-model round trip.
 
@@ -488,8 +489,7 @@ async function loadState(jobDir) {
 
 
 function inspectOoxmlPackage(input, jobDir) {
-  const bundledPython = path.resolve(path.dirname(process.execPath), "..", "..", "python", "python.exe");
-  const python = process.env.CODEX_PYTHON || bundledPython;
+  const python = resolvePython();
   const script = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "inspect_excel_package.py");
   const extraction = path.join(jobDir, "images");
   const result = spawnSync(python, [script, input, "--extract-dir", extraction], {
@@ -497,7 +497,7 @@ function inspectOoxmlPackage(input, jobDir) {
     windowsHide: true,
   });
   if (result.status !== 0) {
-    throw new Error(`OOXML inspection failed: ${result.stderr || result.stdout}`);
+    throw new Error(spawnFailure("OOXML inspection failed", python, result));
   }
   const report = JSON.parse(result.stdout);
   const features = report.features ?? {};
@@ -510,8 +510,7 @@ function inspectOoxmlPackage(input, jobDir) {
 }
 
 function queryRelevantGlossary(manifestPath, outputPath) {
-  const bundledPython = path.resolve(path.dirname(process.execPath), "..", "..", "python", "python.exe");
-  const python = process.env.CODEX_PYTHON || bundledPython;
+  const python = resolvePython();
   const scriptDir = path.dirname(fileURLToPath(import.meta.url));
   const script = path.resolve(scriptDir, "query_repo_glossary.py");
   const repoRoot = path.resolve(scriptDir, "..", "..", "..");
@@ -519,19 +518,19 @@ function queryRelevantGlossary(manifestPath, outputPath) {
     script, "--repo-root", repoRoot, "--manifest", manifestPath, "--output", outputPath,
   ], { encoding: "utf8", windowsHide: true });
   if (result.status !== 0) {
-    throw new Error(`glossary query failed: ${result.stderr || result.stdout}`);
+    throw new Error(spawnFailure("glossary query failed", python, result));
   }
 }
 
 function runImageOperation(output, manifestPath, action) {
-  const python = process.env.CODEX_PYTHON || path.resolve(path.dirname(process.execPath), "..", "..", "python", "python.exe");
+  const python = resolvePython();
   const script = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "inspect_excel_package.py");
   const result = spawnSync(python, [script, output, `--${action}-images`, manifestPath], {encoding: "utf8", windowsHide: true});
-  if (result.status !== 0) throw new Error(`image ${action} failed: ${result.stderr || result.stdout}`);
+  if (result.status !== 0) throw new Error(spawnFailure(`image ${action} failed`, python, result));
 }
 
 function runNativeOperation(action, source, manifestPath, output) {
-  const python = process.env.CODEX_PYTHON || path.resolve(path.dirname(process.execPath), "..", "..", "python", "python.exe");
+  const python = resolvePython();
   const script = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "excel_native_ooxml.py");
   const args = [script, action, "--source", source];
   if (manifestPath) args.push("--manifest", manifestPath);

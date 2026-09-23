@@ -84,9 +84,13 @@ class NativeWorkbookTests(unittest.TestCase):
                 self.assertEqual("".join(cell.itertext()), expected)
                 self.assertIsNotNone(cell.find(f'.//{{{NS}}}b'))
                 self.assertIsNotNone(cell.find(f'.//{{{NS}}}i'))
-            self.assertGreater(float(sheet.find(f'.//{{{NS}}}row[@r="1"]').get("ht")), 15)
+            # Geometry fidelity. The fixture's single cellXf never sets wrapText, so Excel renders
+            # these long labels by spilling into empty neighbouring cells. The translation must keep
+            # that: no injected wrap, no grown row height, and the author's own row 3 height intact.
+            self.assertIsNone(sheet.find(f'.//{{{NS}}}row[@r="1"]').get("ht"))
             self.assertIsNone(sheet.find(f'.//{{{NS}}}row[@r="2"]').get("ht"))
             self.assertEqual(sheet.find(f'.//{{{NS}}}row[@r="3"]').get("ht"), "30")
+            self.assertNotIn("wrapText", output.read("xl/styles.xml").decode("utf-8"))
         self.assertTrue(self.run_native("verify")["passed"])
 
     def test_inspection_discloses_complex_parts_and_operational_text(self):
@@ -152,6 +156,23 @@ class NativeWorkbookTests(unittest.TestCase):
         self.formula_fixture('A2', shared=True)
         report = self.run_native("inspect")
         self.assertEqual({c["address"] for c in report["occurrences"] if c["formula_dependency"]}, {"A2", "A3"})
+
+    def test_external_workbook_reference_is_preserved_not_rejected(self):
+        for formula in ["'[1]Detailed MB'!$F$12", "[1]Detailed MB!$F$12", "[1]!NamedRange",
+                        "SUM('[1]Detailed MB'!$F$12,C1)"]:
+            with self.subTest(formula=formula):
+                self.formula_fixture(formula)
+                report = self.run_native("inspect")
+                self.assertTrue(report["external_data"])
+                self.assertTrue(any("External data preserved without refresh" in w for w in report["warnings"]))
+
+    def test_external_reference_retains_nothing_but_keeps_local_inputs_protected(self):
+        self.formula_fixture("SUM('[1]Detailed MB'!$F$12)")
+        report = self.run_native("inspect")
+        self.assertEqual({c["address"] for c in report["occurrences"] if c["formula_dependency"]}, set())
+        self.formula_fixture("SUM('[1]Detailed MB'!$F$12,C1)")
+        report = self.run_native("inspect")
+        self.assertEqual({c["address"] for c in report["occurrences"] if c["formula_dependency"]}, {"C1"})
 
     def test_unresolved_references_fail_explicitly_without_replacing_output(self):
         for formula in ['SUM(INDIRECT(A1))', 'SUM(OFFSET(A1,B1,0))', 'SUM(Table1[Label])',
@@ -239,7 +260,10 @@ class NativeWorkbookTests(unittest.TestCase):
     def test_verifier_detects_rich_properties_and_style_association_damage(self):
         self.run_native("apply")
         original = self.output.read_bytes()
-        for old, new in [(b"<b/>", b"<strike/>"), (b's="1"', b's="0"')]:
+        # The writer no longer clones wrap styles, so the old s="1" vector became a silent no-op.
+        # An out-of-range style index exercises the same missing-style detection.
+        for old, new in [(b"<b/>", b"<strike/>"),
+                         (b'<c r="A1" t="inlineStr"', b'<c r="A1" s="9" t="inlineStr"')]:
             self.output.write_bytes(original)
             with ZipFile(self.output) as z:
                 entries = [(info, z.read(info.filename)) for info in z.infolist()]
@@ -247,6 +271,21 @@ class NativeWorkbookTests(unittest.TestCase):
                 for info, data in entries:
                     z.writestr(info, data.replace(old, new, 1) if info.filename == "xl/worksheets/sheet1.xml" else data)
             self.run_native("verify", ok=False)
+
+    def test_verifier_rejects_injected_wrap_and_row_growth_on_unwrapped_cells(self):
+        self.run_native("apply")
+        with ZipFile(self.output) as z:
+            entries = [(info, z.read(info.filename)) for info in z.infolist()]
+        with ZipFile(self.output, "w") as z:
+            for info, data in entries:
+                if info.filename == "xl/styles.xml":
+                    data = data.replace(
+                        b'<xf fontId="0" fillId="0" borderId="0"/>',
+                        b'<xf fontId="0" fillId="0" borderId="0"><alignment wrapText="1"/></xf>', 1)
+                elif info.filename == "xl/worksheets/sheet1.xml":
+                    data = data.replace(b'<row r="1">', b'<row r="1" ht="48" customHeight="1">', 1)
+                z.writestr(info, data)
+        self.run_native("verify", ok=False)
 
     def test_real_workbook_reopens_with_chart_comment_image_and_formula_intact(self):
         from openpyxl import Workbook, load_workbook

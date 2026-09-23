@@ -14,6 +14,7 @@ import time
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
+from runtime_paths import bundled_root, resolve_executable as resolve_shared  # noqa: E402
 from translation_core import atomic_json
 
 
@@ -167,28 +168,19 @@ def finalize_stage_plan(completed_stages: list[str]) -> list[str]:
 
 
 def bundled_dependencies() -> Path:
-    """Prefer the running bundled Python's siblings, then the user's runtime."""
-    adjacent = Path(sys.executable).resolve().parent.parent
-    if (adjacent / 'node' / 'bin' / 'node.exe').is_file():
-        return adjacent
-    return Path.home() / '.cache' / 'codex-runtimes' / 'codex-primary-runtime' / 'dependencies'
+    """Root holding the bundled sibling runtimes, chosen by the shared layout probe."""
+    return bundled_root()
 
 
 def resolve_executable(explicit: str | None, env_name: str, fallback: str) -> str:
-    candidate = explicit or os.environ.get(env_name)
-    if not candidate:
-        bundle = bundled_dependencies()
-        bundled = {
-            'CODEX_NODE': bundle / 'node' / 'bin' / 'node.exe',
-            'CODEX_POWERSHELL': bundle / 'native' / 'powershell' / 'pwsh.exe',
-        }.get(env_name)
-        candidate = str(bundled) if bundled and bundled.is_file() else None
-        if not candidate and env_name == 'CODEX_POWERSHELL':
-            candidate = shutil.which('pwsh')
-        candidate = candidate or shutil.which(fallback)
-    if not candidate or not Path(candidate).exists():
-        raise RuntimeError(f"executable not found; pass the corresponding option or set {env_name}")
-    return str(Path(candidate).resolve())
+    """Delegate to the shared skill-level resolver.
+
+    The local copy this replaces walked two levels above the running interpreter and then appended
+    a ``bin`` segment, a layout the managed runtime does not use, so the bundled candidate never
+    existed and resolution silently fell through to PATH, failing only when PATH happened to lack
+    the tool. Layout arithmetic now lives in one audited place.
+    """
+    return resolve_shared(explicit, env_name, fallback)
 
 
 def run_process(command: list[str], *, allowed: set[int] = {0}, env: dict[str, str] | None = None) -> str:

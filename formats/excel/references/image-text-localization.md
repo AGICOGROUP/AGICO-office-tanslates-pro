@@ -1,8 +1,10 @@
 # Excel image-text localization
 
 Follow [the shared in-image translation rule](../../../references/image-translation.md).
-GPT image editing is the only method to replace text or add bilingual text at the original locations,
-according to the user's requested mode, with high-fidelity verification of all non-text details.
+Two methods are accepted and selected per image by that rule: generative `image_edit` for renders,
+photos and sketches, and deterministic erase + refill (`scripts/inimage_erase_refill.py`) for technical
+line drawings whose linework must survive unchanged. Replace text or add bilingual text at the original
+locations, according to the user's requested mode, with high-fidelity verification of all non-text details.
 
 Review each unique image byte sequence once, grouped by SHA-256, within the current job. Reuse its
 decision and final replacement for every worksheet occurrence. A fresh test starts a new job and
@@ -12,6 +14,11 @@ does not reuse translations or generated images from earlier jobs.
 - If no clear translatable text exists, record `retain` and preserve the image bytes at every
   occurrence. Optional notes such as `no-source-text`, `logo-or-brand`, or `photograph` help explain
   the decision. Readable untranslated labels must never be retained for convenience.
+- An image carrying only a logo, wordmark or brand mark is retained by rule: record
+  `retain` / `logo-or-brand`, keep its bytes unchanged, and never call the image editor on it.
+  Regenerating brand artwork adds no translated label while risking changed lettering or icon form.
+  This is a correct retain, not a coverage gap, and must not be reported as an untranslated label.
+  A logo mixed with real document labels is still translatable — localize those labels only.
 - Use `localized` only after the unique PNG/JPEG has been edited and checked at native resolution.
   Keep the supplied image `id` and `sha256`, and set `replacement_path` to the absolute edited-image
   path in the worklist; the runner records the replacement SHA-256. An omitted redundant source
@@ -47,9 +54,11 @@ backend request was cancelled; do not repeatedly restart it.
 
 Inspect the returned file before requesting a correction. For a real defect, describe its exact
 region and exact replacement text, retaining the usable image. Normally use one targeted correction;
-if it does not improve the defect, refine the affected region and exact wording in the GPT
-edit request rather than switching methods. Extra calls require a specific unresolved content
-or readability defect, not font taste, white margins or a desire for another version. A minor,
+if it does not improve the defect, refine the affected region and exact wording in the edit
+request. Do not switch method merely because a cosmetic difference is unpleasant; switching is
+correct only when the shared rule's selection test was misapplied to this image. Extra calls require
+a specific unresolved content or readability defect, not font taste, white margins or a desire for
+another version. A minor,
 unambiguous spelling imperfection can be disclosed with usable output; wrong units, missing labels
 or ambiguous technical meaning still require repair.
 
