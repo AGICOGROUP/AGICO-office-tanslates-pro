@@ -165,12 +165,17 @@ class TranslationStyles:
 def build(package, manifest):
     check_source(package)
     translations = decisions(package, manifest)
+    from excel_native_ooxml import sheet_renames, renamed_workbook
+    renames = sheet_renames(package, translations)
+    translations = {key: value for key, value in translations.items() if key[1] != '@sheet'}
     retained = {u['id'] for u in manifest['translation_units'] if u['status'] == 'retain'}
     for item in manifest['occurrences']:
         if item['translation_unit_id'] in retained:
             translations.pop((item['sheet'],item['address']), None)
     styles = TranslationStyles(package.styles)
     patches, expanded, changed_sheets = {}, 0, []
+    if any(old != new for old, new in renames.items()):
+        patches['xl/workbook.xml'] = renamed_workbook(package, renames)
     masters = {}
     for (sheet, cell_address), cell in package.cells.items():
         formula = cell.find(Q('f'))

@@ -76,6 +76,7 @@ class Package:
         targets = {r.get("Id"): posixpath.normpath(posixpath.join("xl", r.get("Target", ""))).lstrip("/")
                    for r in rels if r.get("TargetMode") != "External"}
         self.shared = list(xml(self.data["xl/sharedStrings.xml"])) if "xl/sharedStrings.xml" in self.data else []
+        self.workbook = workbook
         self.styles = xml(self.data["xl/styles.xml"]) if "xl/styles.xml" in self.data else None
         self.sheets = []
         self.cells = {}
@@ -274,6 +275,10 @@ def inspect(source):
     occurrences = []
     sheets = []
     for sheet in package.sheets:
+        name = sheet["name"]
+        occurrences.append({"id": f"sheet:{name}", "kind": "sheet_name", "sheet": name,
+                            "address": "@sheet", "source": name, "context_key": "sheet:name",
+                            "formula_dependency": False})
         prior = {}
         cells = [(key, cell) for key, cell in package.cells.items() if key[0] == sheet["name"]]
         cells.sort(key=lambda item: coordinates(item[0][1])[::-1])
@@ -308,6 +313,18 @@ def decisions(package, manifest):
     expected = {}
     operational = operational_cells(package)
     for occurrence in manifest.get("occurrences", []):
+        if occurrence.get("kind", "cell") == "sheet_name":
+            name = occurrence["sheet"]
+            if name not in {sheet["name"] for sheet in package.sheets} or occurrence.get("address") != "@sheet" or (name, "@sheet") in expected:
+                raise ValueError(f"unknown source sheet: {name}")
+            unit = units[occurrence["translation_unit_id"]]
+            target = unit.get("translation")
+            if occurrence.get("source") != name or unit.get("status") not in {"translated", "retain"} or not isinstance(target, str) or not target.strip():
+                raise ValueError(f"pending sheet translation: {name}")
+            if unit.get("status") == "retain" and target != name:
+                raise ValueError(f"retained sheet name changed: {name}")
+            expected[(name, "@sheet")] = target
+            continue
         if occurrence.get("kind", "cell") != "cell":
             raise ValueError("unsupported occurrence kind")
         key = (occurrence["sheet"], occurrence["address"])
@@ -336,6 +353,29 @@ def decisions(package, manifest):
     if missing:
         raise ValueError(f"manifest coverage missing cells: {missing[:10]}")
     return expected
+
+
+def sheet_renames(package, expected):
+    names = {sheet["name"] for sheet in package.sheets}
+    result = {old: expected.get((old, "@sheet"), old) for old in names}
+    for old, new in result.items():
+        if (not new or len(new) > 31 or any(c in new for c in "[]:*?/\\")
+                or new.startswith("'") or new.endswith("'")):
+            raise ValueError(f"invalid Excel sheet name: {old} -> {new}")
+    if len({new.casefold() for new in result.values()}) != len(result):
+        raise ValueError("duplicate translated sheet names")
+    for old, new in result.items():
+        if old != new and any(re.search(r"(?i)(?:'" + re.escape(old.replace("'", "''")) + r"'|(?<![\w.])" + re.escape(old) + r")!", formula)
+                              for _, formula in package.formulas):
+            raise ValueError(f"sheet rename affects formula references: {old}; preserve this tab name until reference rewriting is supported")
+    return result
+
+
+def renamed_workbook(package, renames):
+    root = deepcopy(package.workbook)
+    for sheet in root.findall(f"{Q('sheets')}/{Q('sheet')}"):
+        sheet.set("name", renames.get(sheet.get("name"), sheet.get("name")))
+    return serialize(root)
 
 
 def replace_text(package, cell, target):
@@ -468,13 +508,18 @@ def expand_layout(package, changes):
 def verify(source, output, manifest):
     before, after = Package(source), Package(output)
     expected = decisions(before, manifest)
-    changed = {key for key, target in expected.items() if before.text(before.cells[key]) != target}
+    renames = sheet_renames(before, expected)
+    changed = {key for key, target in expected.items() if key in before.cells and before.text(before.cells[key]) != target}
     errors = []
     if before.data.keys() != after.data.keys():
         errors.append("package-parts-change")
-    if set(before.cells) != set(after.cells):
+    if {(renames.get(sheet, sheet), address) for sheet, address in before.cells} != set(after.cells):
         errors.append("cell-structure-change")
     allowed_parts = {s["part"] for s in before.sheets if any(key[0] == s["name"] for key in changed)}
+    if any(old != new for old, new in renames.items()):
+        allowed_parts.add("xl/workbook.xml")
+        if after.data.get("xl/workbook.xml") != renamed_workbook(before, renames):
+            errors.append("sheet-name-change")
     if changed:
         allowed_parts.add("xl/styles.xml")
     localized = {item["sha256"]: item.get("replacement_sha256") for item in manifest.get("images", []) if item.get("status") == "localized"}
@@ -489,7 +534,7 @@ def verify(source, output, manifest):
         elif actual != data:
             errors.append(f"untouched-part-change:{part}")
     for key, cell in before.cells.items():
-        actual = after.cells.get(key)
+        actual = after.cells.get((renames.get(key[0], key[0]), key[1]))
         if actual is None:
             errors.append(f"missing-cell:{key}")
             continue
@@ -568,7 +613,7 @@ def verify(source, output, manifest):
                     if alignment is not None and alignment.get("wrapText") in {"1", "true"}:
                         growable_rows.add((sheet["name"], int(row.get("r"))))
     for sheet in before.sheets:
-        other = out_sheets.get(sheet["name"])
+        other = out_sheets.get(renames.get(sheet["name"], sheet["name"]))
         if other is None:
             errors.append(f"missing-sheet:{sheet['name']}")
             continue
@@ -634,12 +679,15 @@ def apply(source, output, manifest):
         raise ValueError("output must not overwrite source")
     package = Package(source)
     expected = decisions(package, manifest)
-    changes = {key: target for key, target in expected.items() if package.text(package.cells[key]) != target}
+    renames = sheet_renames(package, expected)
+    changes = {key: target for key, target in expected.items() if key in package.cells and package.text(package.cells[key]) != target}
     for key, target in changes.items():
         replace_text(package, package.cells[key], target)
     expanded, styles_changed = expand_layout(package, changes)
     changed_sheets = {key[0] for key in changes}
     patches = {s["part"]: serialize(s["root"]) for s in package.sheets if s["name"] in changed_sheets}
+    if any(old != new for old, new in renames.items()):
+        patches["xl/workbook.xml"] = renamed_workbook(package, renames)
     if styles_changed:
         patches["xl/styles.xml"] = serialize(package.styles)
     output.parent.mkdir(parents=True, exist_ok=True)

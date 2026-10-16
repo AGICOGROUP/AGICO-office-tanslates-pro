@@ -69,6 +69,37 @@ class NativeWorkbookTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         return result
 
+    def test_translates_sheet_tabs_including_empty_sheet(self):
+        with ZipFile(self.source) as archive:
+            entries = [(info, archive.read(info.filename)) for info in archive.infolist()]
+        with ZipFile(self.source, "w") as archive:
+            for info, data in entries:
+                if info.filename == "xl/workbook.xml":
+                    data = data.replace(b'name="Plant"', b'name="\xe8\xae\xbe\xe5\xa4\x87\xe8\xa1\xa8"')
+                    data = data.replace(b'</sheets>', '<sheet name="空白页" sheetId="2" r:id="rId2"/></sheets>'.encode())
+                elif info.filename == "xl/_rels/workbook.xml.rels":
+                    data = data.replace(b'</Relationships>', b'<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/></Relationships>')
+                archive.writestr(info, data)
+            archive.writestr("xl/worksheets/sheet2.xml", f'<worksheet xmlns="{NS}"><sheetData/></worksheet>')
+        for occurrence in self.data["occurrences"]:
+            occurrence["sheet"] = "设备表"
+        self.data["occurrences"].extend([
+            {"id": "sheet:设备表", "kind": "sheet_name", "sheet": "设备表", "address": "@sheet", "source": "设备表", "translation_unit_id": "tab1"},
+            {"id": "sheet:空白页", "kind": "sheet_name", "sheet": "空白页", "address": "@sheet", "source": "空白页", "translation_unit_id": "tab2"},
+        ])
+        self.data["translation_units"].extend([
+            {"id": "tab1", "source": "设备表", "translation": "Equipment", "status": "translated"},
+            {"id": "tab2", "source": "空白页", "translation": "Blank", "status": "translated"},
+        ])
+        self.manifest.write_text(json.dumps(self.data, ensure_ascii=False), encoding="utf-8")
+        inspection = self.run_native("inspect")
+        self.assertEqual([item["source"] for item in inspection["occurrences"] if item["kind"] == "sheet_name"], ["设备表", "空白页"])
+        self.run_native("apply")
+        self.assertTrue(self.run_native("verify")["passed"])
+        with ZipFile(self.output) as archive:
+            root = ET.fromstring(archive.read("xl/workbook.xml"))
+            self.assertEqual([node.get("name") for node in root.findall(f"{{{NS}}}sheets/{{{NS}}}sheet")], ["Equipment", "Blank"])
+
     def test_rich_shared_strings_split_and_all_other_parts_survive(self):
         report = self.run_native("apply")
         self.assertEqual(report["changed_sheets"], ["Plant"])
@@ -215,7 +246,7 @@ class NativeWorkbookTests(unittest.TestCase):
                     data = data.replace(b"<sheetData>", comment + b"<sheetData>")
                 archive.writestr(entry, data)
         inspection = self.run_native("inspect")
-        self.assertEqual(len(inspection["occurrences"]), 4)
+        self.assertEqual(len(inspection["occurrences"]), 5)
         self.run_native("apply")
         self.assertTrue(self.run_native("verify")["passed"])
         with ZipFile(self.output) as archive:

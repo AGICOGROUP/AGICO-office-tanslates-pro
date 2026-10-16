@@ -38,6 +38,11 @@ Use matched glossary terms with cell context and aliases, including reverse Engl
 Chinese targets. Preserve engineering meaning, numbers, units, models, identifiers and line breaks.
 Safe labels are prefilled; ambiguous terminology stays pending. Context-safe and parameter-label
 reuse reduce repeated translation. Do not translate individual formatting runs separately.
+Translate every worksheet tab name through the same worklist, including empty and hidden sheets.
+Use the requested target language and output mode for labels; keep names unique, at most 31
+characters, and free of Excel's forbidden characters. Verify the final tabs in Excel. If a tab
+cannot be renamed without damaging a formula or other reference, retain it with an explicit reason
+and report that exception; never silently omit tab labels.
 
 Monolingual output patches original OOXML cells and expands only affected rows. Shared-string edits
 remain local to each cell, including rich text. Original formulas, typed values, styles, merges,
