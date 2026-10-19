@@ -31,3 +31,7 @@ preservation and recovery behavior, not semantic translation quality.
 
 Architecture: [design](docs/superpowers/specs/2026-09-11-office-translation-refactor-design.md),
 [plan](docs/superpowers/plans/2026-09-11-office-translation-refactor.md).
+
+## Developer
+
+[Dennis-pan-x](https://github.com/Dennis-pan-x)
