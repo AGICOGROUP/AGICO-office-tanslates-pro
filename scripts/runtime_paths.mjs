@@ -19,6 +19,7 @@
  */
 
 import { existsSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
 const EXECUTABLES = {
@@ -34,7 +35,9 @@ const LAYOUTS = {
 
 function searchRoots() {
   const dir = path.dirname(process.execPath);
-  return [dir, "..", "../..", "../../.."].map((rel) => path.resolve(dir, rel));
+  const roots = [dir, "..", "../..", "../../.."].map((rel) => path.resolve(dir, rel));
+  roots.push(path.join(os.homedir(), ".cache", "codex-runtimes", "codex-primary-runtime", "dependencies"));
+  return [...new Set(roots)];
 }
 
 function candidates(runtime) {

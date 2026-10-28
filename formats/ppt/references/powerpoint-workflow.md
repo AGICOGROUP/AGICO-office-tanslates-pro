@@ -51,8 +51,8 @@ and all non-slide package parts against the original working source.
 
 ## Images
 
-Use only [GPT image editing](../../../references/image-translation.md) for readable image text.
-Inspect each unique image, translate its labels, edit, review and insert the generated image
+Follow [shared image handling](../../../references/image-translation.md), using the active tool's
+actual interface and session permissions. Inspect each unique image, translate its labels, edit, review and insert the accepted image
 at its original location. Do not use native text-box overlays or external legends. Implement
 and verify image-replacement support before integrated delivery.
 
@@ -98,8 +98,9 @@ python scripts/ppt_repairs.py fit-text --output <deck> --slide 5 --shape-id 7174
 
 - `<a:lnSpc><a:spcPct val="…"/></a:lnSpc>` must be the first child of `<a:pPr>`, ahead of
   `spcBef`/`spcAft` and the bullet elements.
-- Treat a rendered text bottom below roughly 6.2M EMU (on a 6,858,000 EMU tall slide) as a collision
-  with the frame band and fix it before delivery.
+- Use the actual slide design and visible frame boundary to diagnose collision. The helper's
+  default 6.2M EMU target is an estimate, not a universal defect threshold; pass the real target
+  when it differs. Readable text near the bottom without clipping/overlap needs no repair.
 - Do not reach for smaller fonts, moved shapes or edited frames first, and leave a paragraph alone
   when its box is unchanged and its text still ends inside the frame.
 

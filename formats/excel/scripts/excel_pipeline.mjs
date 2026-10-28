@@ -102,7 +102,7 @@ export function applySafeAutofill(units, targetLanguage) {
       retained += 1;
       continue;
     }
-    if (isSafeIdentifier(unit.source)) {
+    if (unit.context_key !== "sheet:name" && isSafeIdentifier(unit.source)) {
       unit.translation = unit.source;
       unit.status = "retain";
       unit.reason = "identifier/model code retained";
@@ -597,7 +597,10 @@ export async function inspectWorkbook(options) {
   let externalData = false;
   const native = runNativeOperation(config.outputMode === "bilingual" ? "inspect-bilingual" : "inspect", input);
   sheets.push(...native.sheets);
-  occurrences.push(...native.occurrences.map(item => ({ ...item, protected_tokens: protectedTokens(item.source) })));
+  occurrences.push(...native.occurrences.map(item => ({
+    ...item,
+    protected_tokens: item.kind === "sheet_name" ? [] : protectedTokens(item.source),
+  })));
   nativeWarnings = native.warnings;
   externalData = native.external_data;
   const inventory = {

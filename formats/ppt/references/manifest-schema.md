@@ -7,7 +7,7 @@ Every native occurrence retains its source text, translation-unit ID, slide, sha
 role, context, and protected tokens. Every translation unit retains source text, translation,
 context, protected tokens, and occurrence count.
 
-Image text follows only [GPT image editing](../../../references/image-translation.md).
+Image text follows [shared image handling](../../../references/image-translation.md).
 Historical overlay records are not accepted as a method for new translations. Each image group uses
 one `decision`: `skip_target` (the image already carries the target language), `skip_unclear`
 (genuinely unreadable, with a specific reason), or `localized` (the image was edited and is

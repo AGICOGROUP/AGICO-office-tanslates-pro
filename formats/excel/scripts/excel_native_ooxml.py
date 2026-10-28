@@ -102,11 +102,17 @@ class Package:
                     self.formulas.append((name, formula.text or ""))
         # Defined names, validations and conditional formatting can also consume strings.
         self.formulas.extend((None, node.text or "") for node in workbook.findall(f"{Q('definedNames')}/{Q('definedName')}")
-                             if node.get("name") not in {"_xlnm.Print_Area", "_xlnm.Print_Titles"})
+                             if node.get("name") not in {"_xlnm.Print_Area", "_xlnm.Print_Titles", "_xlnm._FilterDatabase"})
         for sheet in self.sheets:
             for node in sheet["root"].iter():
                 if isinstance(node.tag, str) and ET.QName(node).localname in {"formula", "formula1", "formula2"}:
                     self.formulas.append((sheet["name"], node.text or ""))
+        self.validation_lists = {}
+        for sheet in self.sheets:
+            for index, validation in enumerate(sheet["root"].findall(f"{Q('dataValidations')}/{Q('dataValidation')}")):
+                node = validation.find(Q("formula1"))
+                if validation.get("type") == "list" and node is not None and re.fullmatch(r'"(?:[^"]|"")*"', node.text or ""):
+                    self.validation_lists[(sheet["name"], f"@validation:{index}")] = node
 
     def rich(self, cell):
         if cell.get("t") == "s":
@@ -303,6 +309,10 @@ def inspect(source):
         warnings.append(f"Formula input text retained without translation: {len(operational)} cells; examples: {examples}")
     if external_data:
         warnings.append("External data preserved without refresh; Excel recalculation must be skipped")
+    for (name, address), node in package.validation_lists.items():
+        occurrences.append({"id": f"{name}!{address}", "kind": "validation_list", "sheet": name,
+                            "address": address, "source": node.text[1:-1].replace('""', '"'),
+                            "context_key": "validation:list", "formula_dependency": False})
     return {"sheets": sheets, "occurrences": occurrences, "warnings": warnings, "external_data": external_data}
 
 
@@ -313,6 +323,21 @@ def decisions(package, manifest):
     expected = {}
     operational = operational_cells(package)
     for occurrence in manifest.get("occurrences", []):
+        if occurrence.get("kind") == "validation_list":
+            key = (occurrence["sheet"], occurrence["address"])
+            node = package.validation_lists.get(key)
+            unit = units[occurrence["translation_unit_id"]]
+            target = unit.get("translation")
+            source = node.text[1:-1].replace('""', '"') if node is not None else None
+            if (key in expected or source != occurrence["source"] or unit.get("status") not in {"translated", "retain"}
+                    or not isinstance(target, str) or not target.strip()
+                    or len(target.encode("utf-16-le")) // 2 > 255
+                    or source.count(",") != target.count(",")):
+                raise ValueError(f"invalid dropdown translation: {key}")
+            if unit.get("status") == "retain" and target != source:
+                raise ValueError(f"retained dropdown changed: {key}")
+            expected[key] = target
+            continue
         if occurrence.get("kind", "cell") == "sheet_name":
             name = occurrence["sheet"]
             if name not in {sheet["name"] for sheet in package.sheets} or occurrence.get("address") != "@sheet" or (name, "@sheet") in expected:
@@ -340,11 +365,20 @@ def decisions(package, manifest):
             raise ValueError(f"pending translation: {key}")
         template = occurrence.get("translation_template")
         if template:
-            target += template["separator"] + template["suffix"]
+            if unit.get('status') == 'retain':
+                if target != occurrence['source']:
+                    raise ValueError(f"retained text changed: {key}")
+                target = source
+            else:
+                target += template["separator"] + template["suffix"]
         if key in operational and target != source:
             raise ValueError(f"formula-dependent text must be retained: {key}")
         if unit.get("status") == "retain" and target != source:
             raise ValueError(f"retained text changed: {key}")
+        # Parameter values are protected, but ASCII metric exponents are typography,
+        # not different quantities. Normalize only recognized quantity/unit suffixes.
+        if key not in operational:
+            target = metric_exponents(target)
         tokens = occurrence.get("original_protected_tokens", unit.get("protected_tokens", []))
         if technical_mismatch(source, target, tokens):
             raise ValueError(f"protected-token-change: {key}")
@@ -353,6 +387,58 @@ def decisions(package, manifest):
     if missing:
         raise ValueError(f"manifest coverage missing cells: {missing[:10]}")
     return expected
+
+
+def apply_validation_lists(package, expected):
+    changed = set()
+    for key, node in package.validation_lists.items():
+        if key not in expected:
+            raise ValueError(f"manifest coverage missing dropdown: {key}")
+        target = '"' + expected[key].replace('"', '""') + '"'
+        if node.text != target:
+            node.text = target
+            changed.add(key)
+    return changed
+
+
+def metric_exponents(text):
+    return re.sub(r'(?:(?<=\d)|(?<=/))(N?m|cm|mm)([23])\b',
+                  lambda match: match[1] + {'2': '²', '3': '³'}[match[2]], text)
+
+
+def rename_formula_references(text, renames):
+    """Rename local worksheet qualifiers, not formula strings or external books."""
+    names = {old.casefold(): new for old, new in renames.items() if old != new}
+    if not text or not names:
+        return text
+    def replace(match):
+        name = match[1].replace("''", "'") if match[1] is not None else match[2]
+        if '[' in name or ']' in name:
+            return match[0]
+        target = names.get(name.casefold())
+        return "'" + target.replace("'", "''") + "'!" if target is not None else match[0]
+    chunks = re.split(r'("(?:[^"]|"")*")', text)
+    for index in range(0, len(chunks), 2):
+        chunks[index] = re.sub(r"'((?:[^']|'')*)'!|(?<![\w.\]':])([\w.]+)!", replace, chunks[index])
+    return ''.join(chunks)
+
+
+def rewrite_reference_nodes(root, renames):
+    changed = False
+    for node in root.iter():
+        if node.tag in {Q('f'), Q('formula1'), Q('formula2')} and node.text:
+            text = rename_formula_references(node.text, renames)
+            if text != node.text:
+                node.text = text
+                changed = True
+    return changed
+
+
+def reference_adjusted(node, renames):
+    # Preserve inherited namespace declarations used by canonical comparisons.
+    result = xml(ET.tostring(node, with_tail=False))
+    result.tail = node.tail
+    return result if rewrite_reference_nodes(result, renames) else node
 
 
 def sheet_renames(package, expected):
@@ -365,9 +451,14 @@ def sheet_renames(package, expected):
     if len({new.casefold() for new in result.values()}) != len(result):
         raise ValueError("duplicate translated sheet names")
     for old, new in result.items():
-        if old != new and any(re.search(r"(?i)(?:'" + re.escape(old.replace("'", "''")) + r"'|(?<![\w.])" + re.escape(old) + r")!", formula)
-                              for _, formula in package.formulas):
-            raise ValueError(f"sheet rename affects formula references: {old}; preserve this tab name until reference rewriting is supported")
+        if old == new:
+            continue
+        for _, formula in package.formulas:
+            # String-built references require a dedicated decision, not blind substitution.
+            if re.search(r'\b(?:INDIRECT|HYPERLINK)\s*\(', formula, re.I) and old.casefold() in formula.casefold():
+                raise ValueError(f"sheet rename affects string-built reference: {old}")
+            if re.search(r"(?:'[^']*:[^']*'|[\w.]+:[\w.]+)!", formula) and old.casefold() in formula.casefold():
+                raise ValueError(f"sheet rename affects 3D reference: {old}")
     return result
 
 
@@ -375,6 +466,8 @@ def renamed_workbook(package, renames):
     root = deepcopy(package.workbook)
     for sheet in root.findall(f"{Q('sheets')}/{Q('sheet')}"):
         sheet.set("name", renames.get(sheet.get("name"), sheet.get("name")))
+    for node in root.findall(f"{Q('definedNames')}/{Q('definedName')}"):
+        node.text = rename_formula_references(node.text or '', renames)
     return serialize(root)
 
 
@@ -394,14 +487,44 @@ def replace_text(package, cell, target):
             if node is None:
                 node = ET.SubElement(run, Q("t"))
             texts.append(node)
-        total = sum(len(node.text or "") for node in texts) or len(texts)
-        position = cumulative = 0
-        for index, node in enumerate(texts):
-            cumulative += len(node.text or "") or (1 if total == len(texts) else 0)
-            end = len(target) if index == len(texts) - 1 else round(len(target) * cumulative / total)
-            node.text = target[position:end]
-            node.set(XML_SPACE, "preserve")
-            position = end
+        source_texts = [node.text or '' for node in texts]
+        anchors, prefix, target_offset = [], '', 0
+        for index, (run, text) in enumerate(zip(runs, source_texts)):
+            align = run.find(f"{Q('rPr')}/{Q('vertAlign')}")
+            quantity = re.search(r'(\d+(?:[.,]\d+)?)\s*(N?m|[kcm]m)$', prefix)
+            if align is not None and align.get('val') == 'superscript' and text in {'2', '3', '²', '³'} and quantity:
+                exponent = {'2': '[2²]', '²': '[2²]', '3': '[3³]', '³': '[3³]'}[text]
+                pattern = re.escape(quantity[1]) + r'\s*' + re.escape(quantity[2]) + '(' + exponent + r')(?![A-Za-z0-9²³])'
+                match = re.search(pattern, target[target_offset:])
+                if match:
+                    start, end = target_offset + match.start(1), target_offset + match.end(1)
+                    anchors.append((index, start, end))
+                    target_offset = end
+            prefix += text
+
+        def distribute(first, last, start, stop):
+            group = texts[first:last]
+            if not group:
+                return
+            weights = [len(text) or 1 for text in source_texts[first:last]]
+            total, cumulative, position = sum(weights), 0, start
+            length = stop - start
+            for offset, (node, weight) in enumerate(zip(group, weights)):
+                cumulative += weight
+                end = stop if offset == len(group) - 1 else start + round(length * cumulative / total)
+                if length >= len(group):
+                    end = min(max(end, position + 1), stop - (len(group) - offset - 1))
+                node.text = target[position:end]
+                node.set(XML_SPACE, 'preserve')
+                position = end
+
+        previous_run = previous_end = 0
+        for index, start, end in anchors:
+            distribute(previous_run, index, previous_end, start)
+            texts[index].text = target[start:end]
+            texts[index].set(XML_SPACE, 'preserve')
+            previous_run, previous_end = index + 1, end
+        distribute(previous_run, len(texts), previous_end, len(target))
     else:
         node = inline.find(Q("t"))
         if node is None:
@@ -510,12 +633,16 @@ def verify(source, output, manifest):
     expected = decisions(before, manifest)
     renames = sheet_renames(before, expected)
     changed = {key for key, target in expected.items() if key in before.cells and before.text(before.cells[key]) != target}
+    validation_changes = {key for key, node in before.validation_lists.items()
+                          if expected.get(key) != node.text[1:-1].replace('""', '"')}
     errors = []
     if before.data.keys() != after.data.keys():
         errors.append("package-parts-change")
     if {(renames.get(sheet, sheet), address) for sheet, address in before.cells} != set(after.cells):
         errors.append("cell-structure-change")
-    allowed_parts = {s["part"] for s in before.sheets if any(key[0] == s["name"] for key in changed)}
+    allowed_parts = {s["part"] for s in before.sheets if any(key[0] == s["name"] for key in changed | validation_changes)}
+    allowed_parts.update(s['part'] for s in before.sheets
+                         if rewrite_reference_nodes(deepcopy(s['root']), renames))
     if any(old != new for old, new in renames.items()):
         allowed_parts.add("xl/workbook.xml")
         if after.data.get("xl/workbook.xml") != renamed_workbook(before, renames):
@@ -540,13 +667,13 @@ def verify(source, output, manifest):
             continue
         formula = cell.find(Q("f"))
         out_formula = actual.find(Q("f"))
-        if formula is not None and (out_formula is None or canonical(formula) != canonical(out_formula)):
+        if formula is not None and (out_formula is None or canonical(reference_adjusted(formula, renames)) != canonical(out_formula)):
             errors.append(f"formula-change:{key[0]}!{key[1]}")
-        if before.text(cell) is None and canonical(cell) != canonical(actual):
+        if before.text(cell) is None and canonical(reference_adjusted(cell, renames)) != canonical(actual):
             errors.append(f"non-text-change:{key[0]}!{key[1]}")
         if key in expected and after.text(actual) != expected[key]:
             errors.append(f"missing-translation:{key[0]}!{key[1]}")
-        if key not in changed and canonical(cell) != canonical(actual):
+        if key not in changed and canonical(reference_adjusted(cell, renames)) != canonical(actual):
             errors.append(f"untouched-cell-change:{key}")
         if key in changed:
             source_rich, output_rich = before.rich(cell), after.rich(actual)
@@ -618,6 +745,11 @@ def verify(source, output, manifest):
             errors.append(f"missing-sheet:{sheet['name']}")
             continue
         a, b = deepcopy(sheet["root"]), deepcopy(other["root"])
+        rewrite_reference_nodes(a, renames)
+        for index, node in enumerate(a.findall(f"{Q('dataValidations')}/{Q('dataValidation')}")):
+            key = (sheet["name"], f"@validation:{index}")
+            if key in expected:
+                node.find(Q("formula1")).text = '"' + expected[key].replace('"', '""') + '"'
         source_merges = [node.get("ref") for node in a.findall(f"{Q('mergeCells')}/{Q('mergeCell')}")]
         output_merges = [node.get("ref") for node in b.findall(f"{Q('mergeCells')}/{Q('mergeCell')}")]
         if source_merges != output_merges:
@@ -680,11 +812,15 @@ def apply(source, output, manifest):
     package = Package(source)
     expected = decisions(package, manifest)
     renames = sheet_renames(package, expected)
+    validation_changes = apply_validation_lists(package, expected)
     changes = {key: target for key, target in expected.items() if key in package.cells and package.text(package.cells[key]) != target}
     for key, target in changes.items():
         replace_text(package, package.cells[key], target)
     expanded, styles_changed = expand_layout(package, changes)
-    changed_sheets = {key[0] for key in changes}
+    changed_sheets = {key[0] for key in changes} | {key[0] for key in validation_changes}
+    for sheet in package.sheets:
+        if rewrite_reference_nodes(sheet['root'], renames):
+            changed_sheets.add(sheet['name'])
     patches = {s["part"]: serialize(s["root"]) for s in package.sheets if s["name"] in changed_sheets}
     if any(old != new for old, new in renames.items()):
         patches["xl/workbook.xml"] = renamed_workbook(package, renames)

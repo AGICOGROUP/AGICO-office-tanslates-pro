@@ -210,6 +210,12 @@ test("safe English autofill resolves fixed labels units and identifiers only", (
   assert.deepEqual(result, { fixed: 2, retained: 1, pending: 1 });
 });
 
+test("worksheet tab names that resemble identifiers still require translation", () => {
+  const units = [{ source: "Sheet1", context_key: "sheet:name", translation: "", status: "pending" }];
+  assert.deepEqual(applySafeAutofill(units, "zh"), { fixed: 0, retained: 0, pending: 1 });
+  assert.equal(units[0].translation, "");
+});
+
 test("safe autofill does not apply English labels to another target language", () => {
   const units = [{ source: "工程名称", translation: "", status: "pending" }];
   assert.deepEqual(applySafeAutofill(units, "fr"), {
@@ -632,8 +638,16 @@ test("production monolingual writer accepts equivalent technical unit spacing", 
     await prepareManifest({ "job-dir": directory });
     const manifestPath = path.join(directory, "translation-manifest.json");
     const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
-    manifest.translation_units[0].status = "translated";
-    manifest.translation_units[0].translation = "The motor is rated at 45 kW";
+    for (const unit of manifest.translation_units) {
+      if (unit.context_key === "sheet:name") {
+        unit.status = "retain";
+        unit.translation = unit.source;
+        unit.reason = "Fixture sheet identifier retained";
+      } else {
+        unit.status = "translated";
+        unit.translation = "The motor is rated at 45 kW";
+      }
+    }
     await fs.writeFile(manifestPath, JSON.stringify(manifest));
     await applyTranslations({ input: source, output, "job-dir": directory });
     const report = await verifyTranslations({ source, output, "job-dir": directory });
@@ -755,7 +769,7 @@ test("verification reports changed formulas numbers merges and missing translati
     const manifestPath = path.join(jobDir, "translation-manifest.json");
     const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
     for (const unit of manifest.translation_units) {
-      unit.translation = `EN:${unit.source}`;
+      unit.translation = unit.context_key === "sheet:name" ? "Sheet 1" : `EN:${unit.source}`;
       unit.status = "translated";
     }
     await fs.writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");

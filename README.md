@@ -5,6 +5,7 @@ batches. Word, Excel and PowerPoint retain native writers behind a shared task i
 
 ```text
 python scripts/office_pipeline.py prepare source.docx --job-dir job --target-language en
+python scripts/office_pipeline.py batch --job-dir job --output job/batch.json
 python scripts/office_pipeline.py merge --job-dir job --decisions batch.json
 python scripts/office_pipeline.py finalize --job-dir job --output translated.docx
 python scripts/office_pipeline.py status --job-dir job
@@ -22,8 +23,15 @@ adapter commands remain compatible; ordinary jobs should use the shared entry.
 
 - Word writes by paragraph location, supporting contextual translations of identical words.
 - Excel monolingual translation patches original OOXML; bilingual paired rows use a separate writer.
-- PowerPoint text and editable image overlays are written without Office; native rendering remains
+- PowerPoint native text and declared picture replacements are written without Office; native rendering remains
   available for final visual review.
+
+The shared entry now exports bounded pending batches with matching terminology (24,000 source/context
+characters by default). Each format writes and verifies a private candidate before the entry atomically
+publishes the deliverable, preserving any previous output on validation failure. Delivery reports separate
+adapter execution time from whole-session elapsed time; elapsed time also includes model work, waits and
+user pauses. Use the active image tool's current interface and accept harmless cosmetic differences,
+while repairing actual missing labels, changed technical values or unreadable output.
 
 Excel and PowerPoint complex text without a handler is preserved with explicit limitations. Formula-dependent labels may be
 retained. Macro-enabled and encrypted inputs remain unsupported. Unit tests establish deterministic

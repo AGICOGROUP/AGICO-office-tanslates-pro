@@ -14,7 +14,7 @@ from pathlib import Path
 import re
 import tempfile
 
-from translation_quality import technical_mismatch
+from translation_quality import technical_mismatch, sheet_name_mismatch
 
 FIELDS = {"word": ("units", "source", "target"),
           "excel": ("translation_units", "source", "translation"),
@@ -92,12 +92,12 @@ def reviewed_retention(source, target, decision):
             and reason != "Reviewed: source is appropriate in the target document")
 
 
-def decision_error(source: str, target: str, format_name: str, protected_tokens=(), target_language=None, retained=False) -> str | None:
+def decision_error(source: str, target: str, format_name: str, protected_tokens=(), target_language=None, retained=False, context_key=None) -> str | None:
     if not isinstance(target, str) or not target.strip():
         return "translation required"
     if not retained and untranslated_natural_language(source, target, target_language):
         return "possible untranslated English segment: translate it, or explicitly retain unchanged text with a specific reason"
-    if technical_mismatch(source, target, protected_tokens):
+    if (sheet_name_mismatch(source, target) if context_key == "sheet:name" else technical_mismatch(source, target, protected_tokens)):
         return "technical values, units or identifiers changed; preserve the source values"
     if format_name == "word" and re.findall(r"[\t\n]", source) != re.findall(r"[\t\n]", target):
         return "preserve Word tab and line-break boundaries"
@@ -115,7 +115,7 @@ def build_worklist(manifest: dict, format_name: str, max_chars: int = 12000) -> 
         target = unit.get(target_field, "")
         error = unit.get("translation_error") or decision_error(
             unit[source_field], target, format_name, unit.get("protected_tokens", []), manifest.get("target_language"),
-            reviewed_retention(unit[source_field], target, unit))
+            reviewed_retention(unit[source_field], target, unit), unit.get("context_key"))
         if not error:
             continue
         record = {"id": unit["id"], "source": unit[source_field], "translation": target,
@@ -187,6 +187,10 @@ def merge_decisions(manifest: dict, worklist: dict, format_name: str) -> tuple[d
         unit = units.get(unit_id)
         error = None
         target = decision.get("translation", "")
+        if (unit is not None and 'translation' not in decision
+                and decision.get('status') == 'retain'
+                and isinstance(decision.get('reason'), str) and decision['reason'].strip()):
+            target = unit[source_field]
         # A stale batch often includes blank placeholders for units accepted by
         # an earlier batch. They are absence of a decision, not a rollback.
         if unit is not None and not target and decision.get("status", "pending") == "pending":
@@ -201,7 +205,7 @@ def merge_decisions(manifest: dict, worklist: dict, format_name: str) -> tuple[d
             error = "source text changed; edit translation only"
         else:
             error = decision_error(unit[source_field], target, format_name, unit.get("protected_tokens", []), result.get("target_language"),
-                                   reviewed_retention(unit[source_field], target, decision))
+                                   reviewed_retention(unit[source_field], target, decision), unit.get("context_key"))
         if error:
             rejected.append({"id": unit_id, "error": error})
             if unit is not None:

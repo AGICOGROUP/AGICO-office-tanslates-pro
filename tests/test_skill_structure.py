@@ -214,7 +214,7 @@ class InImageMethodPolicyTests(unittest.TestCase):
 
     def test_replacement_writers_accept_either_method(self):
         rule = " ".join(self.rule_text().split())
-        self.assertIn("Register the output with the same `localized` decision fields as method A", rule)
+        self.assertIn("Register the output with the same `localized` decision fields", rule)
         self.assertTrue((ROOT / self.SCRIPT).is_file())
         for name in self.MARKDOWN:
             adapter = Path(name).parent
@@ -262,7 +262,9 @@ class RuntimePathContractTests(unittest.TestCase):
     )
 
     def sources(self):
-        for path in ROOT.rglob("*"):
+        # Inspect maintained source, not ignored historical job scripts or customer artifacts.
+        for path in (path for folder in ('scripts', 'formats', 'tests')
+                     for path in (ROOT / folder).rglob('*')):
             if not path.is_file() or path.suffix not in self.SOURCES:
                 continue
             if self.SKIP_DIRS.intersection(path.parts):

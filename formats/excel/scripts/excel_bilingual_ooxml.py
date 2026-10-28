@@ -165,9 +165,10 @@ class TranslationStyles:
 def build(package, manifest):
     check_source(package)
     translations = decisions(package, manifest)
-    from excel_native_ooxml import sheet_renames, renamed_workbook
+    from excel_native_ooxml import sheet_renames, renamed_workbook, apply_validation_lists
     renames = sheet_renames(package, translations)
-    translations = {key: value for key, value in translations.items() if key[1] != '@sheet'}
+    apply_validation_lists(package, translations)
+    translations = {key: value for key, value in translations.items() if key in package.cells}
     retained = {u['id'] for u in manifest['translation_units'] if u['status'] == 'retain'}
     for item in manifest['occurrences']:
         if item['translation_unit_id'] in retained:
@@ -280,7 +281,7 @@ def build(package, manifest):
             page_props.set('fitToPage','1')
         patches[sheet['part']] = serialize(root)
         changed_sheets.append(name)
-    workbook = xml(package.data['xl/workbook.xml'])
+    workbook = xml(renamed_workbook(package, renames))
     for node in workbook.findall(f"{Q('definedNames')}/{Q('definedName')}"):
         if node.text:
             if node.get('name') in {'_xlnm.Print_Area','_xlnm.Print_Titles'}:

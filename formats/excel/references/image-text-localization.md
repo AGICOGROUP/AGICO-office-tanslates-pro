@@ -1,71 +1,25 @@
-# Excel image-text localization
+# Excel picture writeback
 
-Follow [the shared in-image translation rule](../../../references/image-translation.md).
-Two methods are accepted and selected per image by that rule: generative `image_edit` for renders,
-photos and sketches, and deterministic erase + refill (`scripts/inimage_erase_refill.py`) for technical
-line drawings whose linework must survive unchanged. Replace text or add bilingual text at the original
-locations, according to the user's requested mode, with high-fidelity verification of all non-text details.
+Follow [shared embedded-image handling](../../../references/image-translation.md).
+No images means no image work. Classify unique SHA-256 groups once; logo-only pictures retain
+their exact bytes. Localize readable labels according to the user's requested mode.
 
-Review each unique image byte sequence once, grouped by SHA-256, within the current job. Reuse its
-decision and final replacement for every worksheet occurrence. A fresh test starts a new job and
-does not reuse translations or generated images from earlier jobs.
+Use the current image tool's actual schema, not a historical interface. Keep one running request
+per unique image/mode and translate cells while it runs. Accept readable, accurate edits with
+preserved technical meaning; do not generate another version for font taste. Pixel identity outside
+text masks applies only to explicitly permitted deterministic erase/refill, not to generative editing.
 
-- If the workbook contains no images, skip image review completely.
-- If no clear translatable text exists, record `retain` and preserve the image bytes at every
-  occurrence. Optional notes such as `no-source-text`, `logo-or-brand`, or `photograph` help explain
-  the decision. Readable untranslated labels must never be retained for convenience.
-- An image carrying only a logo, wordmark or brand mark is retained by rule: record
-  `retain` / `logo-or-brand`, keep its bytes unchanged, and never call the image editor on it.
-  Regenerating brand artwork adds no translated label while risking changed lettering or icon form.
-  This is a correct retain, not a coverage gap, and must not be reported as an untranslated label.
-  A logo mixed with real document labels is still translatable — localize those labels only.
-- Use `localized` only after the unique PNG/JPEG has been edited and checked at native resolution.
-  Keep the supplied image `id` and `sha256`, and set `replacement_path` to the absolute edited-image
-  path in the worklist; the runner records the replacement SHA-256. An omitted redundant source
-  hash can be resolved from a known current-job ID; an explicit conflicting hash is rejected.
-  The compact worklist includes `source_image` for the extracted original. Replacement
-  must follow the shared aspect-ratio and minimum-pixel rules. `apply` replaces all matching image parts
-  atomically after workbook export; `verify` checks their resulting hashes and occurrence counts.
-- Use `manual-review` only when text presence or safe localization remains uncertain; inspect the
-  affected labels rather than repeating review of all workbook images.
-- This pipeline writes raster replacements; it does not create worksheet text boxes or translate
-  native chart labels. Limit image edits to source-text masks and preserve all unrelated pixels.
-  The image writer leaves package relationships, crop, anchors and z-order unchanged.
-- Preserve logos, equipment, arrows, symbols, topology, numbers, units, and flow direction.
-- Review localized images at native resolution, focusing on translated labels, technical values,
-  arrows and table boundaries. Repair hidden or illegible text, meaning changes and structural
-  movement. Minor cosmetic differences can accompany a usable delivery with a concise disclosure.
+For a finished edit, preserve `id`/`sha256` and set `status: "localized"` plus an absolute
+`replacement_path` in the batch/worklist image decision. An explicitly conflicting hash is rejected.
+The source is at `source_image`. Preserve aspect ratio, equal-or-higher resolution and all content;
+normalize harmless canvas drift once rather than regenerating or cropping labels.
 
-## Image calls and waiting
+The writer replaces matching `xl/media/*` parts and verifies hashes and occurrence counts.
+Relationships, anchors, crop and z-order stay unchanged. Inspect final labels in their saved placement
+when there is a concrete cropping/readability risk. A `localized` status without matching embedded
+replacement bytes is not completion.
 
-Use the active image-editing tool's supported workflow. Prepare the exact translated labels once,
-reusing reviewed cell wording only when the screenshot has the same content and context. Specify
-the user's requested replacement or bilingual mode, all labels, source dimensions and preserved regions in the
-first call. Treat each unique image as one edit target, not a request for several visual variants.
-Choose either mode only when the user permits that flexibility. Translate all readable labels;
-partial existing translations do not justify skipping the remaining labels.
-
-Keep one in-flight request per image and mode. When a call returns a running ID, retain it and
-continue cell translation, terminology review or merging; wait on that same ID when the independent
-work is done. Do not submit the same image again because a call is slow or a preview looks unchanged.
-If the user changes the mode, stop the obsolete request when supported, keep completed cell work,
-and edit from the original image for the new mode. A stopped client wait does not itself prove the
-backend request was cancelled; do not repeatedly restart it.
-
-Inspect the returned file before requesting a correction. For a real defect, describe its exact
-region and exact replacement text, retaining the usable image. Normally use one targeted correction;
-if it does not improve the defect, refine the affected region and exact wording in the edit
-request. Do not switch method merely because a cosmetic difference is unpleasant; switching is
-correct only when the shared rule's selection test was misapplied to this image. Extra calls require
-a specific unresolved content or readability defect, not font taste, white margins or a desire for
-another version. A minor,
-unambiguous spelling imperfection can be disclosed with usable output; wrong units, missing labels
-or ambiguous technical meaning still require repair.
-
-Do not ask the generator to fix spelling and crop the whole canvas in the same correction. For
-allowed deterministic finishing, crop only verified blank outer margins and resize once to the
-source dimensions. Determine the complete content bounds first, including the bottom table row;
-check the saved result once. Do not regenerate for pixel dimensions or blank margins alone, or
-guess a crop that could remove labels. Preserve the best usable result when a later attempt regresses.
-
-Never flatten the worksheet or chart into an image and never use a large opaque rectangle to hide source content.
+These are raster-picture replacements, not a native chart-label translator. Do not flatten a
+worksheet/chart or hide source content behind opaque worksheet objects. Report genuine unsupported
+native-object labels separately. Legacy `manual-review` is pending work: inspect only that affected
+image, not all already-accepted images.

@@ -6,8 +6,11 @@ import argparse
 import json
 import os
 from pathlib import Path
+import re
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 
 from route_office_file import route
@@ -15,6 +18,8 @@ from translation_core import atomic_json, build_worklist, file_hash, fingerprint
 from translation_assets import prepare_assets, pending_assets, merge_assets
 
 ROOT = Path(__file__).resolve().parents[1]
+WORKFLOW_VERSION = 3
+DEFAULT_BATCH_CHARS = 24000
 SCRIPTS = {name: ROOT / "formats" / name / "scripts" / filename for name, filename in
            {"word": "word_pipeline.py", "excel": "excel_fast_pipeline.py", "ppt": "ppt_pipeline.py"}.items()}
 
@@ -57,7 +62,7 @@ def check_source(state):
         raise ValueError("working source changed since preparation; use a new job directory")
 
 
-def refresh_worklist(job_dir, manifest, format_name, max_chars=12000):
+def refresh_worklist(job_dir, manifest, format_name, max_chars=DEFAULT_BATCH_CHARS):
     work = build_worklist(manifest, format_name, max_chars)
     work["images"] = pending_assets(manifest, format_name)
     atomic_json(Path(job_dir) / "translation-worklist.json", work)
@@ -75,7 +80,8 @@ def summary(job_dir, state, manifest):
             "batches": len(work["batches"]), "warnings": manifest.get("warnings", [])}
 
 
-def prepare_job(source, job_dir, target_language, output_mode="monolingual", batch_chars=12000):
+def prepare_job(source, job_dir, target_language, output_mode="monolingual", batch_chars=DEFAULT_BATCH_CHARS):
+    started = time.perf_counter()
     source = Path(source).resolve()
     job, state_path, manifest_path, work_path = paths(job_dir)
     code, routing = route(source)
@@ -89,7 +95,9 @@ def prepare_job(source, job_dir, target_language, output_mode="monolingual", bat
     identity = {"source": str(source), "source_sha256": file_hash(source),
                 "format": format_name, "target_language": target_language, "output_mode": output_mode}
     job.mkdir(parents=True, exist_ok=True)
-    state = read_json(state_path) if state_path.exists() else {**identity, "stages": {}, "batch_chars": batch_chars}
+    state = read_json(state_path) if state_path.exists() else {
+        **identity, "stages": {}, "batch_chars": batch_chars,
+        "workflow_version": WORKFLOW_VERSION, "started_at": time.time()}
     if any(state.get(key) != value for key, value in identity.items()):
         raise ValueError("job identity changed; use a separate job directory")
     if not state.get("prepared"):
@@ -113,6 +121,7 @@ def prepare_job(source, job_dir, target_language, output_mode="monolingual", bat
         manifest = prepare_assets(manifest, format_name, working, job)
         atomic_json(manifest_path, manifest)
         refresh_worklist(job, manifest, format_name, batch_chars)
+        state['preparation_ms'] = round((time.perf_counter() - started) * 1000)
         atomic_json(state_path, state)
     else:
         check_source(state)
@@ -120,6 +129,58 @@ def prepare_job(source, job_dir, target_language, output_mode="monolingual", bat
         if not work_path.exists():
             refresh_worklist(job, manifest, format_name, batch_chars)
     return summary(job, state, manifest)
+
+
+def batch_job(job_dir, index=1, output=None):
+    """Return one bounded pending batch, including only its relevant terminology.
+
+    This is a view, not a second manifest or translation cache. Decisions from
+    this view use exactly the existing merge protocol.
+    """
+    job, state_path, manifest_path, work_path = paths(job_dir)
+    state = read_json(state_path)
+    check_source(state)
+    work = read_json(work_path)
+    batches = work.get('batches', [])
+    if index < 1 or index > max(1, len(batches)):
+        raise ValueError('batch index is outside the pending batch range')
+    selected = set(batches[index - 1]['unit_ids']) if batches else set()
+    units = [u for u in work['translation_units'] if u['id'] in selected]
+    glossary_path = job / 'relevant-glossary.json'
+    glossary = read_json(glossary_path) if glossary_path.is_file() else {}
+    text = '\n'.join(u['source'] for u in units)
+    def relevant(entry):
+        term = entry.get('source', '')
+        if not term:
+            return False
+        pattern = re.escape(term)
+        if term.isascii():
+            pattern = r'(?<![A-Za-z0-9])' + pattern + r'(?![A-Za-z0-9])'
+        return bool(re.search(pattern, text, re.I))
+    entries = glossary.get('entries', glossary.get('matched_entries', []))
+    entries = entries if isinstance(entries, list) else []
+    images = work.get('images', [])
+    result = {
+        'schema_version': work.get('schema_version', 2),
+        'job_identity': work['job_identity'], 'format': state['format'],
+        'target_language': state['target_language'],
+        'batch': {'index': index, 'total': len(batches),
+                  'remaining_batches': max(0, len(batches) - index),
+                  'pending_units': work['pending_count'],
+                  'remaining_images': max(0, len(images) - 4)},
+        'translation_units': units, 'images': images[:4],
+        'glossary': {'path': str(glossary_path),
+                     'entries': [{key: value for key, value in entry.items() if key != 'text_indices'}
+                                 for entry in entries if relevant(entry)]}}
+    if output:
+        target = Path(output).resolve()
+        owned = {state_path, manifest_path, work_path, glossary_path,
+                 job / 'inventory.json', job / 'job-state.json', job / 'delivery-report.json',
+                 Path(state['source']).resolve(), Path(state['working_source']).resolve()}
+        if target in owned or target.name.startswith('publish-candidate.'):
+            raise ValueError('batch output must not overwrite source or pipeline-owned artifacts')
+        atomic_json(target, result)
+    return result
 
 
 def merge_job(job_dir, decisions=None):
@@ -148,7 +209,7 @@ def unique_warnings(values):
     return result
 
 
-def finalize_job(job_dir, output, decisions=None, visual_review_passed=False):
+def _finalize_candidate(job_dir, output, decisions=None, visual_review_passed=False):
     job, state_path, manifest_path, work_path = paths(job_dir)
     state = read_json(state_path)
     output = Path(output).resolve()
@@ -244,13 +305,57 @@ def finalize_job(job_dir, output, decisions=None, visual_review_passed=False):
     return result
 
 
+def finalize_job(job_dir, output, decisions=None, visual_review_passed=False):
+    """Verify a private candidate before atomically replacing the deliverable.
+
+    Keep the candidate for supported stage-cache reuse, including PPT's visual
+    review continuation. A failed verification never replaces an earlier file.
+    """
+    job, state_path, manifest_path, _ = paths(job_dir)
+    state = read_json(state_path)
+    check_source(state)
+    output = Path(output).resolve()
+    if output in {Path(state['source']).resolve(), Path(state['working_source']).resolve()}:
+        raise ValueError('output must not overwrite the original source or working copy')
+    suffix = {'word': '.docx', 'excel': '.xlsx', 'ppt': '.pptx'}[state['format']]
+    if output.suffix.lower() != suffix:
+        raise ValueError(f'output extension must be {suffix}')
+    candidate = job / ('publish-candidate' + suffix)
+    if output == candidate:
+        raise ValueError('choose a delivery path outside the private candidate')
+    result = _finalize_candidate(job, candidate, decisions, visual_review_passed)
+    if result.get('next_stage') != 'deliver':
+        return result
+    if not output.is_file() or file_hash(output) != result['output_sha256']:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        descriptor, temporary = tempfile.mkstemp(prefix='.' + output.stem + '-', suffix='.tmp', dir=output.parent)
+        os.close(descriptor)
+        try:
+            shutil.copyfile(candidate, temporary)
+            os.replace(temporary, output)
+        finally:
+            Path(temporary).unlink(missing_ok=True)
+    state = read_json(state_path)
+    result = {**result, 'output': str(output), 'workflow_version': WORKFLOW_VERSION,
+              'preparation_ms': state.get('preparation_ms'),
+              'session_elapsed_ms': round(max(0, time.time() - state['started_at']) * 1000)
+              if state.get('started_at') else None,
+              'timing_note': 'session_elapsed_ms includes model work, tools, waits and user pauses; timings_ms measures adapter execution only'}
+    state['published_delivery'] = {
+        'key': fingerprint({'manifest': read_json(manifest_path), 'output': str(output)}),
+        'output_sha256': result['output_sha256'], 'result': result}
+    atomic_json(state_path, state)
+    atomic_json(job / 'delivery-report.json', result)
+    return result
+
+
 def status_job(job_dir):
     job, state_path, manifest_path, _ = paths(job_dir)
     state = read_json(state_path)
     check_source(state)
     manifest = read_json(manifest_path)
     result = summary(job, state, manifest)
-    delivered = state.get("stages", {}).get("deliver", {})
+    delivered = state.get('published_delivery', state.get("stages", {}).get("deliver", {}))
     if delivered and not result["pending_count"] and not result["pending_images"]:
         output = Path(delivered["result"]["output"])
         key = fingerprint({"manifest": manifest, "output": str(output)})
@@ -260,13 +365,20 @@ def status_job(job_dir):
 
 
 def main(argv=None):
+    # JSON is UTF-8 even when launched from a legacy Windows GBK console.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, 'reconfigure'):
+            stream.reconfigure(encoding='utf-8')
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     prepare = commands.add_parser("prepare")
     prepare.add_argument("source", type=Path)
     prepare.add_argument("--target-language", required=True)
     prepare.add_argument("--output-mode", choices=("monolingual", "bilingual"), default="monolingual")
-    prepare.add_argument("--batch-chars", type=int, default=12000)
+    prepare.add_argument("--batch-chars", type=int, default=DEFAULT_BATCH_CHARS)
+    batch = commands.add_parser('batch', help='read/export one pending batch with matching terminology')
+    batch.add_argument('--index', type=int, default=1)
+    batch.add_argument('--output', type=Path)
     merge = commands.add_parser("merge")
     merge.add_argument("--decisions", type=Path)
     finalize = commands.add_parser("finalize")
@@ -274,12 +386,14 @@ def main(argv=None):
     finalize.add_argument("--decisions", type=Path)
     finalize.add_argument("--visual-review-passed", action="store_true")
     status = commands.add_parser("status")
-    for command in (prepare, merge, finalize, status):
+    for command in (prepare, batch, merge, finalize, status):
         command.add_argument("--job-dir", required=True, type=Path)
     args = parser.parse_args(argv)
     try:
         if args.command == "prepare":
             result = prepare_job(args.source, args.job_dir, args.target_language, args.output_mode, args.batch_chars)
+        elif args.command == 'batch':
+            result = batch_job(args.job_dir, args.index, args.output)
         elif args.command == "merge":
             result = merge_job(args.job_dir, args.decisions)
         elif args.command == "finalize":

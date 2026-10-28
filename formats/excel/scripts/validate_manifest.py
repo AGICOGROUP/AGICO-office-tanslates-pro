@@ -9,7 +9,7 @@ import sys
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
-from translation_quality import technical_mismatch
+from translation_quality import technical_mismatch, sheet_name_mismatch
 
 def _text(value: Any) -> bool:
     return isinstance(value, str) and bool(value.strip())
@@ -74,7 +74,8 @@ def validate_v2(payload: dict[str, Any]) -> dict:
         else:
             errors.append(f"{prefix} status must be translated or retain")
         if isinstance(translation, str) and isinstance(unit.get("source"), str):
-            if technical_mismatch(unit["source"], translation, protected_tokens):
+            if (sheet_name_mismatch(unit["source"], translation) if unit.get("context_key") == "sheet:name"
+                    else technical_mismatch(unit["source"], translation, protected_tokens)):
                 errors.append(f"{prefix} changed protected token or technical value")
 
     occurrence_seen: set[str] = set()
@@ -187,7 +188,8 @@ def validate_legacy(payload: Any) -> dict:
             errors.append(f"{prefix}.protected_tokens must be a list of text values")
             protected_tokens = []
         if isinstance(source, str) and isinstance(translation, str):
-            if technical_mismatch(source, translation, protected_tokens):
+            if (sheet_name_mismatch(source, translation) if item.get("context_key") == "sheet:name"
+                    else technical_mismatch(source, translation, protected_tokens)):
                 errors.append(f"{prefix} changed protected token or technical value")
 
     image_seen: set[str] = set()
