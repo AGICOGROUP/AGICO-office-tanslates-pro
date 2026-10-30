@@ -1,73 +1,46 @@
 ---
 name: office-translate-pro-word
-description: Use when translating uploaded Word documents (.doc or .docx), especially technical tables, quotations and specifications whose terminology, editable text, styles, images and layout must be preserved.
+description: Use when translating Word .doc or .docx documents, especially specifications, quotations and tables requiring editable text and preserved formatting.
 ---
 
-# Professional Word Translation
+# Word pipeline
 
-Top-level routing is complete. Do not run the root Office router again or read another format adapter.
-This adapter does not depend on another Office translation skill.
+Top-level routing is complete. Do not run the root Office router again.
+This adapter does not depend on another Office translation skill. Follow the
+[shared workflow](../../references/translation-decisions.md) from the skill root.
 
-## Standard task
+## Word-specific behavior
 
-From this adapter directory, run:
+Preserve the document formatting; pagination may change. When translated text expands (for example,
+Chinese into English), allow natural line wrapping, paragraph growth and flow onto following pages.
+Page breaks, the total number of pages and the pages on which content appears may therefore change;
+these translation-driven changes alone are not formatting damage or a delivery failure.
 
-```text
-python ../../scripts/office_pipeline.py prepare <source> --job-dir <job> --target-language <language>
-python ../../scripts/office_pipeline.py merge --job-dir <job> --decisions <batch.json>
-python ../../scripts/office_pipeline.py finalize --job-dir <job> --output <translated.docx>
-python ../../scripts/office_pipeline.py status --job-dir <job>
-```
+Keep the original formatting properties: styles, font formatting and sizes, alignment, indentation,
+line/paragraph spacing, numbering, table structure/column widths/borders, paper size/orientation,
+margins, sections, headers/footers, and image sizes/anchors. Preserve explicit page/section breaks,
+editable objects and relationships; allow Word's automatic pagination to reflow around them.
+Retain page-number and contents fields, their numbering rules and styling; their displayed values
+may update to follow the new pagination. Do not replace those fields with fixed original numbers.
+Do not reduce fonts or spacing, change margins/table widths, move objects or shorten away meaning
+to force the translation back into the original pagination. Actual clipping, overlap or missing
+content still needs a targeted resolution; additional pages alone do not.
+Never overwrite the original. Microsoft Word converts legacy `.doc` once to a working `.docx`.
 
-Read [translation decisions](../../references/translation-decisions.md), then the job's
-`translation-worklist.json` and `relevant-glossary.json`. Read the listed batches with their context,
-then submit compact ID/translation decisions with the unchanged `job_identity` as described in that reference.
-Merge completed subsets and immediately continue pending batches through finalization and delivery.
-Accepted decisions remain saved; only missing or invalid items return with repair reasons. Finalize
-also merges the default worklist, so small jobs can omit a separate merge command. Repeated preparation
-preserves existing work; use a new job directory for a different source or target language.
+Read complete paragraphs and their neighboring/style context, not separate runs. Keep protected tokens,
+real tabs and explicit line-break boundaries, including empty groups around consecutive breaks.
+The writer preserves native formatting and boundary spaces; avoid inherited negative/compressed
+Latin spacing. Use the matched `../../references/水泥专业名词中英对照.md`, not mechanical word replacement.
 
-## Translation quality
+If there is embedded image text, follow [image handling](../../references/image-translation.md).
+Retain logo-only pictures. Localized pictures must be written back, not delivered as separate
+legends. Preserve their display size, aspect ratio and anchors. Supported main-story inline/raster
+replacements are verified against actual embedded media; report an unsupported image host specifically.
 
-The shared terminology source is `../../references/水泥专业名词中英对照.md`. Use its matched subset,
-exact phrases before shorter terms, and returned context/aliases to choose the engineering meaning.
-Chinese targets support reverse English lookup. Do not load the complete glossary during ordinary work.
+## Delivery
 
-Units include neighboring paragraphs and style context. The same source word can need different
-translations in different contexts; writes use locations rather than global string replacement.
-Translate complete thoughts rather than formatting runs. Preserve numbers, units, signs, models,
-standards, meaningful line breaks and tabs. Protected tokens accept equivalent spacing and full-width
-symbols while retaining SI prefix case and repeated values. Retain source text only when appropriate
-in the requested output; do not hide untranslated sentences behind a retention decision.
-
-Review each unique embedded image text once, including WMF/EMF diagrams, following
-[the shared in-image translation rule](../../references/image-translation.md).
-Pick one of its two methods per image: the native `image_edit` tool for renders, photos and sketches,
-or deterministic erase + refill (`scripts/inimage_erase_refill.py`) for technical line drawings whose
-linework must survive unchanged. Replace text or add bilingual text at its original location
-as requested. Inspect the result using the shared accepted quality criteria; cosmetic redraw
-differences alone do not require another generation. Insert the translated image back into the file.
-Record and verify source/output pixel dimensions and exact aspect ratio. Never crop, truncate,
-downsample or independently stretch the replacement image; use equal-size output or proportional
-upscaling, with blank padding when necessary to restore the source ratio.
-External bilingual legends do not meet this requirement and must not be used as the translation
-result. The Word pipeline replaces localized main-story inline images while preserving their
-display dimensions and verifies the resulting package. Unsupported image hosts remain pending;
-do not claim that review/retention translates an image or that a standalone trial updated the file.
-
-## Preservation and delivery
-
-Preserve the document formatting; pagination may change. Keep styles, tables, editable objects,
-section relationships and the overall visual structure, but allow translation-driven page reflow.
-Do not treat pagination differences alone as damage or a reason to block delivery.
-
-Hash and preserve the source. Never overwrite it. `.doc` conversion uses Microsoft Word once to
-create a working `.docx`. The writer preserves styles, tables, editable text, namespace mappings and
-boundary spaces, and removes unsafe inherited compression from Latin translations. Only changed text
-parts are rewritten. Output replacement is atomic.
-
-Finalize checks translated paragraph locations, protected tokens, media bytes and structure. Repair
-actual content loss, value changes or malformed output, then resume. Deliver at `next_stage: deliver`.
-The legacy `scripts/word_pipeline.py prepare|apply|validate` commands remain for existing jobs and
-troubleshooting. `validate --word-native` is optional and non-blocking, reporting diagnostics and
-warnings. Deliver without an external PDF conversion or rendering gate. Never hide confirmed damage.
+`office_pipeline.py finalize` checks text locations, technical values, structure and media, then
+publishes the verified candidate. Deliver without an external PDF conversion or rendering gate.
+Native Word checking is optional and non-blocking when unavailable; use it for a concrete opening or
+layout concern, not as another routine round. Actual corruption/content loss still needs repair.
+Legacy `scripts/word_pipeline.py` commands remain for targeted diagnosis, not a second ordinary flow.

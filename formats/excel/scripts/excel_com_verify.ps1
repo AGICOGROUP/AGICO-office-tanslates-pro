@@ -59,16 +59,19 @@ function Get-WorkbookReport {
 }
 
 function Convert-SourceErrorKeysForBilingual {
-    param($Keys)
+    param($Keys, $SheetNames, [switch]$MapRows)
     $mapped = New-Object 'System.Collections.Generic.HashSet[string]'
     foreach ($key in $Keys) {
         if ($key -match '^(.*)!([A-Z]+)(\d+)$') {
-            [void]$mapped.Add(("{0}!{1}{2}" -f $Matches[1], $Matches[2], ([int]$Matches[3] * 2 - 1)))
+            $name = if ($SheetNames.ContainsKey($Matches[1])) { $SheetNames[$Matches[1]] } else { $Matches[1] }
+            $row = [int]$Matches[3]
+            if ($MapRows) { $row = $row * 2 - 1 }
+            [void]$mapped.Add(("{0}!{1}{2}" -f $name, $Matches[2], $row))
         } else {
             [void]$mapped.Add($key)
         }
     }
-    return $mapped
+    return ,$mapped
 }
 
 $excel = $null
@@ -81,12 +84,15 @@ try {
     $excel.AskToUpdateLinks = $false
     $source = Get-WorkbookReport $excel $sourceFull
     $output = Get-WorkbookReport $excel $inputFull
-    $baselineFormulaErrors = if ($Bilingual) {
-        Convert-SourceErrorKeysForBilingual $source.formula_errors
-    } else { $source.formula_errors }
-    $baselineValueErrors = if ($Bilingual) {
-        Convert-SourceErrorKeysForBilingual $source.value_errors
-    } else { $source.value_errors }
+    # Tab translations change error keys but do not introduce calculation errors.
+    # Native OOXML verification already checks worksheet order and formula preservation.
+    if ($source.worksheets.Count -ne $output.worksheets.Count) { throw 'Worksheet count changed' }
+    $sheetNames = @{}
+    for ($i = 0; $i -lt $source.worksheets.Count; $i++) {
+        $sheetNames[$source.worksheets[$i]] = $output.worksheets[$i]
+    }
+    $baselineFormulaErrors = Convert-SourceErrorKeysForBilingual $source.formula_errors $sheetNames -MapRows:$Bilingual
+    $baselineValueErrors = Convert-SourceErrorKeysForBilingual $source.value_errors $sheetNames -MapRows:$Bilingual
     $newFormulaErrors = @($output.formula_errors | Where-Object { -not $baselineFormulaErrors.Contains($_) })
     $newValueErrors = @($output.value_errors | Where-Object { -not $baselineValueErrors.Contains($_) })
     if ($newFormulaErrors.Count -gt 0 -or $newValueErrors.Count -gt 0) {

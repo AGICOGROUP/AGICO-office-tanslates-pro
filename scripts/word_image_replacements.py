@@ -178,13 +178,19 @@ def apply_word_image_replacements(output, manifest):
                            f"{[group['id'] for group, _ in unknown]}")
 
     results = []
-    inline = hosts.pop('inline', [])
+    inline_hosts = hosts.pop('inline', [])
+    # Raster media can be swapped without touching either drawing host. Media
+    # filenames are package identities, never InlineShapes collection indices.
+    raster_inline = [(g, p) for g, p in inline_hosts
+                     if Path(p).suffix.lower() not in {'.emf', '.wmf'}]
+    inline = [(g, p) for g, p in inline_hosts
+              if Path(p).suffix.lower() in {'.emf', '.wmf'}]
     if inline:
         results.append(_run_word_replacements(output, [
             {'id': group['id'], 'story_type': 1, 'kind': 'inline',
              'index': _media_index(group), 'replacement_path': str(Path(group['replacement_path']).resolve())}
             for group, _ in inline]))
-    anchored = hosts.pop('anchor', [])
+    anchored = hosts.pop('anchor', []) + raster_inline
     if anchored:
         grouped = {}
         for group, part in anchored:

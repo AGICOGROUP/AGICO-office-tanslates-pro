@@ -15,7 +15,8 @@ from lxml import etree as ET
 from PIL import ImageFont
 
 from excel_native_ooxml import (Package, Q, XML_SPACE, canonical, coordinates,
-                               decisions, layout_geometry, serialize, xml)
+                               decisions, layout_geometry, serialize, xml,
+                               rename_formula_references, sheet_renames)
 
 
 @lru_cache(maxsize=32)
@@ -78,7 +79,7 @@ def map_reference(value, include_translation=False):
     return prefix + ':'.join(out)
 
 
-def map_formula(formula):
+def map_formula(formula, renames=None):
     tokens = Tokenizer('=' + formula.lstrip('=')).items
     sensitive = {'ROW','ROWS','COLUMN','COLUMNS','OFFSET','INDIRECT','ADDRESS','CELL',
                  'COUNTA','COUNTBLANK','COUNTIF','COUNTIFS','SUMIF','SUMIFS','AVERAGEIF',
@@ -91,7 +92,7 @@ def map_formula(formula):
             if '[' in token.value or re.search(r'[^\s!]:[^\s!]+!', token.value):
                 raise ValueError(f'unsupported bilingual reference: {token.value}')
             token.value = map_reference(token.value)
-    return ''.join(t.value for t in tokens)
+    return rename_formula_references(''.join(t.value for t in tokens), renames or {})
 
 
 def check_source(package):
@@ -165,9 +166,10 @@ class TranslationStyles:
 def build(package, manifest):
     check_source(package)
     translations = decisions(package, manifest)
-    from excel_native_ooxml import sheet_renames, renamed_workbook
+    from excel_native_ooxml import sheet_renames, renamed_workbook, apply_validation_lists
     renames = sheet_renames(package, translations)
-    translations = {key: value for key, value in translations.items() if key[1] != '@sheet'}
+    apply_validation_lists(package, translations)
+    translations = {key: value for key, value in translations.items() if key in package.cells}
     retained = {u['id'] for u in manifest['translation_units'] if u['status'] == 'retain'}
     for item in manifest['occurrences']:
         if item['translation_unit_id'] in retained:
@@ -207,7 +209,7 @@ def build(package, manifest):
                         origin, master = masters[name,formula.get('si')]
                         text = Translator('='+master,origin=origin).translate_formula(old_address)[1:]
                     formula.attrib.clear()
-                    formula.text = map_formula(text)
+                    formula.text = map_formula(text, renames)
             target_row = ET.Element(Q('row'), **dict(original.attrib))
             target_row.set('r',str(number*2))
             target_row.attrib.pop('spans',None)
@@ -253,7 +255,7 @@ def build(package, manifest):
             if node.tag in {Q('conditionalFormatting'),Q('dataValidation'),Q('selection')} and node.get('sqref'):
                 node.set('sqref',' '.join(map_reference(x) for x in node.get('sqref').split()))
             if node.tag in {Q('formula'),Q('formula1'),Q('formula2')} and node.text:
-                node.text = map_formula(node.text)
+                node.text = map_formula(node.text, renames)
             for attr in ('activeCell','topLeftCell'):
                 if node.get(attr): node.set(attr,address(node.get(attr)))
             if node.tag == Q('pane') and node.get('state') in {'frozen','frozenSplit'} and node.get('ySplit'):
@@ -280,13 +282,15 @@ def build(package, manifest):
             page_props.set('fitToPage','1')
         patches[sheet['part']] = serialize(root)
         changed_sheets.append(name)
-    workbook = xml(package.data['xl/workbook.xml'])
+    workbook = xml(renamed_workbook(package, renames))
     for node in workbook.findall(f"{Q('definedNames')}/{Q('definedName')}"):
         if node.text:
             if node.get('name') in {'_xlnm.Print_Area','_xlnm.Print_Titles'}:
                 tokens = Tokenizer('='+node.text).items
                 node.text = ''.join(map_reference(t.value,True) if t.type == 'OPERAND' and t.subtype == 'RANGE' else t.value for t in tokens)
             else:
+                # renamed_workbook has already rewritten these qualifiers.
+                # A second pass breaks chained renames (Alpha -> Beta -> Final).
                 node.text = map_formula(node.text)
     patches['xl/workbook.xml'] = serialize(workbook)
     patches['xl/styles.xml'] = serialize(package.styles)
@@ -300,8 +304,31 @@ def build(package, manifest):
 
 def verify(source, output, manifest):
     before, after = Package(source), Package(output)
+    # Build a source-derived formula oracle before build() mutates worksheet
+    # layout. Do not let a repeated package-writer bug validate itself.
+    renames = sheet_renames(before, decisions(before, manifest))
+    masters = {}
+    for (sheet, location), cell in before.cells.items():
+        formula = cell.find(Q('f'))
+        if formula is not None and formula.get('t') == 'shared' and formula.text:
+            masters[sheet, formula.get('si')] = (location, formula.text)
+    expected_formulas = {}
+    for (sheet, location), cell in before.cells.items():
+        formula = cell.find(Q('f'))
+        if formula is None:
+            continue
+        text = formula.text
+        if formula.get('t') == 'shared' and not text:
+            origin, master = masters[sheet, formula.get('si')]
+            text = Translator('=' + master, origin=origin).translate_formula(location)[1:]
+        expected_formulas[renames[sheet], address(location)] = map_formula(text, renames)
     patches, _ = build(before, manifest)
     errors = []
+    for (sheet, location), expected in expected_formulas.items():
+        cell = after.cells.get((sheet, location))
+        formula = cell.find(Q('f')) if cell is not None else None
+        if formula is None or formula.text != expected:
+            errors.append(f'bilingual-formula-reference-change:{sheet}!{location}')
     if before.data.keys() != after.data.keys():
         errors.append('package-parts-change')
     for part,data in before.data.items():

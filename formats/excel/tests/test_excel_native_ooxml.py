@@ -100,6 +100,33 @@ class NativeWorkbookTests(unittest.TestCase):
             root = ET.fromstring(archive.read("xl/workbook.xml"))
             self.assertEqual([node.get("name") for node in root.findall(f"{{{NS}}}sheets/{{{NS}}}sheet")], ["Equipment", "Blank"])
 
+    def test_filter_metadata_does_not_freeze_text_and_dropdowns_translate(self):
+        with ZipFile(self.source) as archive:
+            entries = [(info, archive.read(info.filename)) for info in archive.infolist()]
+        with ZipFile(self.source, "w") as archive:
+            for info, data in entries:
+                if info.filename == "xl/workbook.xml":
+                    data = data.replace(b'</workbook>', b'<definedNames><definedName name="_xlnm._FilterDatabase" localSheetId="0">Plant!$A$1:$C$3</definedName><definedName name="_xlnm.Print_Titles" localSheetId="0">Plant!$1:$1</definedName></definedNames></workbook>')
+                elif info.filename == "xl/worksheets/sheet1.xml":
+                    data = data.replace(b'</worksheet>', b'<dataValidations count="1"><dataValidation type="list" sqref="C2:C3"><formula1>"Pending,Compliant"</formula1></dataValidation></dataValidations></worksheet>')
+                archive.writestr(info, data)
+        inspection = self.run_native("inspect")
+        self.assertEqual({item['address'] for item in inspection['occurrences'] if item['formula_dependency']}, {'A2'})
+        for id, kind, address, source, target in [
+            ('tab', 'sheet_name', '@sheet', 'Plant', '工厂'),
+            ('dropdown', 'validation_list', '@validation:0', 'Pending,Compliant', '待审核,符合要求'),
+        ]:
+            self.data['occurrences'].append(dict(id=id, kind=kind, sheet='Plant', address=address, source=source, translation_unit_id=id))
+            self.data['translation_units'].append(dict(id=id, source=source, translation=target, status='translated'))
+        self.manifest.write_text(json.dumps(self.data, ensure_ascii=False), encoding='utf-8')
+        self.run_native('apply')
+        self.assertTrue(self.run_native('verify')['passed'])
+        with ZipFile(self.output) as archive:
+            workbook = ET.fromstring(archive.read('xl/workbook.xml'))
+            self.assertEqual([node.text for node in workbook.findall(f'{{{NS}}}definedNames/{{{NS}}}definedName')], ["'工厂'!$A$1:$C$3", "'工厂'!$1:$1"])
+            sheet = ET.fromstring(archive.read('xl/worksheets/sheet1.xml'))
+            self.assertEqual(sheet.findtext(f'.//{{{NS}}}formula1'), '"待审核,符合要求"')
+
     def test_rich_shared_strings_split_and_all_other_parts_survive(self):
         report = self.run_native("apply")
         self.assertEqual(report["changed_sheets"], ["Plant"])

@@ -1,6 +1,8 @@
 # PowerPoint pipeline CLI
 
-Run from `formats/ppt/`:
+Ordinary work uses `scripts/office_pipeline.py` from the skill root; see
+[shared workflow](../../../references/translation-decisions.md). The commands below are native
+diagnostic/repair stages, run from `formats/ppt/`:
 
 ```powershell
 python scripts/ppt_pipeline.py inspect --input <source> --job-dir <job> --target-language <language>
@@ -12,8 +14,8 @@ python scripts/ppt_pipeline.py render --source <source> --job-dir <job> --output
 python scripts/ppt_pipeline.py deliver --job-dir <job> --output <output.pptx> --visual-review-passed
 ```
 
-`prepare` pauses with exit code `3`. Complete native text and use only
-[GPT image editing](../../../references/image-translation.md) for image text, followed by
+`prepare` pauses with exit code `3`. Complete native text and follow
+[shared image handling](../../../references/image-translation.md) for image text, followed by
 verified image replacement. Old overlay decisions are not an allowed processing method.
 Declared `localized` replacements are written by `scripts/ppt_image_replacements.py`.
 

@@ -13,6 +13,20 @@ from translation_quality import parameter_mismatch
 
 
 class TranslationEfficiencyTests(unittest.TestCase):
+    def test_unchanged_comma_decimal_quantity_survives_label_translation(self):
+        source = 'LONG: 10,5m; ELEV:3,5; INC:20'
+        self.assertFalse(parameter_mismatch(source, '长度:10,5m; ELEV:3,5; INC:20'))
+        self.assertTrue(parameter_mismatch(source, '长度:10,6m; ELEV:3,5; INC:20'))
+        self.assertTrue(parameter_mismatch(source, '长度:10,5cm; ELEV:3,5; INC:20'))
+
+    def test_without_abbreviation_is_not_a_watt_quantity(self):
+        self.assertFalse(parameter_mismatch('Clinker factor: 1,62 (1,52 w/o CKD)',
+                                            '料耗系数：1,62（1,52，不计窑灰CKD）'))
+
+    def test_dotted_heading_before_v_belt_is_not_a_voltage(self):
+        self.assertFalse(parameter_mismatch('6.6.1\tV-belt drive\t23', '6.6.1\tV带传动\t23'))
+        self.assertTrue(parameter_mismatch('Voltage: 6.1 V', '电压：6.2 V'))
+
     def test_fresh_word_job_delivers_compact_translations_without_touching_source(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

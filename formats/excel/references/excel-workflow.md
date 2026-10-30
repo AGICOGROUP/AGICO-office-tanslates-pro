@@ -2,7 +2,8 @@
 
 ## 1. Route and preserve
 
-Use `scripts/excel_fast_pipeline.py prepare` to hash and route the original, validate the glossary,
+Ordinary work uses the [shared Office workflow](../../../references/translation-decisions.md).
+The compatibility adapter `scripts/excel_fast_pipeline.py prepare` hashes and routes the original, validates the glossary,
 and convert `.xls` once. The converter disables macros, rejects VBA, saves a separate `.xlsx`, and
 reopens it once. Reject `.xlsm` instead of attempting macro preservation.
 
@@ -24,7 +25,9 @@ target language, retain standalone identifiers, uppercase technical codes, model
 dimensions with explicit reasons. Send only remaining `pending` units to the model; do not broaden
 fixed matches by fuzzy search.
 
-At the translation pause, read only `translation-worklist.json` and `relevant-glossary.json`.
+At the translation pause, export the next pending batch through `office_pipeline.py batch`.
+It includes matching terminology; the full `translation-worklist.json` and `relevant-glossary.json`
+remain available for troubleshooting.
 Do not read the inventory or complete manifest during the standard path.
 Apply exact phrase, longest valid matched term, then professional contextual translation. Preserve numbers, units,
 models, identifiers, URLs, standards, punctuation, and meaningful line breaks. Validate the
@@ -36,10 +39,10 @@ Resolve every unique image to `reviewed`, `localized`, or `retain` before `apply
 Run `scripts/excel_fast_pipeline.py finalize` once. Monolingual `apply` patches original OOXML text
 cells with an atomic ZIP writer and verifies its temporary output before replacement. All unrelated
 package parts remain byte-identical. Shared strings become per-cell inline strings when edited;
-original rich run properties are retained with translated characters distributed proportionally.
-For bilingual output, apply
-`bilingual-row-layout.md` only after the grid-safety classifier passes. Otherwise enter strict
-processing before creating an output.
+original rich run properties are retained. Superscripts that encode a unit need semantic alignment,
+not a random translated character assigned by run-length proportion.
+For bilingual output, apply `bilingual-row-layout.md` through the native grid writer. Resolve a
+specific unsupported reference/object rather than adding a second generic strict-processing gate.
 For monolingual output, estimate wrapped line count from final text and effective merged-cell width.
 Increase only affected row heights up to Excel's 409.5-point limit and clone wrapping styles only
 where needed. Preserve blank rows, hidden rows and vertically merged row heights. This estimate
@@ -59,7 +62,8 @@ changes word order, and source phonetic guides are removed only from edited stri
   Disclose their untranslated complex text by part name. Formula input strings remain unchanged with
   retained-cell counts and examples. Macro content and actual damage still block processing.
 
-Treat sub-2-point empty legacy shape fragments as decorative borders, not unsupported drawings.
+Preserve invisible empty legacy objects without treating their count or dimensions alone as
+unsupported meaningful drawings; inspect actual visibility/text/graphics semantics.
 Use Microsoft Excel COM to open source and output read-only, fully recalculate both, check
 worksheet/used-range access, and compare formula/value error cells. Reject new error cells introduced
 by translation; do not fail only because the source already contained the same error cells. Do not

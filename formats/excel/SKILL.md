@@ -1,85 +1,52 @@
 ---
 name: office-translate-pro-excel
-description: Use when translating monolingual or bilingual Excel workbooks (.xls or .xlsx), especially technical tables whose formulas, layout, images and editable structure must be preserved.
+description: Use when translating Excel .xls or .xlsx workbooks, including engineering equipment lists and bilingual tables whose formulas, units and editable structure must survive.
 ---
 
-# Professional Excel Translation
+# Excel pipeline
 
-Top-level routing is complete. Do not run the root Office router again or read another format adapter.
+Top-level routing is complete. Do not run the root Office router again.
+Follow the [shared workflow](../../references/translation-decisions.md) from the skill root.
+Use `prepare --output-mode bilingual` only when paired translation rows are requested;
+otherwise keep the normal monolingual cell layout.
 
-## Standard task
+## Translate the workbook, not only visible body cells
 
-From this adapter directory:
+Use cell/column context and the matched `../../references/水泥专业名词中英对照.md`.
+Translate every worksheet tab through the worklist, including hidden/empty sheets, and literal
+dropdown choices consistently with cell labels. Names must be unique, no more than 31 characters
+and free of Excel's forbidden characters. Native formula sheet qualifiers and defined names are
+updated for supported local references; calculation logic and values remain unchanged. Report an
+actual unsafe reference exception rather than silently leaving Chinese tabs.
 
-```text
-python ../../scripts/office_pipeline.py prepare <source> --job-dir <job> --target-language <language> --output-mode monolingual
-python ../../scripts/office_pipeline.py merge --job-dir <job> --decisions <batch.json>
-python ../../scripts/office_pipeline.py finalize --job-dir <job> --output <translated.xlsx>
-```
+Preserve numbers, units, signs, identifiers, number formats and meaningful line breaks. Keep square/
+cubic exponents readable as `m²`, `m³`, `cm²`, `Nm³`. Do not proportionally assign an unrelated part of
+a translated phrase to a source superscript run. Check the actual saved unit cells when rich-run
+formatting creates a display risk. A unit spelling correction is not permission to change dimensions.
 
-Use `--output-mode bilingual` for paired translation rows. Read
-[translation decisions](../../references/translation-decisions.md), then `translation-worklist.json` and
-`relevant-glossary.json`. Follow its batches, keeping `job_identity`, IDs and source strings intact.
-Fill `translation` in the supplied worklist and merge completed subsets. For a small batch, fill the
-default worklist and call finalize directly; it performs merge itself. When using explicit merge,
-continue to finalize only when its JSON says `ready: true`; exit code 0 alone does not mean ready.
-Repair only missing or invalid items from the refreshed worklist. Accepted work persists. Repeated
-prepare/finalize resumes work; use status only to recover uncertain or interrupted state.
+## Native preservation
 
-Existing jobs can still use `scripts/excel_fast_pipeline.py prepare` and
-`scripts/excel_fast_pipeline.py finalize`. Runtimes resolve from bundled dependencies; do not install
-packages or create runtime junctions per job. `stage-timings.json` measures pipeline commands, not
-end-to-end translation, image generation, model work or waiting. Use actual task/tool timestamps
-when investigating total latency; do not describe pipeline milliseconds as total task time.
+Monolingual writing patches original OOXML cells, expanding only affected rows when needed. Keep
+typed values, formula logic, merges, styles, charts, comments, drawings, relationships, media and
+unknown parts. Formula-controlled lookup labels may need retention; disclose the affected labels.
+Print ranges and filter databases are layout metadata, not a reason to freeze ordinary language.
+Invisible blank objects stay preserved and must not block cell translation merely because they exist.
+Meaningful unsupported object text is reported specifically, never silently discarded.
 
-## Translation and preservation
+For bilingual paired rows, read [row-layout details](references/bilingual-row-layout.md).
+Preserve original source rows/styles and blue translation rows; use supported reference rewriting.
+Do not flatten a sheet or silently substitute monolingual output for an unsupported bilingual layout.
 
-Use matched glossary terms with cell context and aliases, including reverse English lookup for
-Chinese targets. Preserve engineering meaning, numbers, units, models, identifiers and line breaks.
-Safe labels are prefilled; ambiguous terminology stays pending. Context-safe and parameter-label
-reuse reduce repeated translation. Do not translate individual formatting runs separately.
-Translate every worksheet tab name through the same worklist, including empty and hidden sheets.
-Use the requested target language and output mode for labels; keep names unique, at most 31
-characters, and free of Excel's forbidden characters. Verify the final tabs in Excel. If a tab
-cannot be renamed without damaging a formula or other reference, retain it with an explicit reason
-and report that exception; never silently omit tab labels.
+## Pictures and delivery
 
-Monolingual output patches original OOXML cells and expands only affected rows. Shared-string edits
-remain local to each cell, including rich text. Original formulas, typed values, styles, merges,
-charts, comments, drawings, media, relationships and unknown package parts are preserved. Unsupported
-complex-object text remains untranslated with explicit warnings. Formula-dependent source labels may
-be retained to preserve calculation; disclose this limitation rather than claiming complete translation.
-Literal A1 `INDIRECT`, fixed numeric `OFFSET`, whole-row/column ranges and shared formulas protect
-only their identified inputs. Print areas and print titles are layout metadata. An unresolved dynamic,
-structured or external formula reference reports the affected formula for repair; never mark all
-workbook text retained as a substitute for resolving it.
+If images exist, read [image writeback](references/image-text-localization.md) and the linked shared
+rule. Review each unique image once; reuse only inside the current job. A `localized` decision needs
+an absolute `replacement_path`; final validation checks actual embedded hashes and occurrences.
+Status alone does not prove image translation. Logo-only pictures retain their original bytes.
 
-Bilingual paired blue rows expand the original OOXML grid while retaining source cell styles,
-number formats, shared-formula calculations and sheet layout metadata. Read
-`references/bilingual-row-layout.md` for this mode. Unsupported objects and row-sensitive formulas
-need a supported layout choice; never silently discard objects or substitute monolingual output.
-
-## Images and delivery
-
-Read `references/image-text-localization.md` only when images exist. Two methods are accepted and
-selected per image by the shared rule: generative `image_edit`, and deterministic erase + refill
-(`../../scripts/inimage_erase_refill.py`) for technical line drawings whose linework must survive
-unchanged. Apply the shared accepted quality criteria. Review each unique image once;
-choose `reviewed`, `retain` or `localized`. Localization requires an absolute `replacement_path` to
-an edited PNG/JPEG that preserves aspect ratio without cropping and is not lower-resolution than the
-source, as defined by the shared rule. Start required image editing after reading
-its labels, then use asynchronous generation time to translate/review/merge cells. Do not leave the
-text batch untouched while repeatedly waiting for images. The writer replaces every matching part
-and verifies actual bytes; status alone is not translation. Disclose labels left untranslated.
-
-The source stays unchanged. `.xls` converts once to a working `.xlsx`. Corrupt, encrypted and
-macro-enabled containers remain unsupported; VBA is never enabled. External relationships are
-preserved without refresh, and native recalculation is skipped with a warning when external data
-would be evaluated.
-
-Finalize verifies coverage, typed values, formulas, merges, sheet order and untouched package parts.
-Ordinary native checking uses Microsoft Excel read-only with a bounded timeout. Missing Office or
-timeout allows the verified file with a warning; confirmed opening failures, new formula errors or
-content damage require repair. Accepted decisions survive repair. Deliver at `next_stage: deliver`.
-Do not rerun repository tests, export PDF or add an ordinary visual gate. Read pipeline references
-only for a concrete troubleshooting need.
+`.xls` converts once. External relationships stay intact without refresh. Finalize verifies coverage,
+typed values, formula logic/references, merges, sheet order and untouched package parts, followed by
+one bounded read-only Excel check when available. Missing Office/timeout follows the warning path;
+confirmed opening failures or new formula errors require repair. Publish only the verified candidate.
+Do not add routine PDF exports, repository tests or repeated full-sheet visual gates.
+`scripts/excel_fast_pipeline.py` remains the compatibility/diagnostic adapter, not another user entry.

@@ -52,39 +52,20 @@ class PowerPointOnlySkillContract(unittest.TestCase):
         self.assertIn("AutomationSecurity = 3", script)
         self.assertLess(script.index("AutomationSecurity = 3"), script.index("Presentations.Open"))
 
-    def test_embedded_image_translation_uses_only_three_fast_decisions(self):
-        skill = (ROOT / "SKILL.md").read_text(encoding="utf-8").lower()
-        image_rule = (ROOT / "references" / "image-text-localization.md").read_text(
-            encoding="utf-8"
-        ).lower()
-        overlay_rule = (ROOT / "references" / "overlay-schema.md").read_text(
-            encoding="utf-8"
-        ).lower()
-        manifest_rule = (ROOT / "references" / "manifest-schema.md").read_text(
-            encoding="utf-8"
-        ).lower()
-        cli_rule = (ROOT / "references" / "pipeline-cli.md").read_text(
-            encoding="utf-8"
-        ).lower()
-
-        for text in (skill, image_rule, manifest_rule, cli_rule):
-            self.assertIn("bilingual_below", text)
-            for decision in ("skip_target", "skip_unclear", "overlay"):
-                self.assertIn(decision, text)
-            for legacy in ("manual_review", "text_region_replace", "risk_plan"):
-                self.assertNotIn(legacy, text)
-        self.assertIn("bilingual_below", overlay_rule)
-        self.assertIn("preserve the original image", image_rule)
-        self.assertIn("immediately below", image_rule)
-        self.assertIn("single-pass", image_rule)
-        self.assertIn("do not retry", image_rule)
-        self.assertIn("powerpoint embedded images only", skill)
-        self.assertIn("all readable source labels", image_rule)
-        self.assertIn("partial target-language text does not skip the whole image", image_rule)
-        self.assertIn("small but readable", image_rule)
-        self.assertIn("selectable or copyable", image_rule)
-        self.assertIn("embedded object", image_rule)
-        self.assertIn("preview image", image_rule)
+    def test_image_decisions_do_not_accept_retired_native_overlays(self):
+        import sys
+        sys.path.insert(0, str(ROOT.parents[1] / 'scripts'))
+        from translation_assets import merge_assets, pending_assets
+        digest = 'a' * 64
+        manifest = {'image_groups':[{'sha256':digest, 'decision':'pending', 'overlay_ids':[]}],
+                    'overlays':[]}
+        rejected = merge_assets(manifest, [{'id':digest, 'decision':'overlay'}], 'ppt')
+        self.assertTrue(rejected)
+        self.assertEqual(len(pending_assets(manifest, 'ppt')), 1)
+        accepted = merge_assets(manifest, [{'id':digest, 'decision':'skip_target',
+                                            'reason':'Logo-only artwork'}], 'ppt')
+        self.assertEqual(accepted, [])
+        self.assertEqual(pending_assets(manifest, 'ppt'), [])
 
     def test_workflow_has_one_route_and_no_risk_tiers(self):
         text = "\n".join(

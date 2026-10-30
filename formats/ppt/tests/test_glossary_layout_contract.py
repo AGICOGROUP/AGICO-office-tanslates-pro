@@ -9,13 +9,16 @@ LAYOUT = ROOT / "references" / "typography-and-fit.md"
 
 
 class GlossaryAndLayoutContractTests(unittest.TestCase):
-    def test_skill_requires_supplied_translation_before_model_preference(self):
-        skill = (ROOT / "SKILL.md").read_text(encoding="utf-8").lower()
-        self.assertIn("../../references/水泥专业名词中英对照.md", skill)
-        self.assertIn("relevant", skill)
-        self.assertIn("exact", skill)
-        self.assertIn("longest", skill)
-        self.assertIn("before model", skill)
+    def test_native_adapter_resolves_the_shared_glossary(self):
+        import json, subprocess, sys
+        result = subprocess.run([sys.executable, str(ROOT / 'scripts/resolve_repo_glossary.py'),
+                                 '--text', '水泥磨'],
+                                capture_output=True, text=True, encoding='utf-8')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = json.loads(result.stdout)
+        self.assertEqual(Path(report['path']).resolve(),
+                         (ROOT.parents[1] / 'references/水泥专业名词中英对照.md').resolve())
+        self.assertTrue(any(item['source'] == '水泥磨' for item in report['matched_entries']))
 
     def test_peer_heading_and_body_typography_is_consistent(self):
         self.assertTrue(LAYOUT.is_file(), "typography/layout contract must be bundled")

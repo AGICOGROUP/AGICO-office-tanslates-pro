@@ -5,7 +5,7 @@ import re
 import unicodedata
 
 PROTECTED_TOKEN = re.compile(
-    r"https?://\S+|www\.\S+|\b\d+(?:[.,]\d+)?\s*(?:%|°C|℃|kW|MW|V|kV|A|mA|Pa|kPa|MPa|"
+    r"https?://\S+|www\.\S+|(?<![\w.])\d+(?:[.,]\d+)?\s*(?:%|°C|℃|kW|MW|V|kV|A|mA|Pa|kPa|MPa|"
     r"mm|cm|m|km|kg|t|t/h|m[³3]/h|Nm[³3]/min|rpm|r/min)(?![A-Za-z0-9])|\b[A-Z][A-Z0-9._/-]*\d[A-Z0-9._/-]*\b",
     re.IGNORECASE,
 )
@@ -13,6 +13,11 @@ PROTECTED_TOKEN = re.compile(
 
 def technical_mismatch(source: str, target: str, protected_tokens=()) -> bool:
     return _technical_mismatch(source, target, tuple(protected_tokens))
+
+
+def sheet_name_mismatch(source: str, target: str) -> bool:
+    """Sheet labels may resemble model codes; preserve their numeric identifiers only."""
+    return Counter(re.findall(r"\d+(?:[.,]\d+)?", source)) - Counter(re.findall(r"\d+(?:[.,]\d+)?", target)) != Counter()
 
 
 @lru_cache(maxsize=4096)
@@ -28,6 +33,12 @@ def _technical_mismatch(source: str, target: str, protected_tokens: tuple) -> bo
         pattern = re.sub(r"(?<=\d)(?=[A-Za-z%°])", lambda _: r"\s*", pattern)
         left = r"(?<![A-Za-z0-9_])" if normalized_token[:1].isascii() and normalized_token[:1].isalnum() else ""
         right = r"(?![A-Za-z0-9_])" if normalized_token[-1:].isascii() and normalized_token[-1:].isalnum() else ""
+        # Older extraction can capture 96m from 96m². The complete area/volume
+        # quantity was already checked by parameter_mismatch; do not require
+        # its truncated length prefix to stand alone after NFKC normalization.
+        if (re.fullmatch(r"\d+(?:\.\d+)?\s*(?:[kcm]?m|Nm)", normalized_token, re.I)
+                and re.search(left + pattern + r"[²³]", source, re.I)):
+            continue
         if not re.search(left + pattern + right, normalized_target):
             return True
     return False
@@ -41,7 +52,9 @@ def normalize_protected_tokens(tokens: list[str]) -> set[str]:
 
 
 def canonical_parameters(text: str) -> str:
-    text = unicodedata.normalize("NFKC", text).replace("℃", "°C").replace("−", "-")
+    # NFKC turns №7 into No7, which looks like a model identifier. Keep a
+    # document-number boundary while leaving genuine source codes No7 intact.
+    text = unicodedata.normalize("NFKC", text.replace('№', 'No. ')).replace("℃", "°C").replace("−", "-")
     text = re.sub(r"\b(Annexure|Appendix|Attachment)-(?=\d)", r"\1 ", text, flags=re.IGNORECASE)
     # Repair a missing space in prose followed by a complete voltage quantity.
     # Do not split arbitrary letter/digit identifiers (ab123, To6.3X, etc.).
@@ -77,17 +90,21 @@ def parameter_mismatch(source: str, target: str) -> bool:
         return True
     # Prefer a complete unit expression over the legacy regex's shorter match.
     technical = re.compile(
-        r"\d+(?:[.,]\d+)?\s*"
+        r"(?<![\w.])\d+(?:[.,]\d+)?\s*"
         r"(?:[mMk]?W|[mMk]?Pa|[kM]?V|mA|A|[kcm]?m|kg|t|kcal|mg|Nm|%|°C|Hz|rpm|r/min)"
         r"(?:[23])?(?:\s*/\s*(?:[kcm]?m[23]?|kg|h|d|min|s))?(?![A-Za-z0-9])"
         r"|" + PROTECTED_TOKEN.pattern,
         re.IGNORECASE,
     )
     source = re.sub(r"[\u3400-\u9fff]", " ", source)
+    source = re.sub(r"\bw/o\b", "without", source, flags=re.IGNORECASE)
     expected = Counter(next(iter(normalize_protected_tokens([match.group()])))
                        for match in technical.finditer(source))
     # Normalize only the documented legacy spelling, not SI prefixes or models.
     target = re.sub(r"(?<=\d)\s*Kv\b", " kV", target)
+    # Compare decimal commas consistently with normalize_protected_tokens;
+    # canonical_parameters has already handled thousands separators.
+    target = re.sub(r"(?<=\d),(?=\d)", ".", target)
     for token, count in expected.items():
         left = r"(?<![A-Za-z0-9.])" if token[:1].isdigit() else r"(?<![A-Za-z])"
         pattern = re.escape(token).replace("/", r"\s*/\s*")

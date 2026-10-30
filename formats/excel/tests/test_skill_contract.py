@@ -30,16 +30,14 @@ class ExcelSkillContractTests(unittest.TestCase):
         missing = sorted(path for path in required if not (ROOT / path).is_file())
         self.assertEqual([], missing)
 
-    def test_skill_uses_compact_one_command_prepare_and_finalize_flow(self):
-        skill = (ROOT / "SKILL.md").read_text(encoding="utf-8")
-        for token in (
-            "excel_fast_pipeline.py prepare",
-            "translation-worklist.json",
-            "excel_fast_pipeline.py finalize",
-            "stage-timings.json",
-        ):
-            self.assertIn(token, skill)
-        self.assertNotIn("Read these files completely before execution", skill)
+    def test_shared_batch_entry_is_executable(self):
+        import sys
+        entry = ROOT.parents[1] / 'scripts' / 'office_pipeline.py'
+        result = subprocess.run([sys.executable, str(entry), '--help'],
+                                capture_output=True, text=True, encoding='utf-8')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        for command in ('prepare', 'batch', 'merge', 'finalize', 'status'):
+            self.assertIn(command, result.stdout)
 
     def test_com_verifier_opens_recalculates_and_scans_without_exporting_pdf(self):
         script = (ROOT / "scripts" / "excel_com_verify.ps1").read_text(encoding="utf-8")
@@ -77,19 +75,13 @@ class ExcelSkillContractTests(unittest.TestCase):
             self.assertIn(token, script)
         self.assertLess(script.index("AutomationSecurity = 3"), script.index("Workbooks.Open"))
 
-    def test_standard_flow_has_no_baseline_or_final_visual_render_gate(self):
-        skill = (ROOT / "SKILL.md").read_text(encoding="utf-8")
-        workflow = (ROOT / "references" / "excel-workflow.md").read_text(encoding="utf-8")
-        combined = (skill + "\n" + workflow).casefold()
-        for phrase in (
-            "do not render a source baseline",
-            "new error cells",
-            "explicitly requests",
-            "only missing or invalid items",
-        ):
-            self.assertIn(phrase, combined)
-        self.assertNotIn("visual-review", combined)
-        self.assertNotIn("visual-review", (ROOT / "references" / "pipeline-cli.md").read_text(encoding="utf-8"))
+    def test_native_adapter_remains_available_behind_shared_entry(self):
+        import sys
+        result = subprocess.run([sys.executable, str(ROOT / 'scripts/excel_fast_pipeline.py'), '--help'],
+                                capture_output=True, text=True, encoding='utf-8')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('prepare', result.stdout)
+        self.assertIn('finalize', result.stdout)
 
     def test_skill_routes_every_job_through_risk_driven_resumable_pipeline(self):
         skill = (ROOT / "SKILL.md").read_text(encoding="utf-8")
@@ -115,28 +107,13 @@ class ExcelSkillContractTests(unittest.TestCase):
         ):
             self.assertNotIn(obsolete, combined)
 
-    def test_skill_is_excel_only_and_complete(self):
-        skill = (ROOT / "SKILL.md").read_text(encoding="utf-8")
-        required = [
-            "office-translate-pro-excel",
-            "office_pipeline.py prepare",
-            ".xls",
-            ".xlsx",
-            "macro-enabled containers remain unsupported",
-            "relevant-glossary.json",
-            "job_identity",
-            "office_pipeline.py merge",
-            "office_pipeline.py finalize",
-            "formula",
-            "image",
-            "Microsoft Excel read-only",
-        ]
-        missing = [token for token in required if token not in skill]
-        self.assertEqual([], missing)
-        self.assertNotIn("../../references/水泥专业名词中英对照.md", skill)
-        self.assertNotIn("final-renders", skill)
-        self.assertNotIn("skip-render", skill)
-        self.assertNotIn("exports required sheets to\n   PDF", skill)
+    def test_skill_links_resolve_in_the_installed_layout(self):
+        import re
+        skill = (ROOT / 'SKILL.md').read_text(encoding='utf-8')
+        self.assertIn('name: office-translate-pro-excel', skill)
+        for link in re.findall(r'\]\(([^)]+)\)', skill):
+            with self.subTest(link=link):
+                self.assertTrue((ROOT / link).resolve().is_file())
 
     def test_bilingual_excel_defaults_to_paired_blue_translation_rows(self):
         skill = (ROOT / "SKILL.md").read_text(encoding="utf-8")
