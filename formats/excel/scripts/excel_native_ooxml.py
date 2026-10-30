@@ -402,8 +402,14 @@ def apply_validation_lists(package, expected):
 
 
 def metric_exponents(text):
-    return re.sub(r'(?:(?<=\d)|(?<=/))(N?m|cm|mm)([23])\b',
-                  lambda match: match[1] + {'2': '²', '3': '³'}[match[2]], text)
+    # Require a complete quantity boundary; a suffix inside X30m3, 30m3-A or
+    # MODEL/Nm3 is an identifier, not evidence of an area/volume unit.
+    replace = lambda match: match[1] + {'2': '²', '3': '³'}[match[2]]
+    text = re.sub(
+        r'(?<![A-Za-z0-9_./-])(\d+(?:[.,]\d+)?(?:\s*[-–~]\s*\d+(?:[.,]\d+)?)?\s*'
+        r'(?:(?:kg|mg|g|t|kN|N)\s*/\s*)?'
+        r'(?:Nm|mm|cm|m))([23])(?![A-Za-z0-9_.-])', replace, text)
+    return re.sub(r'\A(\s*(?:Nm|mm|cm|m))([23])(?=(?:/(?:h|min|s))?\s*\Z)', replace, text)
 
 
 def rename_formula_references(text, renames):
