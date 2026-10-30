@@ -11,8 +11,20 @@ This adapter does not depend on another Office translation skill. Follow the
 
 ## Word-specific behavior
 
-Preserve the document formatting; pagination may change. Keep styles, tables, sections,
-headers/footers, editable objects and relationships. Translation-driven reflow is not damage.
+Preserve the document formatting; pagination may change. When translated text expands (for example,
+Chinese into English), allow natural line wrapping, paragraph growth and flow onto following pages.
+Page breaks, the total number of pages and the pages on which content appears may therefore change;
+these translation-driven changes alone are not formatting damage or a delivery failure.
+
+Keep the original formatting properties: styles, font formatting and sizes, alignment, indentation,
+line/paragraph spacing, numbering, table structure/column widths/borders, paper size/orientation,
+margins, sections, headers/footers, and image sizes/anchors. Preserve explicit page/section breaks,
+editable objects and relationships; allow Word's automatic pagination to reflow around them.
+Retain page-number and contents fields, their numbering rules and styling; their displayed values
+may update to follow the new pagination. Do not replace those fields with fixed original numbers.
+Do not reduce fonts or spacing, change margins/table widths, move objects or shorten away meaning
+to force the translation back into the original pagination. Actual clipping, overlap or missing
+content still needs a targeted resolution; additional pages alone do not.
 Never overwrite the original. Microsoft Word converts legacy `.doc` once to a working `.docx`.
 
 Read complete paragraphs and their neighboring/style context, not separate runs. Keep protected tokens,
