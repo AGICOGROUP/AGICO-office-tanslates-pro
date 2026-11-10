@@ -1,14 +1,19 @@
 # Embedded-image handling
 
 This reference applies to pictures inside Office files, not standalone image translation.
-Inspect each unique source image once. Translate readable labels with the current model and the
-same engineering terminology as the native text. Follow the user's image-language and bilingual/
-replacement choice. Keep the original label locations: a separate legend is not image translation.
+Inspect each unique source image once. Use the current model and the same
+engineering terminology as the native text. Follow the user's image-language
+and bilingual/replacement choice. Edit readable text in place with the available
+image editing tool, keeping its original location. A separate legend is not
+image translation.
 
 ## Classify once
 
-- Logo-only/wordmark, photograph with no document text, or labels already in the requested mode:
-  retain the original bytes with a specific reason. Do not regenerate branding.
+- Real photographs (including sites, buildings, equipment, and people), logo-only
+  images, and labels already in the requested mode: retain the original bytes
+  with a specific reason. Keep lettering, banners, and nameplates within photos
+  as captured. In a document or composite graphic, localize the surrounding
+  printed text and keep any embedded photograph intact.
 - Readable document labels: localize them, preserving equipment identity/counts, topology,
   arrows, values, identifiers, logos, aspect ratio and placement.
 - Genuinely illegible text or an unsupported host: identify the affected image/labels precisely.

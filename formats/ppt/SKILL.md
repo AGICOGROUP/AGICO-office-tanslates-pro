@@ -8,17 +8,43 @@ description: Use when translating PowerPoint .ppt or .pptx presentations while p
 Top-level routing is complete. Do not run the root Office router again.
 Follow the [shared workflow](../../references/translation-decisions.md) from the skill root.
 
+## Choose the delivery mode
+
+For bilingual PowerPoint, deliver one presentation in source/target pairs:
+A1, B1, A2, B2, through the last slide. Each A slide is the source page,
+and each B slide is its target-language counterpart. Keep a pair even for
+photo-only or already bilingual slides. On B, reuse correct target wording
+and complete missing target text. Keep terminology consistent across native
+text and images.
+
+Prepare and finalize a one-to-one target deck with the shared PPT workflow
+(default mode). Then pair it with the prepared source .pptx:
+
+```text
+python formats/ppt/scripts/pair_slides.py <prepared-source.pptx> <verified-target.pptx> <private-paired.pptx>
+```
+
+This uses Microsoft PowerPoint, verifies the pair order and embedded picture
+bytes, and reopens the candidate. Use the working .pptx for legacy .ppt inputs.
+If PowerPoint is unavailable or pairing fails, keep the verified target deck,
+diagnose the failure, and report the bilingual deliverable as pending. Render
+the paired candidate and inspect A/B order, slide dimensions, and visual
+fidelity before publishing. The Excel bilingual flag does not select this mode.
+
 ## Translate within the slide design
 
 Translate complete paragraphs and table cells in context with the matched
 `../../references/水泥专业名词中英对照.md`. Preserve technical values, meaningful line breaks,
 shape geometry, themes, relationships, animations and boundary spaces. Prefer concise, natural
 target language that fits the available shape; do not summarize away meaning to force a fit.
-Remove unsafe inherited negative Latin spacing before changing font size or geometry.
+Reset inherited character or paragraph spacing when it causes letter gaps
+or overlapping lines. Repair wrapping within the slide and check the rendered
+result before changing geometry.
 
 For embedded images, read [image writeback](references/image-text-localization.md) and its shared
-rule. Translate labels at their original positions, preserve the picture extent/crop/rotation,
-and verify actual replacement bytes. External legends and text-box covers do not translate an image.
+rule. Translate readable embedded text with an image editing tool in its
+original position on B. Preserve artwork and check the actual replacement
+bytes. Keep real photographs unchanged, including signage and lettering.
 
 Charts, SmartArt, notes, master/layout text and embedded objects without a supported translator stay
 preserved with specific warnings. Do not translate an embedded object's preview instead of its native

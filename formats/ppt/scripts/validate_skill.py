@@ -23,6 +23,8 @@ REQUIRED = (
     "references/overlay-schema.md",
     "scripts/ppt_com.ps1",
     "scripts/ppt_pipeline.py",
+    "scripts/pair_slides.py",
+    "scripts/pair_slides.ps1",
     "scripts/inspect_pptx_package.py",
     "scripts/pptx_ooxml.py",
     "scripts/validate_manifest.py",

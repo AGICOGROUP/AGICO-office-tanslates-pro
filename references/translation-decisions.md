@@ -12,6 +12,9 @@ python scripts/office_pipeline.py finalize --job-dir <job> --output <translated-
 
 ## Prepare once, read a bounded batch
 
+For bilingual PPT, follow the [paired-slide procedure](../formats/ppt/SKILL.md#choose-the-delivery-mode)
+after producing the verified target deck.
+
 Choose a new job directory for a different source, target language, or fresh test. Preparation
 extracts native content, conversion when needed, location/context, protected values, unique images
 and matched terminology. Existing jobs resume; they are not fresh tests. `.doc`, `.xls` and `.ppt`
