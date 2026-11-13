@@ -20,6 +20,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 from lxml import etree
 
 from analyze_docx import analyze, PROTECTED_TOKEN
+from docx_text import content_nodes as local_content_nodes, paragraph_text, node_texts, FIELD_TAGS
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
 from glossary import lookup_terms
 from translation_quality import canonical_parameters, normalize_protected_tokens, parameter_mismatch
@@ -38,29 +39,6 @@ TEXT_PARTS = ("word/document.xml", "word/header", "word/footer", "word/footnotes
 
 def is_text_part(name: str) -> bool:
     return name in TEXT_PARTS or name.startswith(("word/header", "word/footer")) and name.endswith(".xml")
-
-
-def local_content_nodes(paragraph: etree._Element) -> list[etree._Element]:
-    allowed = {W_T, W_TAB, *W_BREAKS}
-    return [
-        node for node in paragraph.iter()
-        if node.tag in allowed
-        and next((ancestor for ancestor in node.iterancestors() if ancestor.tag == W_P), None) is paragraph
-    ]
-
-
-def paragraph_text(paragraph: etree._Element) -> str:
-    if paragraph.tag == f"{{{W_NS}}}lvlText":
-        return paragraph.get(f"{{{W_NS}}}val", "")
-    pieces = []
-    for node in local_content_nodes(paragraph):
-        if node.tag == W_T:
-            pieces.append(node.text or "")
-        elif node.tag == W_TAB:
-            pieces.append("\t")
-        else:
-            pieces.append("\n")
-    return "".join(pieces).strip()
 
 
 def set_text_node(node: etree._Element, value: str) -> None:
@@ -104,13 +82,15 @@ def replace_paragraph_text(paragraph: etree._Element, source: str, target: str) 
             number_format.set(f"{{{W_NS}}}val", 'decimal')
         return
     nodes = local_content_nodes(paragraph)
-    text_indexes = [index for index, node in enumerate(nodes) if node.tag == W_T and (node.text or "").strip()]
+    text_indexes = [index for index, node in enumerate(nodes) if node.tag in FIELD_TAGS or node.tag == W_T and (node.text or "").strip()]
     if not text_indexes:
         raise ValueError("paragraph has no writable text node")
     # paragraph_text() strips boundary whitespace; keep boundary tabs/breaks untouched too.
     active_nodes = nodes[text_indexes[0]:text_indexes[-1] + 1]
-    separators = ["\t" if node.tag == W_TAB else "\n" for node in active_nodes if node.tag != W_T]
-    target_parts = re.split(r"(\t|\n)", target)
+    separators = [value for node, value in zip(active_nodes, node_texts(active_nodes)) if node.tag != W_T]
+    separator_pattern = r"(\t|\n|\{\{FIELD\d+\}\})" if any(
+        node.tag in FIELD_TAGS for node in active_nodes) else r"(\t|\n)"
+    target_parts = re.split(separator_pattern, target)
     target_separators = target_parts[1::2]
     if target_separators != separators:
         raise ValueError("translation changed protected tab or line-break structure")

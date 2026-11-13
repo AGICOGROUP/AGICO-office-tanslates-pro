@@ -202,6 +202,59 @@ class NativeWorkbookTests(unittest.TestCase):
         report = self.run_native("inspect")
         self.assertEqual({c["address"] for c in report["occurrences"] if c["formula_dependency"]}, {"A2"})
 
+    def test_unused_legacy_print_area_alias_does_not_freeze_labels(self):
+        parts = fixture(self.source)
+        parts["xl/workbook.xml"] = parts["xl/workbook.xml"].replace(
+            '</workbook>', '<definedNames><definedName name="_xlnm.Print_Area">Plant!$A$1:$C$3</definedName>'
+            '<definedName name="Print_Area_MI">Plant!$A$1:$C$3</definedName></definedNames></workbook>')
+        with ZipFile(self.source, "w", ZIP_DEFLATED) as archive:
+            for name, content in parts.items():
+                archive.writestr(name, content)
+        report = self.run_native("inspect")
+        self.assertEqual({c["address"] for c in report["occurrences"] if c["formula_dependency"]}, {"A2"})
+
+    def test_used_legacy_print_area_alias_still_protects_inputs(self):
+        parts = fixture(self.source)
+        parts["xl/workbook.xml"] = parts["xl/workbook.xml"].replace(
+            '</workbook>', '<definedNames><definedName name="_xlnm.Print_Area">Plant!$A$1:$C$3</definedName>'
+            '<definedName name="Print_Area_MI">Plant!$A$1:$C$3</definedName></definedNames></workbook>')
+        parts["xl/worksheets/sheet1.xml"] = parts["xl/worksheets/sheet1.xml"].replace(
+            'COUNTIF(A2,"运行")', 'SUM(Print_Area_MI)')
+        with ZipFile(self.source, "w", ZIP_DEFLATED) as archive:
+            for name, content in parts.items():
+                archive.writestr(name, content)
+        report = self.run_native("inspect")
+        self.assertEqual({c["address"] for c in report["occurrences"] if c["formula_dependency"]},
+                         {"A1", "B1", "A2", "A3"})
+
+    def test_drawing_labels_and_footer_translate_without_geometry_changes(self):
+        parts = fixture(self.source)
+        parts["xl/drawings/drawing1.xml"] = (
+            '<a:p xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">'
+            '<a:r><a:rPr sz="1200"/><a:t>Dust Collector</a:t></a:r></a:p>')
+        parts["xl/worksheets/sheet1.xml"] = parts["xl/worksheets/sheet1.xml"].replace(
+            "</worksheet>", '<headerFooter><oddFooter>&amp;CPrepared by AKI &amp;D</oddFooter></headerFooter></worksheet>')
+        with ZipFile(self.source, "w", ZIP_DEFLATED) as archive:
+            for name, content in parts.items():
+                archive.writestr(name, content)
+        report = self.run_native("inspect")
+        extras = [o for o in report["occurrences"] if o["kind"] == "object_text"]
+        self.assertEqual(len(extras), 2)
+        for index, item in enumerate(extras):
+            identity = "object-" + str(index)
+            item["translation_unit_id"] = identity
+            self.data["occurrences"].append(item)
+            self.data["translation_units"].append({
+                "id": identity, "source": item["source"], "status": "translated",
+                "translation": "除尘器" if item["source"] == "Dust Collector" else "&C编制：AKI &D"})
+        self.manifest.write_text(json.dumps(self.data, ensure_ascii=False), encoding="utf-8")
+        self.run_native("apply")
+        self.assertTrue(self.run_native("verify")["passed"])
+        with ZipFile(self.output) as archive:
+            drawing = ET.fromstring(archive.read("xl/drawings/drawing1.xml"))
+            self.assertEqual(drawing.find(".//{*}t").text, "除尘器")
+            self.assertEqual(drawing.find(".//{*}rPr").get("sz"), "1200")
+
     def test_static_offset_and_whole_ranges_are_bounded(self):
         for formula, expected in [('SUM(OFFSET(B1,0,1))', {"B1", "C1"}),
                                   ('SUM(C:C)', {"C1"}), ('SUM(3:3)', {"A3"})]:

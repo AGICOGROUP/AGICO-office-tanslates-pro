@@ -100,13 +100,44 @@ class Package:
                 formula = cell.find(Q("f"))
                 if formula is not None:
                     self.formulas.append((name, formula.text or ""))
-        # Defined names, validations and conditional formatting can also consume strings.
-        self.formulas.extend((None, node.text or "") for node in workbook.findall(f"{Q('definedNames')}/{Q('definedName')}")
-                             if node.get("name") not in {"_xlnm.Print_Area", "_xlnm.Print_Titles", "_xlnm._FilterDatabase"})
         for sheet in self.sheets:
             for node in sheet["root"].iter():
                 if isinstance(node.tag, str) and ET.QName(node).localname in {"formula", "formula1", "formula2"}:
                     self.formulas.append((sheet["name"], node.text or ""))
+        # Defined names, validations and conditional formatting can also consume strings.
+        defined_names = workbook.findall(f"{Q('definedNames')}/{Q('definedName')}")
+        print_areas = {node.text for node in defined_names if node.get("name") == "_xlnm.Print_Area"}
+        print_alias_pattern = re.compile(r"(?<![\w.])print_area_mi(?![\w.])", re.I)
+        print_alias_used = (any(print_alias_pattern.search(formula) for _, formula in self.formulas)
+                            or any(print_alias_pattern.search(node.text or "") for node in defined_names))
+        for node in defined_names:
+            name = node.get("name", "")
+            if name in {"_xlnm.Print_Area", "_xlnm.Print_Titles", "_xlnm._FilterDatabase"}:
+                continue
+            # Legacy Excel exports duplicate print ranges under this name.
+            # Exempt only identical, unused aliases. A formula consuming the
+            # alias still requires protection of the referenced input cells.
+            if (name.casefold() == "print_area_mi" and node.text in print_areas
+                    and not print_alias_used):
+                continue
+            self.formulas.append((None, node.text or ""))
+        self.extra_roots = {}
+        self.extra_nodes = {}
+        for part, data in self.data.items():
+            if part.startswith("xl/drawings/") and part.endswith(".xml"):
+                root = xml(data)
+                nodes = root.findall(".//{http://schemas.openxmlformats.org/drawingml/2006/main}t")
+            elif part.startswith("xl/worksheets/") and part.endswith(".xml"):
+                root = next((s["root"] for s in self.sheets if s["part"] == part), None)
+                nodes = [] if root is None else [n for n in root.iter() if n.tag in {
+                    Q("oddHeader"), Q("oddFooter"), Q("evenHeader"), Q("evenFooter"),
+                    Q("firstHeader"), Q("firstFooter")}]
+            else:
+                continue
+            for index, node in enumerate(nodes):
+                if node.text and node.text.strip():
+                    self.extra_roots[part] = root
+                    self.extra_nodes[(part, f"@text:{index}")] = node
         self.validation_lists = {}
         for sheet in self.sheets:
             for index, validation in enumerate(sheet["root"].findall(f"{Q('dataValidations')}/{Q('dataValidation')}")):
@@ -265,13 +296,15 @@ def operational_cells(package):
 
 
 def preservation_warnings(package):
-    prefixes = ("xl/charts/", "xl/comments", "xl/threadedComments/", "xl/drawings/", "xl/externalLinks/", "xl/tables/", "customXml/")
+    prefixes = ("xl/charts/", "xl/comments", "xl/threadedComments/", "xl/externalLinks/", "xl/tables/", "customXml/")
     warnings = [f"Preserved without translating complex content: {name}" for name in package.data
                 if name.startswith(prefixes) and name.endswith(".xml")]
-    for sheet in package.sheets:
-        if any(isinstance(node.tag, str) and ET.QName(node).localname in {"oddHeader", "oddFooter", "evenHeader", "evenFooter", "firstHeader", "firstFooter"}
-               and (node.text or "").strip() for node in sheet["root"].iter()):
-            warnings.append(f"Preserved without translating header/footer: {sheet['part']}")
+    for name, data in package.data.items():
+        if name.startswith("xl/drawings/") and name.endswith(".xml"):
+            if any(node.tag != "{http://schemas.openxmlformats.org/drawingml/2006/main}t"
+                   and node.text and re.search(r"[A-Za-z\u3400-\u9fff]", node.text)
+                   for node in xml(data).iter()):
+                warnings.append(f"Preserved unsupported drawing text: {name}")
     return warnings
 
 
@@ -313,6 +346,10 @@ def inspect(source):
         occurrences.append({"id": f"{name}!{address}", "kind": "validation_list", "sheet": name,
                             "address": address, "source": node.text[1:-1].replace('""', '"'),
                             "context_key": "validation:list", "formula_dependency": False})
+    for (part, address), node in package.extra_nodes.items():
+        occurrences.append({"id": f"{part}!{address}", "kind": "object_text", "sheet": part,
+                            "address": address, "source": node.text, "context_key": "object:text",
+                            "formula_dependency": False})
     return {"sheets": sheets, "occurrences": occurrences, "warnings": warnings, "external_data": external_data}
 
 
@@ -323,6 +360,23 @@ def decisions(package, manifest):
     expected = {}
     operational = operational_cells(package)
     for occurrence in manifest.get("occurrences", []):
+        if occurrence.get("kind") == "object_text":
+            key = (occurrence["sheet"], occurrence["address"])
+            node = package.extra_nodes.get(key)
+            unit = units[occurrence["translation_unit_id"]]
+            target = unit.get("translation")
+            if (node is None or node.text != occurrence["source"] or key in expected
+                    or unit.get("status") not in {"translated", "retain"}
+                    or not isinstance(target, str) or not target.strip()
+                    or unit.get("status") == "retain" and target != node.text
+                    or technical_mismatch(node.text, target, occurrence.get("protected_tokens", []))):
+                raise ValueError(f"invalid object text translation: {key}")
+            if "Header" in node.tag or "Footer" in node.tag:
+                controls = r'&(?:"[^"]*"|[A-Za-z]|[0-9]+|&|[+-])'
+                if re.findall(controls, node.text) != re.findall(controls, target):
+                    raise ValueError(f"header/footer controls changed: {key}")
+            expected[key] = target
+            continue
         if occurrence.get("kind") == "validation_list":
             key = (occurrence["sheet"], occurrence["address"])
             node = package.validation_lists.get(key)
@@ -384,6 +438,7 @@ def decisions(package, manifest):
             raise ValueError(f"protected-token-change: {key}")
         expected[key] = target
     missing = [key for key, cell in package.cells.items() if (package.text(cell) or "").strip() and key not in expected]
+    missing.extend(key for key in package.extra_nodes if key not in expected)
     if missing:
         raise ValueError(f"manifest coverage missing cells: {missing[:10]}")
     return expected
@@ -655,6 +710,18 @@ def verify(source, output, manifest):
             errors.append("sheet-name-change")
     if changed:
         allowed_parts.add("xl/styles.xml")
+    for part, root in before.extra_roots.items():
+        desired = deepcopy(root)
+        touched = False
+        for key, node in before.extra_nodes.items():
+            if key[0] == part and key in expected:
+                path = root.getroottree().getpath(node)
+                desired.xpath(path, namespaces={k: v for k, v in root.nsmap.items() if k})[0].text = expected[key]
+                touched |= expected[key] != node.text
+        if touched:
+            allowed_parts.add(part)
+        if part.startswith("xl/drawings/") and canonical(desired) != canonical(after.extra_roots[part]):
+            errors.append(f"object-text-change:{part}")
     localized = {item["sha256"]: item.get("replacement_sha256") for item in manifest.get("images", []) if item.get("status") == "localized"}
     for part, data in before.data.items():
         actual = after.data.get(part)
@@ -756,6 +823,10 @@ def verify(source, output, manifest):
             key = (sheet["name"], f"@validation:{index}")
             if key in expected:
                 node.find(Q("formula1")).text = '"' + expected[key].replace('"', '""') + '"'
+        for key, node in before.extra_nodes.items():
+            if key[0] == sheet["part"] and key in expected:
+                path = sheet["root"].getroottree().getpath(node)
+                a.xpath(path, namespaces={k: v for k, v in a.nsmap.items() if k})[0].text = expected[key]
         source_merges = [node.get("ref") for node in a.findall(f"{Q('mergeCells')}/{Q('mergeCell')}")]
         output_merges = [node.get("ref") for node in b.findall(f"{Q('mergeCells')}/{Q('mergeCell')}")]
         if source_merges != output_merges:
@@ -832,6 +903,10 @@ def apply(source, output, manifest):
         patches["xl/workbook.xml"] = renamed_workbook(package, renames)
     if styles_changed:
         patches["xl/styles.xml"] = serialize(package.styles)
+    for key, node in package.extra_nodes.items():
+        if key in expected and expected[key] != node.text:
+            node.text = expected[key]
+            patches[key[0]] = serialize(package.extra_roots[key[0]])
     output.parent.mkdir(parents=True, exist_ok=True)
     descriptor, name = tempfile.mkstemp(prefix=".excel-native-", suffix=output.suffix, dir=output.parent)
     os.close(descriptor)

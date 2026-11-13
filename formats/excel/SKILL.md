@@ -31,6 +31,8 @@ typed values, formula logic, merges, styles, charts, comments, drawings, relatio
 unknown parts. Formula-controlled lookup labels may need retention; disclose the affected labels.
 Print ranges and filter databases are layout metadata, not a reason to freeze ordinary language.
 Invisible blank objects stay preserved and must not block cell translation merely because they exist.
+Native DrawingML text labels and printed headers/footers participate in the worklist and verified
+writeback. Preserve header/footer control codes such as `&P`, `&D`, `&F` and font commands exactly.
 Meaningful unsupported object text is reported specifically, never silently discarded.
 
 For bilingual paired rows, read [row-layout details](references/bilingual-row-layout.md).

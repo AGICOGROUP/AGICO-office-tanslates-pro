@@ -20,7 +20,8 @@ Keep the original formatting properties: styles, font formatting and sizes, alig
 line/paragraph spacing, numbering, table structure/column widths/borders, paper size/orientation,
 margins, sections, headers/footers, and image sizes/anchors. Preserve explicit page/section breaks,
 editable objects and relationships; allow Word's automatic pagination to reflow around them.
-Retain page-number and contents fields, their numbering rules and styling; their displayed values
+Keep each `{{FIELD1}}`-style marker in its original order when translating the surrounding text.
+It represents an immutable dynamic field, including its cached result. Retain page-number and contents fields, their numbering rules and styling; their displayed values
 may update to follow the new pagination. Do not replace those fields with fixed original numbers.
 Do not reduce fonts or spacing, change margins/table widths, move objects or shorten away meaning
 to force the translation back into the original pagination. Actual clipping, overlap or missing

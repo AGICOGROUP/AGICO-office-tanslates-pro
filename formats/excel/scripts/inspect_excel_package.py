@@ -267,9 +267,10 @@ def apply_image_replacements(path: Path, manifest: dict) -> dict:
         if actual_hash != item.get("replacement_sha256") or actual_hash == digest:
             raise ValueError("localized image replacement hash is changed or identical to source")
         with Image.open(io.BytesIO(originals[digest])) as before, Image.open(io.BytesIO(data)) as after:
+            source_format, replacement_format = before.format, after.format
             before.load(); after.load()
-            if before.format not in {"PNG", "JPEG"} or before.format != after.format or before.size != after.size:
-                raise ValueError("localized image must preserve PNG/JPEG format and pixel dimensions")
+            if source_format not in {"PNG", "JPEG", "WMF"} or source_format != replacement_format or before.size != after.size:
+                raise ValueError("localized image must preserve PNG/JPEG/metafile format and pixel dimensions")
         replacements[digest] = data
     descriptor, temporary_name = tempfile.mkstemp(prefix=".images-", suffix=".xlsx", dir=path.parent)
     os.close(descriptor)

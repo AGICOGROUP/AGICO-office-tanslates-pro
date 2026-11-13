@@ -12,6 +12,7 @@ import sys
 from zipfile import BadZipFile, ZipFile
 
 from lxml import etree as ET
+from docx_text import paragraph_text
 
 
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
@@ -32,25 +33,6 @@ def package_has_vba(archive: ZipFile, names: set[str]) -> bool:
         return True
     content_types = archive.read("[Content_Types].xml").lower() if "[Content_Types].xml" in names else b""
     return b"macroenabled" in content_types or b"vbaproject" in content_types
-
-
-def paragraph_text(paragraph: ET.Element) -> str:
-    if paragraph.tag == f"{W}lvlText":
-        return paragraph.get(f"{W}val", "")
-    pieces: list[str] = []
-    for node in paragraph.iter():
-        if (
-            node.tag in {f"{W}t", f"{W}tab", f"{W}br", f"{W}cr"}
-            and next((ancestor for ancestor in node.iterancestors() if ancestor.tag == f"{W}p"), None)
-            is paragraph
-        ):
-            if node.tag == f"{W}t":
-                pieces.append(node.text or "")
-            elif node.tag == f"{W}tab":
-                pieces.append("\t")
-            else:
-                pieces.append("\n")
-    return "".join(pieces).strip()
 
 
 def paragraph_layout_risks(paragraph: ET.Element, text: str) -> list[str]:
