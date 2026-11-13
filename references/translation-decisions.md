@@ -77,8 +77,10 @@ inspect its current renders and continue with `--visual-review-passed` only afte
 Do not claim a generated picture was translated inside the document until actual writeback is verified.
 
 Image decisions keep the format's supplied field: Word/Excel use `status` (`retain`, `localized`);
-PPT uses `decision` (`skip_target` for already-target/no-text/logo pictures, `skip_unclear` only for
-unreadable text, or `localized`). Include the specific reason for retention. Word/Excel localized
+PPT uses `decision` (`skip_target` for exempt photos/already-target/no-text/logo pictures,
+`skip_unclear` only for unreadable text, or `localized`). Unchanged image decisions require
+`reason` and a valid `reason_code` from [embedded-image handling](image-translation.md).
+Word/Excel localized
 decisions also carry actual `source_pixel_width` and `source_pixel_height`; PPT resolves them from
 the extracted source. Every localized decision needs the absolute `replacement_path`.
 

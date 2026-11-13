@@ -28,7 +28,7 @@ class TranslationAssetsTests(unittest.TestCase):
         digest = "a" * 64
         manifest = {"images": [{"id": "img-" + digest[:16], "sha256": digest,
                                 "status": "manual-review"}]}
-        decision = {"id": "img-" + digest[:16], "status": "retain"}
+        decision = {"id": "img-" + digest[:16], "status": "retain", "reason_code": "logo_only", "reason": "Logo-only artwork"}
         self.assertEqual(merge_assets(manifest, [decision], "excel"), [])
         self.assertEqual(manifest["images"][0]["status"], "retain")
         self.assertEqual(manifest["images"][0]["sha256"], digest)
@@ -50,7 +50,7 @@ class TranslationAssetsTests(unittest.TestCase):
         self.assertTrue(merge_assets(manifest, [decision], "ppt"))
         self.assertEqual(manifest["image_groups"][0]['decision'], 'pending')
         self.assertEqual(manifest['overlays'], [])
-        decision.update(decision="skip_target")
+        decision.update(decision="skip_target", reason_code="logo_only", reason="Logo-only artwork")
         self.assertFalse(merge_assets(manifest, [decision], "ppt"))
         self.assertEqual(manifest["image_groups"][0]["overlay_ids"], [])
         self.assertEqual(manifest["overlays"], [])

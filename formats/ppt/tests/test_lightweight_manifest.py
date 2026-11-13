@@ -25,6 +25,8 @@ def manifest_with_image(decision: str, *, overlays: list[dict] | None = None) ->
         "image_groups": [{
             "sha256": "b" * 64,
             "decision": decision,
+            "reason_code": "unreadable_text" if decision == "skip_unclear" else "logo_only",
+            "reason": "Bottom label is illegible" if decision == "skip_unclear" else "Logo-only artwork",
             "preserve_source_image": decision == "overlay",
             "overlay_ids": ["overlay-1"] if decision == "overlay" else [],
         }],
@@ -46,6 +48,19 @@ class LightweightImageManifestTests(unittest.TestCase):
     def test_skip_unclear_is_valid_without_overlays(self):
         summary = self.validate(manifest_with_image("skip_unclear"))
         self.assertEqual(1, summary["skipped_unclear_images"])
+        self.assertIn("Bottom label is illegible", summary["warnings"][0])
+
+    def test_direct_manifest_cannot_bypass_retention_checks(self):
+        for metadata in ({}, {"reason": "document_scan_left_in_source_language"},
+                {"reason": "budget exhausted", "reason_code": "budget"},
+                {"reason": "Blurred label", "reason_code": "unreadable_text"}):
+            with self.subTest(metadata=metadata):
+                data = manifest_with_image("skip_target")
+                data["image_groups"][0].pop("reason")
+                data["image_groups"][0].pop("reason_code")
+                data["image_groups"][0].update(metadata)
+                with self.assertRaises(ManifestError):
+                    self.validate(data)
 
     def test_overlay_requires_editable_bilingual_below_overlay(self):
         data = manifest_with_image("overlay", overlays=[{

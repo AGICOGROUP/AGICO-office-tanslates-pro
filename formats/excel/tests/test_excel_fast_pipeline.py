@@ -26,6 +26,20 @@ def load_runner():
 
 
 class ExcelFastPipelineTests(unittest.TestCase):
+    def test_image_worklist_retention_requires_and_preserves_valid_justification(self):
+        runner = load_runner()
+        manifest = {"translation_units": [], "images": [{"id": "img-1", "status": "manual-review"}]}
+        original = deepcopy(manifest)
+        for metadata in ({}, {"reason_code": "document_scan", "reason": "Authenticity evidence"}):
+            with self.subTest(metadata=metadata), self.assertRaises(ValueError):
+                runner.apply_worklist(manifest, {"images": [{"id": "img-1", "status": "retain", **metadata}]})
+        self.assertEqual(original, manifest)
+        decision = {"id": "img-1", "status": "retain", "reason_code": "photo_exempt_equipment",
+                    "reason": "Standalone equipment photograph"}
+        result = runner.apply_worklist(manifest, {"images": [decision]})
+        self.assertEqual(decision, result["images"][0])
+        self.assertEqual(original, manifest)
+
     def test_finalize_resume_requires_unchanged_sources_output_and_decisions(self):
         runner = load_runner()
         for changed in (None, "source", "original", "output", "manifest"):

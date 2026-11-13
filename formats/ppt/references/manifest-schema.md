@@ -9,10 +9,11 @@ context, protected tokens, and occurrence count.
 
 Image text follows [shared image handling](../../../references/image-translation.md).
 Historical overlay records are not accepted as a method for new translations. Each image group uses
-one `decision`: `skip_target` (the image already carries the target language), `skip_unclear`
+one `decision`: `skip_target` (exempt photograph, no text, logo-only, or already-target labels), `skip_unclear`
 (genuinely unreadable, with a specific reason), or `localized` (the image was edited and is
 re-inserted by the replacement writer). Readable untranslated
-labels stay pending until edited and inserted; retention needs a specific reason.
+labels stay pending until edited and inserted; retention needs a specific `reason` and an allowed
+`reason_code` from the shared image rule. Unknown or missing reasons/codes fail validation.
 
 A `localized` group records the approved edit in `replacement_path` (absolute, existing file) and
 `replacement_sha256`, plus `source_pixel_width` and `source_pixel_height`. The writer fits the edit to

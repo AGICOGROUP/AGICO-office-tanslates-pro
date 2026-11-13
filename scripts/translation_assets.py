@@ -5,6 +5,7 @@ import math
 from zipfile import ZipFile
 
 from translation_core import file_hash
+from image_retention import retention_error
 
 
 # ``localized`` means the image was edited in place with GPT image editing and
@@ -49,8 +50,11 @@ def pending_assets(manifest, format_name):
     field = "decision" if format_name == "ppt" else "status"
     accepted = ACCEPTED_IMAGE_DECISIONS[format_name]
     for group in manifest.get(asset_field(format_name), []):
-        if group.get(field) not in accepted or group.get("decision_error"):
+        error = retention_error(group, group.get(field))
+        if group.get(field) not in accepted or group.get("decision_error") or error:
             record = deepcopy(group)
+            if error:
+                record["decision_error"] = error
             record["id"] = group.get("id", group["sha256"])
             if format_name == "ppt" and group.get("overlay_ids"):
                 record["overlays"] = [deepcopy(item) for item in manifest.get("overlays", []) if item["id"] in group["overlay_ids"]]
@@ -105,6 +109,9 @@ def merge_assets(manifest, decisions, format_name):
             allowed = ACCEPTED_IMAGE_DECISIONS[format_name]
             if value not in allowed:
                 raise ValueError(f"use one of {', '.join(sorted(allowed))}")
+            error = retention_error(decision, value)
+            if error:
+                raise ValueError(error)
             updates = {field: value}
             if value == "bilingual":
                 raise ValueError("External image legends do not translate in-image text; use verified in-image editing")
@@ -161,6 +168,8 @@ def merge_assets(manifest, decisions, format_name):
                 old_ids = set(group.get("overlay_ids", []))
                 manifest["overlays"] = [item for item in manifest.get("overlays", []) if item["id"] not in old_ids]
                 updates["overlay_ids"] = []
+            group.pop("reason", None)
+            group.pop("reason_code", None)
             group.update(updates)
             for optional in ("reason", "reason_code"):
                 if optional in decision:

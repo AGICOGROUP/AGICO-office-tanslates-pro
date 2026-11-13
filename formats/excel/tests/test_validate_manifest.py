@@ -86,7 +86,7 @@ class ManifestValidatorTests(unittest.TestCase):
                 {"id": "Sheet1!A1", "source": "水泥", "translation": "Cement", "status": "translated", "protected_tokens": []},
                 {"id": "Sheet1!A2", "source": "ZKRM 15TPH", "translation": "ZKRM 15TPH", "status": "retain", "reason": "model code", "protected_tokens": ["ZKRM", "15TPH"]},
             ],
-            "images": [{"id": "Sheet1#Image1", "status": "reviewed", "reason": "no text"}],
+            "images": [{"id": "Sheet1#Image1", "status": "reviewed", "reason_code": "no_text", "reason": "no text"}],
         }
         result = self.run_validator(payload)
         self.assertEqual(0, result.returncode, result.stdout)
@@ -143,20 +143,27 @@ class ManifestValidatorTests(unittest.TestCase):
         self.assertIn("duplicate id", errors)
         self.assertIn("context_key", errors)
 
-    def test_completed_image_review_does_not_require_reason_metadata(self):
+    def test_completed_retention_requires_valid_code_and_explanation(self):
         for schema in (1, 2):
-            for status in ("reviewed", "localized", "retain"):
-                for metadata in ({}, {"reason_code": "already-bilingual", "reason": "已是双语"}):
+            for status in ("reviewed", "retain"):
+                for metadata, passed in (({}, False),
+                        ({"reason_code": "invented", "reason": "keep certificate"}, False),
+                        ({"reason_code": "logo_only"}, False),
+                        ({"reason_code": "logo_only", "reason": "Only company emblem"}, True)):
                     with self.subTest(schema=schema, status=status, metadata=metadata):
                         payload = self.make_v2_manifest() if schema == 2 else {"items": [], "images": []}
-                        payload["images"] = [{
-                            "id": "img-001", "sha256": "b" * 64,
-                            "occurrences": ["S1#Image1"], "status": status, **metadata,
-                        }]
-                        if status == "localized":
-                            payload["images"][0].update(replacement_path="D:/job/translated.png", replacement_sha256="c" * 64)
+                        payload["images"] = [{"id": "img-001", "sha256": "b" * 64,
+                            "occurrences": ["S1#Image1"], "status": status, **metadata}]
                         report = validate_manifest.validate(payload)
-                        self.assertTrue(report["passed"], report["errors"])
+                        self.assertEqual(passed, report["passed"], report["errors"])
+
+    def test_localized_image_does_not_need_retention_reason(self):
+        payload = self.make_v2_manifest()
+        payload["images"] = [{"id": "img-001", "sha256": "b" * 64,
+            "occurrences": ["S1#Image1"], "status": "localized",
+            "replacement_path": "D:/job/translated.png", "replacement_sha256": "c" * 64}]
+        report = validate_manifest.validate(payload)
+        self.assertTrue(report["passed"], report["errors"])
 
     def test_v2_rejects_changed_protected_token(self):
         payload = self.make_v2_manifest()

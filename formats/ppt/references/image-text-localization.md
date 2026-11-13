@@ -24,7 +24,7 @@ crop, rotation, group membership and unrelated relationships. When pairing,
 the source and target copies must resolve to their own original and localized
 bytes respectively, even if they began with the same asset.
 
-Use `skip_target` with a specific retention reason for real photographs,
+Use `skip_target` with a specific `reason` and an allowed `reason_code` from the shared rule for real photographs,
 logo-only images and images already in the requested language mode.
-Use `skip_unclear` only when source text cannot be read. Disclose residual
+Use `skip_unclear` with `reason_code: "unreadable_text"` only when source text cannot be read. Disclose residual
 unreadable content or technical hosts outside image writeback.

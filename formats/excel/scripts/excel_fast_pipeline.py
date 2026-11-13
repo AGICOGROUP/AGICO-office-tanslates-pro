@@ -16,6 +16,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
 from runtime_paths import bundled_root, resolve_executable as resolve_shared  # noqa: E402
 from translation_core import atomic_json
+from image_retention import retention_error
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -138,7 +139,11 @@ def apply_worklist(manifest: dict[str, Any], worklist: dict[str, Any]) -> dict[s
         status = decision.get("status")
         if status not in {"reviewed", "localized", "retain"}:
             raise ValueError(f"pending image decision: {image_id}")
+        error = retention_error(decision, status)
+        if error:
+            raise ValueError(f"{image_id}: {error}")
         image_index[image_id]["status"] = status
+        image_index[image_id]["reason"] = decision.get("reason")
         image_index[image_id]["reason_code"] = decision.get("reason_code")
         if status == "localized":
             replacement = Path(decision.get("replacement_path", ""))

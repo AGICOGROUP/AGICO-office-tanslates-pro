@@ -63,7 +63,7 @@ class PowerPointOnlySkillContract(unittest.TestCase):
         self.assertTrue(rejected)
         self.assertEqual(len(pending_assets(manifest, 'ppt')), 1)
         accepted = merge_assets(manifest, [{'id':digest, 'decision':'skip_target',
-                                            'reason':'Logo-only artwork'}], 'ppt')
+                                            'reason':'Logo-only artwork', 'reason_code':'logo_only'}], 'ppt')
         self.assertEqual(accepted, [])
         self.assertEqual(pending_assets(manifest, 'ppt'), [])
 

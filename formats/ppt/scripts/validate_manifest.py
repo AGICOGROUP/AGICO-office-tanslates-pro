@@ -14,6 +14,7 @@ REPOSITORY_SCRIPTS = str(Path(__file__).resolve().parents[3] / "scripts")
 if REPOSITORY_SCRIPTS not in sys.path:
     sys.path.append(REPOSITORY_SCRIPTS)
 from translation_quality import technical_mismatch
+from image_retention import retention_error
 
 
 class ManifestError(ValueError):
@@ -135,6 +136,7 @@ def validate_manifest(path: str | Path, require_translations: bool = False) -> d
         if occurrence["source_text"] != unit["source_text"] or tokens != unit["protected_tokens"]:
             raise ManifestError(f"{label}: occurrence does not match translation unit {unit_id}")
 
+    image_warnings: list[str] = []
     seen_hashes: set[str] = set()
     overlay_images = skipped_target_images = skipped_unclear_images = localized_images = 0
     for index, group in enumerate(data["image_groups"], start=1):
@@ -154,10 +156,15 @@ def validate_manifest(path: str | Path, require_translations: bool = False) -> d
             raise ManifestError(f"{label}.decision: unsupported decision: {decision}")
         overlay_ids = string_list(group.get("overlay_ids", []), f"{label}.overlay_ids")
         if decision in {"skip_target", "skip_unclear"}:
+            error = retention_error(group, decision)
+            if error:
+                raise ManifestError(f"{label}: {error}")
             if overlay_ids:
                 raise ManifestError(f"{label}.overlay_ids: skipped images cannot have overlays")
             skipped_target_images += decision == "skip_target"
             skipped_unclear_images += decision == "skip_unclear"
+            if decision == "skip_unclear":
+                image_warnings.append(f"image {digest}: unreadable source text retained: {group['reason']}")
         elif decision == "localized":
             if overlay_ids:
                 raise ManifestError(f"{label}.overlay_ids: localized images cannot have overlays")
@@ -193,7 +200,7 @@ def validate_manifest(path: str | Path, require_translations: bool = False) -> d
     embedded_objects = data.get("embedded_objects", [])
     if not isinstance(embedded_objects, list):
         raise ManifestError("embedded_objects: expected an array")
-    warnings: list[str] = []
+    warnings: list[str] = image_warnings
     preserved_embedded_objects = 0
     for index, embedded in enumerate(embedded_objects, start=1):
         if not isinstance(embedded, dict):

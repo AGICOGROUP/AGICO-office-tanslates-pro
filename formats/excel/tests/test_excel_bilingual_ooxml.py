@@ -49,6 +49,15 @@ class BilingualPreservationTests(unittest.TestCase):
             'translation_units':[
                 {'id':'one','source':'设备','translation':'Equipment descriptions and operating requirements','status':'translated'},
                 {'id':'two','source':'001','translation':'001','status':'retain'}]}
+        # Header/footer text is part of native coverage, even in hand-built fixtures.
+        package = Package(self.source)
+        for index, ((part, address), node) in enumerate(package.extra_nodes.items()):
+            unit_id = f'header-{index}'
+            self.manifest['occurrences'].append({'id':unit_id, 'kind':'object_text',
+                'sheet':part, 'address':address, 'source':node.text, 'translation_unit_id':unit_id})
+            self.manifest['translation_units'].append({'id':unit_id, 'source':node.text,
+                'translation':node.text, 'status':'retain', 'reason':'Already-target English header'})
+
 
     def test_source_styles_and_print_metadata_survive_pairing(self):
         apply(self.source,self.output,self.manifest)

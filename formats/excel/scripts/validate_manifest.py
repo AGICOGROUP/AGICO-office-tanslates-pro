@@ -10,6 +10,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
 from translation_quality import technical_mismatch, sheet_name_mismatch
+from image_retention import retention_error
 
 def _text(value: Any) -> bool:
     return isinstance(value, str) and bool(value.strip())
@@ -122,6 +123,9 @@ def validate_v2(payload: dict[str, Any]) -> dict:
         locations = image.get("occurrences")
         if not isinstance(locations, list) or not locations or not all(_text(item) for item in locations):
             errors.append(f"{prefix}.occurrences must be a non-empty list of locations")
+        error = retention_error(image, image.get("status"))
+        if error:
+            errors.append(f"{prefix}: {error}")
         if image.get("status") == "manual-review":
             errors.append(f"{prefix} manual-review is not deliverable")
         elif image.get("status") not in {"reviewed", "localized", "retain"}:
@@ -203,6 +207,9 @@ def validate_legacy(payload: Any) -> dict:
             errors.append(f"{prefix} has missing or duplicate id")
         else:
             image_seen.add(image_id)
+        error = retention_error(image, image.get("status"))
+        if error:
+            errors.append(f"{prefix}: {error}")
         if image.get("status") not in {"reviewed", "localized", "retain"}:
             errors.append(f"{prefix} status must be reviewed, localized, or retain")
 

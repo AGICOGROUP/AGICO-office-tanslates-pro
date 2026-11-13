@@ -22,6 +22,29 @@ image translation.
 An image mixing a logo and real labels still needs its labels localized. Partially bilingual
 artwork is not a reason to skip the remaining source-only labels.
 
+Certificates, approvals and press scans are document images, not exempt photographs.
+Translate their readable print in place while preserving seals, signatures and embedded photos.
+Authenticity, third-party ownership, density, time/budget limits, or editing difficulty do not
+justify leaving readable text untranslated. Overlap with a seal or linework calls for a safer
+edit; it does not create a blanket geometry exemption. Identify truly unreadable labels precisely.
+
+Every unchanged image decision needs both a non-empty `reason` identifying what was inspected
+and an allowed `reason_code`:
+
+| Actual content | `reason_code` |
+|---|---|
+| Genuine standalone site, building, equipment, people, crowd or scene photograph | `photo_exempt_site`, `photo_exempt_building`, `photo_exempt_equipment`, `photo_exempt_people`, `photo_exempt_crowd`, `photo_exempt_scene` |
+| All labels already satisfy the requested language mode | `already_target` |
+| No text, or logo-only artwork | `no_text`, `logo_only` |
+| Genuinely unreadable source labels, identified in `reason` | `unreadable_text` |
+
+PPT uses `skip_target` for the first three rows and `skip_unclear` only for the last.
+Word/Excel use `retain` (legacy `reviewed` has the same checks). `localized` needs no retention
+reason. Missing or unknown codes are rejected; old invalid decisions return to pending work.
+Reinspect affected images and correct their decisions rather than guessing a code to pass validation.
+These are structural checks, not proof that the classification or translation is correct.
+Disclose any residual unreadable text; never describe it as translated.
+
 ## Two accepted methods, subject to current tool permissions
 
 Use the image-editing tool actually available in the current session. Tool instructions take

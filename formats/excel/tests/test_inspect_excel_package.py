@@ -97,7 +97,7 @@ class ExcelPackageInspectorTests(unittest.TestCase):
                 if image["sha256"] in localized_hashes:
                     image.update(status="localized", replacement_path=str(replacement), replacement_sha256=hashlib.sha256(replacement.read_bytes()).hexdigest())
                 else:
-                    image.update(status="retain", reason_code="photograph")
+                    image.update(status="retain", reason_code="photo_exempt_equipment", reason="Standalone equipment photograph")
             from inspect_excel_package import verify_image_manifest
             # A localized status alone must not validate an unchanged workbook.
             with self.assertRaisesRegex(ValueError, "image"):

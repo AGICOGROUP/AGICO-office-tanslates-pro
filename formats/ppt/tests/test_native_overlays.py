@@ -194,7 +194,7 @@ class NativeOverlayTests(unittest.TestCase):
         path = job / "translation-manifest.json"
         manifest = json.loads(path.read_text(encoding="utf-8"))
         manifest["translation_units"][0]["translation"] = "Motor 45 kW Temperature 25 °C"
-        manifest["image_groups"][0]["decision"] = "skip_unclear"
+        manifest["image_groups"][0].update(decision="skip_target", reason_code="no_text", reason="Blank white fixture image contains no text")
         path.write_text(json.dumps(manifest), encoding="utf-8")
         self.assertEqual(0, command_apply(argparse.Namespace(input=self.source, job_dir=job, output=self.output)))
         self.assertEqual(0, command_verify(argparse.Namespace(source=self.source, job_dir=job, output=self.output)))
@@ -204,6 +204,21 @@ class NativeOverlayTests(unittest.TestCase):
         with self.assertRaises(ManifestError):
             command_apply(argparse.Namespace(input=self.source, job_dir=job, output=self.output))
         self.assertEqual(accepted, self.output.read_bytes())
+
+    def test_invalid_retention_cannot_write_over_previous_output(self):
+        job = self.root / "job"
+        command_inspect(argparse.Namespace(input=self.source, job_dir=job, target_language="en"))
+        command_prepare(argparse.Namespace(job_dir=job, source_language="auto"))
+        path = job / "translation-manifest.json"
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        manifest["translation_units"][0]["translation"] = "Equipment"
+        manifest["image_groups"][0].update(decision="skip_target", overlay_ids=[],
+            reason_code="document_scan_left_in_source_language", reason="Authenticity evidence")
+        path.write_text(json.dumps(manifest), encoding="utf-8")
+        self.output.write_bytes(b"previous accepted output")
+        with self.assertRaisesRegex(ManifestError, "reason_code"):
+            command_apply(argparse.Namespace(input=self.source, job_dir=job, output=self.output))
+        self.assertEqual(b"previous accepted output", self.output.read_bytes())
 
     def test_explicit_custom_token_is_checked_during_apply_and_verify(self):
         presentation = Presentation(self.source)
@@ -216,7 +231,7 @@ class NativeOverlayTests(unittest.TestCase):
         manifest = json.loads(path.read_text(encoding="utf-8"))
         manifest["translation_units"][0]["protected_tokens"] = ["AGICO"]
         manifest["occurrences"][0]["protected_tokens"] = ["AGICO"]
-        manifest["image_groups"][0]["decision"] = "skip_unclear"
+        manifest["image_groups"][0].update(decision="skip_target", reason_code="no_text", reason="Blank white fixture image contains no text")
         for translation in ("Equipment", "Agico Equipment", "XAGICOY Equipment", "A G I C O Equipment"):
             with self.subTest(translation=translation):
                 manifest["translation_units"][0]["translation"] = translation
